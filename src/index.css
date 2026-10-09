@@ -1,0 +1,134 @@
+@import "@fontsource-variable/geist";
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --font-sans: "Geist Variable", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-xs: 4px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-4xl: 6px;
+}
+
+:root {
+  font-family: "Geist Variable", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+  --background: #f4f7f8;
+  --foreground: #15232b;
+  --card: #ffffff;
+  --card-foreground: #15232b;
+  --popover: #ffffff;
+  --popover-foreground: #15232b;
+  --primary: #11675d;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f2ef;
+  --secondary-foreground: #16574f;
+  --muted: #f0f4f4;
+  --muted-foreground: #728087;
+  --accent: #eef5f3;
+  --accent-foreground: #145d54;
+  --destructive: #c8443b;
+  --border: #e3e9e9;
+  --input: #dce4e4;
+  --ring: #6caaa0;
+  --radius: 6px;
+  --sidebar: #132e32;
+  --sidebar-soft: #1a3b3e;
+  --sidebar-muted: #9bb7b3;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--background); }
+body { min-width: 320px; margin: 0; background: var(--background); color: var(--foreground); }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+::selection { background: #d5ece6; color: #143b36; }
+
+.app-shell { min-height: 100vh; }
+.page-scroll { min-height: 100vh; }
+.sidebar { background: var(--sidebar); color: #f7fbfa; }
+.side-link { color: var(--sidebar-muted); transition: background .18s ease, color .18s ease; }
+.side-link:hover, .side-link[data-active="true"] { background: var(--sidebar-soft); color: #fff; }
+.metric-card { box-shadow: 0 6px 20px rgba(26, 53, 57, .035); }
+.soft-grid { background-image: radial-gradient(rgba(21, 90, 81, .09) 1px, transparent 1px); background-size: 18px 18px; }
+.safe-area-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+/* Use a clear, consistent hierarchy for page, section, card, and dialog headings. */
+h1 { font-size: clamp(1.8rem, 2.4vw, 2.15rem) !important; line-height: 1.2 !important; letter-spacing: -.025em; }
+h2 { font-size: clamp(1.45rem, 2vw, 1.7rem) !important; line-height: 1.3 !important; }
+h3 { font-size: clamp(1.2rem, 1.6vw, 1.4rem) !important; line-height: 1.35 !important; }
+[data-slot="card-title"] { font-size: 1.2rem !important; line-height: 1.4 !important; }
+[data-slot="dialog-title"] { font-size: 1.35rem !important; line-height: 1.4 !important; }
+.app-shell header h1 { font-size: 1.25rem !important; line-height: 1.3 !important; }
+
+/* Keep secondary UI copy readable across all pages and screen sizes. */
+  [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"], [class~="text-[12px]"], [class~="text-[13px]"], [class~="text-[0.8rem]"], .text-xs { font-size: 16px !important; line-height: 1.55rem !important; }
+  [class~="text-[15px]"], .text-sm { font-size: 17px !important; line-height: 1.6rem !important; }
+
+/* Sonner uses data attributes so app-wide toast feedback stays readable too. */
+[data-sonner-toaster] { --width: min(420px, calc(100vw - 24px)); }
+[data-sonner-toast] { min-height: 64px !important; padding: 16px 18px !important; }
+[data-sonner-toast] [data-title] { font-size: 18px !important; line-height: 1.5 !important; }
+[data-sonner-toast] [data-description] { font-size: 17px !important; line-height: 1.5 !important; }
+
+.result-choice[data-selected="true"][data-result="OK"] {
+  background-color: #15803d !important;
+  border-color: #15803d !important;
+  color: #fff !important;
+}
+.result-choice[data-selected="true"][data-result="NG"] {
+  background-color: #b42318 !important;
+  border-color: #b42318 !important;
+  color: #fff !important;
+}
+.result-choice[data-selected="true"][data-result="N/A"] {
+  background-color: #475569 !important;
+  border-color: #475569 !important;
+  color: #fff !important;
+}
+.result-choice[data-selected="true"]:hover { filter: brightness(.9); }
+.result-choice:focus-visible { outline: 3px solid #6caaa0; outline-offset: 2px; }
+
+@media (max-width: 767px) {
+  body { font-size: 16px; }
+  h1 { font-size: clamp(1.7rem, 7vw, 2rem) !important; }
+  h2 { font-size: 1.4rem !important; }
+  h3 { font-size: 1.2rem !important; }
+  [data-slot="card-title"] { font-size: 1.15rem !important; }
+  [data-slot="dialog-title"] { font-size: 1.25rem !important; }
+  .app-shell header h1 { font-size: 1.15rem !important; }
+  .mobile-nav { padding-bottom: max(.5rem, env(safe-area-inset-bottom)); }
+  [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"], [class~="text-[12px]"], [class~="text-[13px]"], [class~="text-[0.8rem]"], .text-xs { font-size: 17px !important; line-height: 1.6rem !important; }
+  [class~="text-[15px]"], .text-sm { font-size: 18px !important; line-height: 1.65rem !important; }
+  [data-sonner-toast] { min-height: 68px !important; padding: 17px 18px !important; }
+  [data-sonner-toast] [data-title] { font-size: 19px !important; }
+  [data-sonner-toast] [data-description] { font-size: 18px !important; }
+  [data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] { min-height: 44px; font-size: 16px !important; }
+  label { line-height: 1.4rem; }
+}

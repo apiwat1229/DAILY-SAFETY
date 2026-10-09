@@ -1,0 +1,38 @@
+name: daily-safety
+
+services:
+  daily-safety:
+    build: .
+    image: daily-safety:production
+    container_name: daily-safety
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4000
+      APP_TIME_ZONE: Asia/Bangkok
+    volumes:
+      - daily-safety-data:/app/data
+    networks:
+      proxy:
+        ipv4_address: 172.20.0.4
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  proxy:
+    external: true
+    name: nginx-proxy-manager_default
+
+volumes:
+  daily-safety-data:

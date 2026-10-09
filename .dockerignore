@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+.git
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+daily-safety-deploy.tar.gz

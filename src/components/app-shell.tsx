@@ -1,0 +1,131 @@
+import { useState } from 'react'
+import { Activity, BookOpenText, ClipboardCheck, ContactRound, FileBarChart2, FileSpreadsheet, ListChecks, LogOut, Menu, Plus, ShieldCheck, UserRoundCog, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { api } from '@/lib/api'
+import type { User } from '@/lib/types'
+import { Button } from '@/components/ui/button'
+import { DashboardPage } from '@/pages/dashboard-page'
+import { InspectionFormPage } from '@/pages/inspection-form-page'
+import { InspectionsPage } from '@/pages/inspections-page'
+import { UsersPage } from '@/pages/users-page'
+import { ChecklistAdminPage } from '@/pages/checklist-admin-page'
+import { EmployeesPage } from '@/pages/employees-page'
+import { AssessmentsPage } from '@/pages/assessments-page'
+import { AssessmentReportsPage } from '@/pages/assessment-reports-page'
+import { TrainingMaterialsPage } from '@/pages/training-materials-page'
+import { useI18n } from '@/lib/i18n'
+import { LanguageSwitch } from '@/components/language-switch'
+
+export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials'
+type Props = { user: User; page: PageKey; onPage: (page: PageKey) => void; onUserChange: (user: User | null) => void }
+
+export function AppShell({ user, page, onPage, onUserChange }: Props) {
+  const [mobileMenu, setMobileMenu] = useState(false)
+  const { t } = useI18n()
+  const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
+    dashboard: { title: t('ภาพรวมความปลอดภัย'), subtitle: t('สรุปผลการตรวจและรายการที่ต้องติดตาม') },
+    inspections: { title: t('รายการตรวจ'), subtitle: t('ค้นหา ตรวจสอบ และติดตามรายการบันทึก') },
+    new: { title: t('บันทึกการตรวจ'), subtitle: t('แบบตรวจความปลอดภัยประจำวัน') },
+    users: { title: t('ผู้ใช้งาน'), subtitle: t('จัดการบัญชีและสิทธิ์การใช้งาน') },
+    employees: { title: t('รายชื่อพนักงาน'), subtitle: t('จัดการข้อมูลพนักงานและรหัสสำหรับค้นหาในรายงาน') },
+    checklist: { title: t('แบบตรวจความปลอดภัยประจำวัน'), subtitle: t('เพิ่มและจัดการหัวข้อตรวจ') },
+    assessments: { title: t('แบบประเมิน'), subtitle: t('สร้างข้อสอบและจัดการลิงก์สำหรับผู้ทำแบบประเมิน') },
+    'assessment-reports': { title: t('รายงานแบบประเมิน'), subtitle: t('ตรวจคำตอบและส่งออกผลประเมินเป็น Excel') },
+    'training-materials': { title: t('สื่ออบรม'), subtitle: t('จัดการเอกสารและสื่อสำหรับแชร์ให้พนักงาน') },
+  }
+  const navItems = user.role === 'admin'
+    ? [
+        { key: 'dashboard' as const, label: t('ภาพรวม'), icon: Activity },
+        { key: 'inspections' as const, label: t('รายการตรวจ'), icon: FileBarChart2 },
+        { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
+        { key: 'users' as const, label: t('ผู้ใช้งาน'), icon: UserRoundCog },
+        { key: 'employees' as const, label: t('รายชื่อพนักงาน'), icon: ContactRound },
+        { key: 'checklist' as const, label: t('หัวข้อตรวจ'), icon: ListChecks },
+        { key: 'assessments' as const, label: t('แบบประเมิน'), icon: ClipboardCheck },
+        { key: 'assessment-reports' as const, label: t('รายงานแบบประเมิน'), icon: FileSpreadsheet },
+        { key: 'training-materials' as const, label: t('สื่ออบรม'), icon: BookOpenText },
+      ]
+    : [
+        { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
+        { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
+      ]
+
+  async function handleLogout() {
+    try { await api.logout() } catch { /* session may already have expired */ }
+    onUserChange(null)
+    toast.success(t('ออกจากระบบแล้ว'))
+  }
+
+  return (
+    <div className="app-shell min-h-screen md:flex">
+      <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[280px] shrink-0 flex-col px-4 py-5 md:flex">
+        <Brand />
+        <div className="mt-9 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-[#7e9c97]">{t('เมนูหลัก')}</div>
+        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
+        <ProfileBlock user={user} onLogout={handleLogout} />
+      </aside>
+
+      <div className="page-scroll min-w-0 flex-1">
+        <header className="sticky top-0 z-20 border-b border-[#e8eeee] bg-[#f7f9f9]/95 backdrop-blur-md">
+          <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between px-4 sm:px-7 lg:px-9">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="icon" aria-label={t('เปิดเมนู')} onClick={() => setMobileMenu(true)} className="md:hidden"><Menu size={18} /></Button>
+              <div><h1 className="text-lg font-semibold tracking-tight md:text-xl">{pageMeta[page].title}</h1><p className="mt-0.5 hidden text-xs text-muted-foreground sm:block">{pageMeta[page].subtitle}</p></div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-2 rounded-full border border-[#e5eceb] bg-white px-3 py-1.5 text-xs text-muted-foreground sm:flex"><span className="size-1.5 rounded-full bg-emerald-500" /> {t('ระบบพร้อมใช้งาน')}</div>
+              <LanguageSwitch />
+              <div className="grid size-9 place-items-center rounded-full bg-[#deeee9] text-xs font-semibold text-[#14574e] md:hidden">{user.name.slice(0, 1)}</div>
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1500px] px-4 pb-12 pt-6 sm:px-7 sm:pt-8 lg:px-9">
+          {page === 'dashboard' && user.role === 'admin' ? <DashboardPage user={user} onPage={onPage} /> : null}
+          {page === 'inspections' ? <InspectionsPage user={user} initialFilter={null} onInitialFilterApplied={() => undefined} /> : null}
+          {page === 'new' ? <InspectionFormPage user={user} onCreated={() => onPage('inspections')} /> : null}
+          {page === 'users' && user.role === 'admin' ? <UsersPage currentUser={user} onCurrentUserUpdate={onUserChange} /> : null}
+          {page === 'employees' && user.role === 'admin' ? <EmployeesPage /> : null}
+          {page === 'checklist' && user.role === 'admin' ? <ChecklistAdminPage /> : null}
+          {page === 'assessments' && user.role === 'admin' ? <AssessmentsPage /> : null}
+          {page === 'assessment-reports' && user.role === 'admin' ? <AssessmentReportsPage /> : null}
+          {page === 'training-materials' && user.role === 'admin' ? <TrainingMaterialsPage /> : null}
+        </main>
+      </div>
+
+      {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
+        <aside className="sidebar flex h-full w-[280px] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between"><Brand /><Button variant="ghost" size="icon" className="text-[#bad0cc] hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
+          <div className="mt-8 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-[#7e9c97]">{t('เมนูหลัก')}</div>
+          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
+          <ProfileBlock user={user} onLogout={handleLogout} />
+        </aside>
+      </div>}
+    </div>
+  )
+}
+
+function Brand() {
+  const { t } = useI18n()
+  return <div className="flex items-center gap-3 px-2">
+    <div className="grid size-10 place-items-center rounded-lg bg-[#d8eee8] text-[#14574e]"><ShieldCheck size={21} /></div>
+    <div><p className="text-[13px] font-semibold tracking-[.1em] text-white">Y.T. RUBBER</p><p className="mt-0.5 text-[10px] text-[#9bb7b3]">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
+  </div>
+}
+
+function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const { t } = useI18n()
+  return <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.05] p-3.5">
+    <div className="flex items-center gap-2.5">
+      <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#2d5655] text-xs font-semibold text-[#d9efea]">{user.name.slice(0, 1)}</div>
+      <div className="min-w-0"><p className="truncate text-xs font-medium text-white">{user.name}</p><p className="mt-0.5 text-[10px] text-[#9bb7b3]">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
+      <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="ml-auto text-[#9bb7b3] hover:bg-white/10 hover:text-white"><LogOut size={15} /></Button>
+    </div>
+  </div>
+}
+
+type NavLinkProps = { label: string; icon: typeof Activity; active: boolean; onClick: () => void }
+function NavLink({ label, icon: Icon, active, onClick }: NavLinkProps) {
+  return <Button type="button" variant="ghost" data-active={active} onClick={onClick} className="side-link flex h-auto w-full items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium">
+    <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{active && <span className="ml-auto size-1.5 rounded-full bg-[#9fe1cb]" />}
+  </Button>
+}
