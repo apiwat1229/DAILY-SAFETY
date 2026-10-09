@@ -16,7 +16,7 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
   }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
-  dashboard: (filters?: Partial<Filters>) => request<DashboardData>(`/api/dashboard${toQuery(filters)}`),
+  dashboard: (filters?: Partial<Filters> & { categoryResult?: 'NG' | 'N/A' }) => request<DashboardData>(`/api/dashboard${toQuery(filters)}`),
   dashboardCategory: (category: string, from: string, to: string, result: 'NG' | 'N/A') => {
     const query = new URLSearchParams({ category, from, to, result })
     return request<DashboardCategorySummary>(`/api/dashboard/category?${query.toString()}`)

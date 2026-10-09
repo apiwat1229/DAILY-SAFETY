@@ -37,8 +37,8 @@ export function DashboardPage({ user, onPage }: Props) {
 
   useEffect(() => {
     setLoading(true)
-    api.dashboard({ from, to }).then(setData).catch((error) => toast.error(error.message)).finally(() => setLoading(false))
-  }, [from, to, refreshKey])
+    api.dashboard({ from, to, categoryResult: selectedResult }).then(setData).catch((error) => toast.error(error.message)).finally(() => setLoading(false))
+  }, [from, to, refreshKey, selectedResult])
 
   useEffect(() => {
     if (!selectedCategory) { setCategorySummary(null); return }
@@ -117,15 +117,18 @@ export function DashboardPage({ user, onPage }: Props) {
         </Card>
 
         <Card className="rounded-2xl border-[#e8eeee]">
-          <CardHeader className="pb-2"><CardTitle className="text-[15px]">{t('หัวข้อที่พบปัญหาบ่อย')}</CardTitle><CardDescription className="mt-1 text-xs">{t('เรียงตามจำนวนรายการ NG')}</CardDescription></CardHeader>
+          <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between">
+            <div><CardTitle className="text-[15px]">{t('หัวข้อที่พบปัญหาบ่อย')}</CardTitle><CardDescription className="mt-1 text-xs">{t(selectedResult === 'NG' ? 'เรียงตามจำนวนรายการ NG' : 'เรียงตามจำนวนรายการ N/A')}</CardDescription></div>
+            <div className="flex w-full items-center gap-2 sm:w-auto"><span className="shrink-0 text-xs text-muted-foreground">{t('แสดงสถานะ')}</span><Select value={selectedResult} onValueChange={(value: 'NG' | 'N/A') => setSelectedResult(value)}><SelectTrigger aria-label={t('แสดงสถานะ')} className="h-10 w-full bg-white sm:w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NG">NG</SelectItem><SelectItem value="N/A">N/A</SelectItem></SelectContent></Select></div>
+          </CardHeader>
           <CardContent className="pt-3">
             {data?.categories.length ? <div className="space-y-4">{data.categories.map((category, index) => {
               const max = Math.max(...data.categories.map((item) => item.count), 1)
-              return <button key={category.title} type="button" onClick={() => { setSelectedResult('NG'); setSelectedCategory(category.title) }} aria-label={`${t('ดูรายละเอียด')}: ${t(category.title)}`} className="group w-full rounded-lg px-1 py-1 text-left transition hover:bg-[#f7faf9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+              return <button key={category.title} type="button" onClick={() => setSelectedCategory(category.title)} aria-label={`${t('ดูรายละเอียด')}: ${t(category.title)}`} className="group w-full rounded-lg px-1 py-1 text-left transition hover:bg-[#f7faf9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                 <div className="mb-1.5 flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><span className="grid size-6 shrink-0 place-items-center rounded-md bg-[#f1f5f4] text-[10px] text-muted-foreground">{index + 1}</span><span className="truncate text-xs font-medium group-hover:text-primary">{t(category.title)}</span></div><span className="flex shrink-0 items-center gap-2 text-xs font-semibold">{category.count}<ArrowRight size={14} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" /></span></div>
-                <div className="ml-8 h-2 overflow-hidden rounded-full bg-[#eef2f1]"><div className="h-full rounded-full bg-[#e79b60]" style={{ width: `${(category.count / max) * 100}%` }} /></div>
+                <div className="ml-8 h-2 overflow-hidden rounded-full bg-[#eef2f1]"><div className={`h-full rounded-full ${selectedResult === 'NG' ? 'bg-[#e79b60]' : 'bg-slate-500'}`} style={{ width: `${(category.count / max) * 100}%` }} /></div>
               </button>
-            })}</div> : <div className="grid h-[168px] place-items-center text-xs text-muted-foreground">{t('ยังไม่มีรายการ NG')}</div>}
+            })}</div> : <div className="grid h-[168px] place-items-center text-xs text-muted-foreground">{t(selectedResult === 'NG' ? 'ยังไม่มีรายการ NG' : 'ยังไม่มีรายการ N/A')}</div>}
             <div className="mt-5 flex items-center justify-between border-t border-[#edf0f0] pt-4"><div className="flex items-center gap-2 text-[11px] text-muted-foreground"><ShieldAlert size={14} className="text-amber-600" /> {t('ใช้ข้อมูลตามผลตรวจที่บันทึก')}</div><Button variant="link" size="sm" onClick={() => onPage('inspections')} className="h-auto p-0 text-[11px]">{t('เปิดรายงาน')}</Button></div>
           </CardContent>
         </Card>

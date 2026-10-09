@@ -955,12 +955,13 @@ app.get('/api/dashboard', requireAdmin, (req, res) => {
       AND r.follow_up_status != 'แก้ไขแล้ว' AND r.due_date != '' AND r.due_date < ?
   `).get(from, to, todayKey).n
   const categoryWhere = buildInspectionWhere({ from, to }, req.session.user)
+  const categoryResult = req.query.categoryResult === 'N/A' ? 'N/A' : 'NG'
   const categories = db.prepare(`
     SELECT r.item_title AS title, COUNT(*) AS count
     FROM responses r JOIN inspections i ON i.id = r.inspection_id
-    ${categoryWhere.sql ? `${categoryWhere.sql} AND r.result = 'NG'` : 'WHERE r.result = \'NG\''}
+    ${categoryWhere.sql ? `${categoryWhere.sql} AND r.result = ?` : 'WHERE r.result = ?'}
     GROUP BY r.item_title ORDER BY count DESC, r.item_title LIMIT 6
-  `).all(...categoryWhere.params)
+  `).all(...categoryWhere.params, categoryResult)
   const trend = db.prepare(`
     SELECT i.inspection_date AS date,
       SUM(CASE WHEN r.result = 'OK' THEN 1 ELSE 0 END) AS ok,
