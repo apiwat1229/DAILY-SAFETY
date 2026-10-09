@@ -78,7 +78,7 @@ export const api = {
   createTrainingMaterial: (body: FormData) => request<{ material: TrainingMaterial }>('/api/admin/training-materials', { method: 'POST', body }),
   updateTrainingMaterial: (id: string, body: FormData) => request<{ material: TrainingMaterial }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
   deleteTrainingMaterial: (id: string) => request<{ ok: boolean }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  publicTrainingMaterial: (token: string) => request<{ material: TrainingMaterial & { fileUrl: string } }>(`/api/public/training-materials/${encodeURIComponent(token)}`),
+  publicTrainingMaterial: (token: string) => request<{ material: TrainingMaterial & { fileUrl: string; presentationUrl: string } }>(`/api/public/training-materials/${encodeURIComponent(token)}`),
   markTrainingViewed: (token: string, input: { employeeCode: string; employeeName: string }) => request<{ ok: boolean; viewedAt: string }>(`/api/public/training-materials/${encodeURIComponent(token)}/views`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   }),

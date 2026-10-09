@@ -123,6 +123,7 @@ export type TrainingMaterial = {
   description: string
   originalName: string
   mimeType: string
+  companionOriginalName?: string
   isActive: boolean
   createdAt: string
   updatedAt: string

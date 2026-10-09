@@ -18,6 +18,7 @@ data/*.sqlite
 data/*.sqlite-shm
 data/*.sqlite-wal
 data/uploads/
+.codex-pptx-build/
 
 # Editor directories and files
 .vscode/*

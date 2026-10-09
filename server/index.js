@@ -157,6 +157,8 @@ db.exec(`
     original_name TEXT NOT NULL,
     stored_name TEXT NOT NULL UNIQUE,
     mime_type TEXT NOT NULL,
+    companion_original_name TEXT NOT NULL DEFAULT '',
+    companion_stored_name TEXT NOT NULL DEFAULT '',
     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
     created_by TEXT NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL,
@@ -186,6 +188,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_assessment_submissions_employee ON assessment_submissions(employee_code);
   CREATE INDEX IF NOT EXISTS idx_training_views_employee ON training_views(employee_code, viewed_at DESC);
 `)
+
+const trainingMaterialColumns = db.prepare('PRAGMA table_info(training_materials)').all()
+if (!trainingMaterialColumns.some((column) => column.name === 'companion_original_name')) {
+  db.exec("ALTER TABLE training_materials ADD COLUMN companion_original_name TEXT NOT NULL DEFAULT ''")
+}
+if (!trainingMaterialColumns.some((column) => column.name === 'companion_stored_name')) {
+  db.exec("ALTER TABLE training_materials ADD COLUMN companion_stored_name TEXT NOT NULL DEFAULT ''")
+}
 
 const checklistColumns = db.prepare('PRAGMA table_info(checklist_items)').all()
 if (!checklistColumns.some((column) => column.name === 'choices_json')) {
@@ -359,6 +369,26 @@ if (db.prepare("SELECT setting_value FROM app_settings WHERE setting_key = 'samp
       .run(trainingId, newPublicToken(), 'คู่มืออบรมความปลอดภัยพื้นฐานในสถานที่ทำงาน', 'สื่ออบรม 3 หน้า: PPE เครื่องจักร สารเคมี งานเสี่ยง และการตอบสนองเหตุฉุกเฉิน', originalName, storedName, adminId, timestamp, timestamp)
   }
   db.prepare("UPDATE app_settings SET setting_value = '1' WHERE setting_key = 'sample_safety_content_seeded'").run()
+}
+
+const fireTrainingId = 'sample-fire-evacuation-training-v1'
+if (!db.prepare('SELECT id FROM training_materials WHERE id = ?').get(fireTrainingId)) {
+  const adminId = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY created_at LIMIT 1").get()?.id
+  if (!adminId) throw new Error('Cannot add sample fire-safety training without an active administrator account.')
+  const originalName = 'fire-prevention-emergency-evacuation-th.pdf'
+  const storedName = originalName
+  const companionOriginalName = 'fire-prevention-emergency-evacuation-th.pptx'
+  const companionStoredName = companionOriginalName
+  await writeFile(path.join(trainingUploadDir, storedName), await readFile(path.join(root, 'seed', originalName)))
+  await writeFile(path.join(trainingUploadDir, companionStoredName), await readFile(path.join(root, 'seed', companionOriginalName)))
+  const timestamp = nowIso()
+  db.prepare(`INSERT INTO training_materials
+    (id, public_token, title, description, original_name, stored_name, mime_type,
+      companion_original_name, companion_stored_name, is_active, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'application/pdf', ?, ?, 1, ?, ?, ?)`)
+    .run(fireTrainingId, newPublicToken(), 'การป้องกันอัคคีภัยและการอพยพฉุกเฉิน',
+      'สื่ออบรม 8 สไลด์ พร้อมไฟล์ PowerPoint สำหรับนำไปใช้ประกอบการอบรม',
+      originalName, storedName, companionOriginalName, companionStoredName, adminId, timestamp, timestamp)
 }
 
 db.exec(`
@@ -589,6 +619,7 @@ function trainingMaterialDto(row) {
     description: row.description,
     originalName: row.original_name,
     mimeType: row.mime_type,
+    companionOriginalName: row.companion_original_name || '',
     isActive: Boolean(row.is_active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1488,7 +1519,11 @@ app.post('/api/public/assessments/:token/submissions', (req, res) => {
 app.get('/api/public/training-materials/:token', (req, res) => {
   const material = db.prepare('SELECT * FROM training_materials WHERE public_token = ? AND is_active = 1').get(req.params.token)
   if (!material) return res.status(404).json({ error: 'ไม่พบเอกสารหรือปิดการเผยแพร่แล้ว' })
-  res.set('Cache-Control', 'no-store').json({ material: { ...trainingMaterialDto(material), fileUrl: `/api/public/training-materials/${material.public_token}/file` } })
+  res.set('Cache-Control', 'no-store').json({ material: {
+    ...trainingMaterialDto(material),
+    fileUrl: `/api/public/training-materials/${material.public_token}/file`,
+    presentationUrl: material.companion_stored_name ? `/api/public/training-materials/${material.public_token}/presentation` : '',
+  } })
 })
 
 app.post('/api/public/training-materials/:token/views', (req, res) => {
@@ -1516,6 +1551,17 @@ app.get('/api/public/training-materials/:token/file', (req, res, next) => {
   const safeFilename = material.original_name.replace(/["\r\n]/g, '_')
   res.type(material.mime_type).set('X-Content-Type-Options', 'nosniff').set('Content-Disposition', `inline; filename="${safeFilename}"`)
   res.sendFile(path.join(trainingUploadDir, material.stored_name), (error) => error && next(error))
+})
+
+app.get('/api/public/training-materials/:token/presentation', (req, res, next) => {
+  const material = db.prepare(`SELECT companion_stored_name, companion_original_name
+    FROM training_materials WHERE public_token = ? AND is_active = 1`).get(req.params.token)
+  if (!material?.companion_stored_name) return res.status(404).json({ error: 'ไม่พบไฟล์ PowerPoint หรือปิดการเผยแพร่แล้ว' })
+  const safeFilename = material.companion_original_name.replace(/["\r\n]/g, '_')
+  res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
+    .set('X-Content-Type-Options', 'nosniff')
+    .set('Content-Disposition', `attachment; filename="${safeFilename}"`)
+  res.sendFile(path.join(trainingUploadDir, material.companion_stored_name), (error) => error && next(error))
 })
 
 app.get('/api/admin/assessments', requireAdmin, (_req, res) => {
@@ -1675,6 +1721,7 @@ app.delete('/api/admin/training-materials/:id', requireAdmin, async (req, res) =
   if (!existing) return res.status(404).json({ error: 'ไม่พบสื่ออบรม' })
   db.prepare('DELETE FROM training_materials WHERE id = ?').run(existing.id)
   await unlink(path.join(trainingUploadDir, existing.stored_name)).catch(() => undefined)
+  if (existing.companion_stored_name) await unlink(path.join(trainingUploadDir, existing.companion_stored_name)).catch(() => undefined)
   addAudit(req.session.user.id, 'ลบสื่ออบรม', 'training_material', existing.id, { title: existing.title })
   res.json({ ok: true })
 })
