@@ -1,4 +1,4 @@
-import type { Assessment, AssessmentQuestion, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, Filters, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
+import type { Assignee, Assessment, AssessmentQuestion, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, Filters, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
@@ -22,6 +22,7 @@ export const api = {
     return request<DashboardCategorySummary>(`/api/dashboard/category?${query.toString()}`)
   },
   myTasks: () => request<{ tasks: MyTask[]; counts: { total: number; notStarted: number; inProgress: number; overdue: number } }>('/api/my-tasks'),
+  assignees: () => request<{ assignees: Assignee[] }>('/api/assignees'),
   checklist: () => request<{ items: ChecklistItem[] }>('/api/checklist'),
   adminChecklist: () => request<{ items: ChecklistItem[] }>('/api/admin/checklist'),
   createChecklistItem: (input: Pick<ChecklistItem, 'title' | 'description' | 'choices' | 'order'>) => request<{ item: ChecklistItem }>('/api/admin/checklist', {

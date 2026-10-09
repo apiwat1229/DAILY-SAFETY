@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowRight, Camera, CheckCircle2, CircleHelp, ClipboardCheck, Images, ImagePlus, LoaderCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, localDateString, localTimeString } from '@/lib/api'
-import type { ChecklistItem, InspectionSuggestions, User } from '@/lib/types'
+import type { Assignee, ChecklistItem, InspectionSuggestions, User } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,13 +11,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/date-picker'
 import { TimePicker } from '@/components/time-picker'
 import { AutocompleteInput } from '@/components/autocomplete-input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/lib/i18n'
 
 type Result = ChecklistItem['choices'][number] | ''
-type DraftResponse = { result: Result; issueDetails: string; responsible: string; beforeFiles: File[] }
+type DraftResponse = { result: Result; issueDetails: string; responsible: string; responsibleUserId: string; beforeFiles: File[] }
 type Props = { user: User; onCreated: () => void }
 
-const blankResponse = (): DraftResponse => ({ result: '', issueDetails: '', responsible: '', beforeFiles: [] })
+const blankResponse = (): DraftResponse => ({ result: '', issueDetails: '', responsible: '', responsibleUserId: '', beforeFiles: [] })
 const today = localDateString()
 const MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
 const COMPRESSED_IMAGE_TARGET_BYTES = 7.5 * 1024 * 1024
@@ -91,6 +92,7 @@ export function InspectionFormPage({ user, onCreated }: Props) {
   const [checklistLoading, setChecklistLoading] = useState(true)
   const [responses, setResponses] = useState<Record<string, DraftResponse>>({})
   const [suggestions, setSuggestions] = useState<InspectionSuggestions>({ areas: [], shifts: [], inspectors: [], employeeCodes: [], responsibles: [] })
+  const [assignees, setAssignees] = useState<Assignee[]>([])
   const [busy, setBusy] = useState(false)
   const [invalidTarget, setInvalidTarget] = useState<string | null>(null)
   const { language, t } = useI18n()
@@ -103,6 +105,7 @@ export function InspectionFormPage({ user, onCreated }: Props) {
       .finally(() => setChecklistLoading(false))
   }, [])
   useEffect(() => { api.suggestions(language).then(setSuggestions).catch(() => undefined) }, [language])
+  useEffect(() => { api.assignees().then(({ assignees: rows }) => setAssignees(rows)).catch((error) => toast.error(error.message)) }, [])
 
   const answered = useMemo(() => Object.values(responses).filter((response) => response.result).length, [responses])
   const ngCount = useMemo(() => Object.values(responses).filter((response) => response.result === 'NG').length, [responses])
@@ -134,8 +137,8 @@ export function InspectionFormPage({ user, onCreated }: Props) {
     setInvalidTarget((current) => current?.startsWith(`item-${key}-`) ? null : current)
     const current = responses[key]
     updateResponse(key, result === 'NG'
-      ? { result, issueDetails: current.result === 'NG' ? current.issueDetails : '', responsible: current.result === 'NG' ? current.responsible : '', beforeFiles: current.result === 'NG' ? current.beforeFiles : [] }
-      : { result, issueDetails: '', responsible: '', beforeFiles: [] })
+      ? { result, issueDetails: current.result === 'NG' ? current.issueDetails : '', responsible: current.result === 'NG' ? current.responsible : '', responsibleUserId: current.result === 'NG' ? current.responsibleUserId : '', beforeFiles: current.result === 'NG' ? current.beforeFiles : [] }
+      : { result, issueDetails: '', responsible: '', responsibleUserId: '', beforeFiles: [] })
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -153,12 +156,12 @@ export function InspectionFormPage({ user, onCreated }: Props) {
       moveToInvalid(`item-${unanswered.key}-card`)
       return toast.error(`${t('กรุณาเลือกผลตรวจให้ครบ')} · ${t(unanswered.title)}`)
     }
-    const invalidNg = checklist.find(({ key }) => responses[key].result === 'NG' && (!responses[key].issueDetails.trim() || !responses[key].responsible.trim() || responses[key].beforeFiles.length === 0))
+    const invalidNg = checklist.find(({ key }) => responses[key].result === 'NG' && (!responses[key].issueDetails.trim() || !responses[key].responsibleUserId || responses[key].beforeFiles.length === 0))
     if (invalidNg) {
       const response = responses[invalidNg.key]
       const targetId = !response.issueDetails.trim()
         ? `item-${invalidNg.key}-details`
-        : !response.responsible.trim()
+        : !response.responsibleUserId
           ? `item-${invalidNg.key}-responsible`
           : `item-${invalidNg.key}-photo`
       moveToInvalid(targetId)
@@ -168,7 +171,7 @@ export function InspectionFormPage({ user, onCreated }: Props) {
     const body = new FormData()
     body.set('payload', JSON.stringify({
       date, time, inspectorName: inspectorName.trim(), employeeCode: employeeCode.trim(), area: area.trim(), shift: shift.trim(),
-      responses: checklist.map(({ key }) => ({ key, result: responses[key].result, issueDetails: responses[key].issueDetails, responsible: responses[key].responsible })),
+      responses: checklist.map(({ key }) => ({ key, result: responses[key].result, issueDetails: responses[key].issueDetails, responsible: responses[key].responsible, responsibleUserId: responses[key].responsibleUserId })),
     }))
     const photoMetadata: { key: string; type: 'before' }[] = []
     for (const item of checklist) {
@@ -212,7 +215,7 @@ export function InspectionFormPage({ user, onCreated }: Props) {
 
     <div className="flex items-center justify-between"><div><h2 className="text-base font-semibold">{t('รายการตรวจ')} {checklist.length} {t('หัวข้อ')}</h2><p className="mt-1 text-[11px] text-muted-foreground">{t('ผลตรวจที่เลือกแล้ว')} {answered} / {checklist.length}</p></div><div className="flex gap-1.5"><Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">OK {Object.values(responses).filter((item) => item.result === 'OK').length}</Badge><Badge variant="outline" className="border-red-200 bg-red-50 text-[10px] text-red-700">NG {ngCount}</Badge></div></div>
 
-    <div className="space-y-3">{checklist.map((item) => <ChecklistCard key={item.key} item={item} response={responses[item.key]} responsibleSuggestions={suggestions.responsibles} invalidTarget={invalidTarget} onChange={(update) => updateResponse(item.key, update)} onResult={(result) => chooseResult(item.key, result)} />)}</div>
+    <div className="space-y-3">{checklist.map((item) => <ChecklistCard key={item.key} item={item} response={responses[item.key]} assignees={assignees} invalidTarget={invalidTarget} onChange={(update) => updateResponse(item.key, update)} onResult={(result) => chooseResult(item.key, result)} />)}</div>
 
     <div className="safe-area-bottom sticky bottom-0 z-10 -mx-4 border-t border-[#e3e9e8] bg-[#f4f7f8]/95 px-4 py-3 backdrop-blur-md sm:-mx-7 sm:px-7 lg:-mx-9 lg:px-9">
       <div className="mx-auto flex max-w-[1100px] flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
@@ -227,7 +230,7 @@ function FormField({ label, htmlFor, children }: { label: string; htmlFor: strin
   return <div className="grid gap-1.5"><Label htmlFor={htmlFor} className="inspection-field-label text-xs text-muted-foreground sm:text-[10px]">{label}</Label>{children}</div>
 }
 
-function ChecklistCard({ item, response, responsibleSuggestions, invalidTarget, onChange, onResult }: { item: ChecklistItem; response: DraftResponse; responsibleSuggestions: string[]; invalidTarget: string | null; onChange: (update: Partial<DraftResponse>) => void; onResult: (result: Result) => void }) {
+function ChecklistCard({ item, response, assignees, invalidTarget, onChange, onResult }: { item: ChecklistItem; response: DraftResponse; assignees: Assignee[]; invalidTarget: string | null; onChange: (update: Partial<DraftResponse>) => void; onResult: (result: Result) => void }) {
   const [previews, setPreviews] = useState<string[]>([])
   const [compressing, setCompressing] = useState(false)
   const cameraInput = useRef<HTMLInputElement>(null)
@@ -277,7 +280,7 @@ function ChecklistCard({ item, response, responsibleSuggestions, invalidTarget, 
     {response.result === 'NG' && <div className="mt-4 grid gap-3 border-t border-[#f1e2de] pt-4 lg:grid-cols-[1.1fr_.9fr]">
       <div className="grid gap-3">
         <div className="grid gap-1.5"><Label htmlFor={`${itemTargetPrefix}details`} className="inspection-field-label text-xs font-medium sm:text-[10px]">{t('รายละเอียดที่พบ')} <span className="text-red-600">*</span></Label><Textarea id={`${itemTargetPrefix}details`} aria-invalid={invalidTarget === `${itemTargetPrefix}details`} value={response.issueDetails} onChange={(event) => onChange({ issueDetails: event.target.value })} rows={2} placeholder={t('ระบุสิ่งที่พบและจุดที่เกิดปัญหา')} className={`resize-y bg-white text-xs ${invalidTarget === `${itemTargetPrefix}details` ? 'border-red-500 ring-2 ring-red-200' : ''}`} required /></div>
-        <div className="grid gap-1.5"><Label htmlFor={`${itemTargetPrefix}responsible`} className="inspection-field-label text-xs font-medium sm:text-[10px]">{t('ผู้รับผิดชอบ')} <span className="text-red-600">*</span></Label><AutocompleteInput id={`${itemTargetPrefix}responsible`} value={response.responsible} onValueChange={(value) => onChange({ responsible: value })} suggestions={responsibleSuggestions} placeholder={t('ชื่อผู้รับผิดชอบ')} className={`h-10 bg-white text-sm ${invalidTarget === `${itemTargetPrefix}responsible` ? 'border-red-500 ring-2 ring-red-200' : ''}`} required /></div>
+        <div className="grid gap-1.5"><Label htmlFor={`${itemTargetPrefix}responsible`} className="inspection-field-label text-xs font-medium sm:text-[10px]">{t('ผู้รับผิดชอบ')} <span className="text-red-600">*</span></Label><Select value={response.responsibleUserId} onValueChange={(id) => { const assignee = assignees.find((candidate) => candidate.id === id); onChange({ responsibleUserId: id, responsible: assignee?.name || '' }) }}><SelectTrigger id={`${itemTargetPrefix}responsible`} aria-invalid={invalidTarget === `${itemTargetPrefix}responsible`} className={`h-10 w-full bg-white text-sm ${invalidTarget === `${itemTargetPrefix}responsible` ? 'border-red-500 ring-2 ring-red-200' : ''}`}><SelectValue placeholder={t('เลือกบัญชีผู้รับผิดชอบ')} /></SelectTrigger><SelectContent>{assignees.map((assignee) => <SelectItem key={assignee.id} value={assignee.id}>{assignee.name} · {assignee.employeeCode}</SelectItem>)}</SelectContent></Select>{assignees.length === 0 && <p className="text-xs text-amber-700">{t('ยังไม่มีบัญชีพนักงานหรือหัวหน้างานที่ใช้งานได้')}</p>}</div>
       </div>
       <div id={`${itemTargetPrefix}photo`} className="grid content-start gap-1.5">
         <Label className="inspection-field-label text-xs font-medium sm:text-[10px]">{t('รูปก่อนแก้ไข')} <span className="text-red-600">*</span></Label>

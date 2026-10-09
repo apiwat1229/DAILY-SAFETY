@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CalendarClock, Camera, Check, ChevronRight, ImagePlus, LoaderCircle, RotateCcw, UserRound, ZoomIn, ZoomOut } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, formatDate, formatDateTime } from '@/lib/api'
-import type { Inspection, InspectionResponse, User } from '@/lib/types'
+import type { Assignee, Inspection, InspectionResponse, User } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AutocompleteInput } from '@/components/autocomplete-input'
 import { useI18n } from '@/lib/i18n'
 
 type Props = { id: string | null; user: User; onOpenChange: (open: boolean) => void; onUpdated?: () => void }
@@ -51,7 +50,7 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated }: Pr
         </div>
         <div className="flex items-center justify-between"><div><h3 className="text-sm font-semibold">{t('ผลตรวจรายหัวข้อ')}</h3><p className="mt-1 text-xs text-muted-foreground">{t('บันทึกเมื่อ')} {formatDateTime(inspection.createdAt, language)}</p></div><div className="flex gap-2"><Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">NG {inspection.items.filter((item) => item.result === 'NG').length}</Badge><Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">OK {inspection.items.filter((item) => item.result === 'OK').length}</Badge></div></div>
         <div className="space-y-2.5">{inspection.items.map((item) => {
-          const isAssignedToUser = [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase())
+          const isAssignedToUser = item.responsibleUserId === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase())
           const canManage = user.role === 'admin' || (isAssignedToUser && item.followUpStatus !== 'แก้ไขแล้ว')
           return <ResponseCard key={item.id} item={item} canManage={canManage} manageLabel={user.role === 'admin' ? 'จัดการงาน' : 'อัปเดตงานของฉัน'} onManage={() => setSelectedItem(item)} onPhotoClick={setSelectedPhoto} />
         })}</div>
@@ -115,30 +114,34 @@ function PhotoPreviewDialog({ photo, onOpenChange }: { photo: InspectionResponse
 function IssueUpdateDialog({ item, user, onOpenChange, onSaved }: { item: InspectionResponse | null; user: User; onOpenChange: (open: boolean) => void; onSaved: (inspection: Inspection) => void }) {
   const { language, t } = useI18n()
   const [status, setStatus] = useState('ยังไม่แก้ไข')
-  const [responsible, setResponsible] = useState('')
+  const [responsibleUserId, setResponsibleUserId] = useState('')
+  const [assignees, setAssignees] = useState<Assignee[]>([])
   const [dueDate, setDueDate] = useState('')
   const [note, setNote] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
-  const [responsibleSuggestions, setResponsibleSuggestions] = useState<string[]>([])
-
-  useEffect(() => { api.suggestions(language).then(({ responsibles }) => setResponsibleSuggestions(responsibles)).catch(() => undefined) }, [language])
+  useEffect(() => { if (user.role === 'admin') api.assignees().then(({ assignees: rows }) => setAssignees(rows)).catch(() => undefined) }, [user.role])
 
   useEffect(() => {
     if (!item) return
     setStatus(item.followUpStatus)
-    setResponsible(item.responsible)
     setDueDate(item.dueDate)
     setNote(item.resolutionNote)
     setFiles([])
   }, [item])
+
+  useEffect(() => {
+    if (!item) return
+    const current = assignees.find((assignee) => assignee.id === item.responsibleUserId || [assignee.name, assignee.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase()))
+    setResponsibleUserId(item.responsibleUserId || current?.id || '')
+  }, [item, assignees])
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!item) return
     const body = new FormData()
     body.set('followUpStatus', status)
-    body.set('responsible', responsible)
+    body.set('responsibleUserId', responsibleUserId)
     body.set('dueDate', dueDate)
     body.set('resolutionNote', note)
     files.forEach((file) => body.append('photos', file))
@@ -159,12 +162,12 @@ function IssueUpdateDialog({ item, user, onOpenChange, onSaved }: { item: Inspec
       <form onSubmit={save} className="space-y-4 pt-1">
         <div className="grid gap-2"><Label htmlFor="follow-status">{t('สถานะการแก้ไข')}</Label><Select value={status} onValueChange={setStatus}><SelectTrigger id="follow-status" className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent>{actionStatuses.map((option) => <SelectItem key={option} value={option}>{t(option)}</SelectItem>)}</SelectContent></Select></div>
         {user.role === 'admin' ? <>
-          <div className="grid gap-2"><Label htmlFor="follow-responsible">{t('ผู้รับผิดชอบ')}</Label><AutocompleteInput id="follow-responsible" value={responsible} onValueChange={setResponsible} suggestions={responsibleSuggestions} required /></div>
+          <div className="grid gap-2"><Label htmlFor="follow-responsible">{t('ผู้รับผิดชอบ')}</Label><Select value={responsibleUserId} onValueChange={setResponsibleUserId}><SelectTrigger id="follow-responsible" className="h-10 w-full"><SelectValue placeholder={t('เลือกบัญชีผู้รับผิดชอบ')} /></SelectTrigger><SelectContent>{assignees.map((assignee) => <SelectItem key={assignee.id} value={assignee.id}>{assignee.name} · {assignee.employeeCode}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">{t('เลือกบัญชีที่ผู้รับผิดชอบใช้เข้าสู่ระบบ')}</p></div>
           <div className="grid gap-2"><Label htmlFor="follow-due">{t('กำหนดเสร็จ')}</Label><DatePicker id="follow-due" ariaLabel={t('กำหนดเสร็จ')} value={dueDate} onChange={setDueDate} clearable placeholder={t('เลือกวัน')} /></div>
         </> : <div className="grid gap-2 sm:grid-cols-2"><div><Label>{t('ผู้รับผิดชอบ')}</Label><p className="mt-2 rounded-md border bg-muted px-3 py-2 text-sm">{item?.responsible}</p></div><div><Label>{t('กำหนดเสร็จ')}</Label><p className="mt-2 rounded-md border bg-muted px-3 py-2 text-sm">{item?.dueDate ? formatDate(item.dueDate, language) : '—'}</p></div></div>}
         <div className="grid gap-2"><Label htmlFor="resolution-note">{t('บันทึกการแก้ไข')}</Label><Textarea id="resolution-note" value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder={t('อธิบายวิธีแก้ไขหรือสิ่งที่ต้องตรวจซ้ำ')} /></div>
         <div className="grid gap-2"><Label htmlFor="after-photos">{t('รูปหลังแก้ไข')}</Label><label htmlFor="after-photos" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[#cfddda] bg-[#f7faf9] p-3 text-xs text-muted-foreground hover:border-primary/50"><ImagePlus size={18} className="text-primary" /><span>{files.length ? `${t('เลือกแล้ว')} ${files.length} ${t('รูป')}` : t('เพิ่มรูปจากกล้องหรืออุปกรณ์')}</span><input id="after-photos" type="file" accept="image/*" multiple capture="environment" onChange={(event) => setFiles(Array.from(event.target.files || []))} className="sr-only" /></label>{item?.photos.some((photo) => photo.type === 'after') && <p className="text-[10px] text-muted-foreground">{t('มีรูปหลังแก้ไขบันทึกไว้แล้ว')}</p>}</div>
-        <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึก')}</Button></div>
+        <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy || (user.role === 'admin' && !responsibleUserId)} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึก')}</Button></div>
       </form>
     </DialogContent>
   </Dialog>

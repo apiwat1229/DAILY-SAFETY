@@ -7,6 +7,8 @@ export type User = {
   isActive: boolean
 }
 
+export type Assignee = Pick<User, 'id' | 'name' | 'employeeCode' | 'role'>
+
 export type ChecklistItem = {
   key: string
   title: string
@@ -31,6 +33,7 @@ export type InspectionResponse = ChecklistItem & {
   result: InspectionResult
   issueDetails: string
   responsible: string
+  responsibleUserId: string
   followUpStatus: string
   dueDate: string
   resolutionNote: string

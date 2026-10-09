@@ -64,6 +64,7 @@ db.exec(`
     result TEXT NOT NULL CHECK(result IN ('OK', 'NG', 'N/A')),
     issue_details TEXT NOT NULL DEFAULT '',
     responsible TEXT NOT NULL DEFAULT '',
+    responsible_user_id TEXT NOT NULL DEFAULT '',
     follow_up_status TEXT NOT NULL DEFAULT 'ไม่เกี่ยวข้อง',
     due_date TEXT NOT NULL DEFAULT '',
     resolution_note TEXT NOT NULL DEFAULT '',
@@ -182,6 +183,10 @@ const inspectionColumns = db.prepare('PRAGMA table_info(inspections)').all()
 if (!inspectionColumns.some((column) => column.name === 'inspection_time')) {
   db.exec("ALTER TABLE inspections ADD COLUMN inspection_time TEXT NOT NULL DEFAULT ''")
 }
+const responseColumns = db.prepare('PRAGMA table_info(responses)').all()
+if (!responseColumns.some((column) => column.name === 'responsible_user_id')) {
+  db.exec("ALTER TABLE responses ADD COLUMN responsible_user_id TEXT NOT NULL DEFAULT ''")
+}
 const userColumns = db.prepare('PRAGMA table_info(users)').all()
 if (!userColumns.some((column) => column.name === 'is_active')) {
   db.exec('ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))')
@@ -290,6 +295,27 @@ await seedUser({
   employeeCode: 'LEADER-01',
   role: 'leader',
 })
+
+db.exec(`
+  UPDATE responses
+  SET responsible_user_id = (
+    SELECT id FROM users
+    WHERE employee_code != '' AND LOWER(TRIM(employee_code)) = LOWER(TRIM(responses.responsible))
+    ORDER BY is_active DESC LIMIT 1
+  )
+  WHERE result = 'NG' AND responsible_user_id = '' AND EXISTS (
+    SELECT 1 FROM users WHERE employee_code != '' AND LOWER(TRIM(employee_code)) = LOWER(TRIM(responses.responsible))
+  );
+  UPDATE responses
+  SET responsible_user_id = (
+    SELECT id FROM users
+    WHERE LOWER(TRIM(display_name)) = LOWER(TRIM(responses.responsible))
+    LIMIT 1
+  )
+  WHERE result = 'NG' AND responsible_user_id = '' AND (
+    SELECT COUNT(*) FROM users WHERE LOWER(TRIM(display_name)) = LOWER(TRIM(responses.responsible))
+  ) = 1;
+`)
 
 const app = express()
 app.disable('x-powered-by')
@@ -572,9 +598,9 @@ function buildInspectionWhere(filters, user) {
     clauses.push(`(i.inspector_id = ? OR EXISTS (
       SELECT 1 FROM responses assigned
       WHERE assigned.inspection_id = i.id AND assigned.result = 'NG'
-        AND LOWER(TRIM(assigned.responsible)) IN (LOWER(?), LOWER(?))
+        AND (assigned.responsible_user_id = ? OR LOWER(TRIM(assigned.responsible)) IN (LOWER(?), LOWER(?)))
     ))`)
-    params.push(user.id, user.name, user.employeeCode)
+    params.push(user.id, user.id, user.name, user.employeeCode)
   }
   if (filters.from) { clauses.push('i.inspection_date >= ?'); params.push(filters.from) }
   if (filters.to) { clauses.push('i.inspection_date <= ?'); params.push(filters.to) }
@@ -640,6 +666,7 @@ function getInspection(id) {
     result: row.result,
     issueDetails: row.issue_details,
     responsible: row.responsible,
+    responsibleUserId: row.responsible_user_id || '',
     followUpStatus: row.follow_up_status,
     dueDate: row.due_date,
     resolutionNote: row.resolution_note,
@@ -663,22 +690,22 @@ function canReadInspection(user, inspectionId) {
   return Boolean(db.prepare(`SELECT i.id FROM inspections i
     WHERE i.id = ? AND (i.inspector_id = ? OR EXISTS (
       SELECT 1 FROM responses assigned WHERE assigned.inspection_id = i.id AND assigned.result = 'NG'
-        AND LOWER(TRIM(assigned.responsible)) IN (LOWER(?), LOWER(?))
-    ))`).get(inspectionId, user.id, user.name, user.employeeCode))
+        AND (assigned.responsible_user_id = ? OR LOWER(TRIM(assigned.responsible)) IN (LOWER(?), LOWER(?)))
+    ))`).get(inspectionId, user.id, user.id, user.name, user.employeeCode))
 }
 
 function canReadResponse(user, responseId) {
   if (user.role === 'admin') return true
   return Boolean(db.prepare(`SELECT r.id FROM responses r JOIN inspections i ON i.id = r.inspection_id
     WHERE r.id = ? AND (i.inspector_id = ? OR (r.result = 'NG'
-      AND LOWER(TRIM(r.responsible)) IN (LOWER(?), LOWER(?))))`)
-    .get(responseId, user.id, user.name, user.employeeCode))
+      AND (r.responsible_user_id = ? OR LOWER(TRIM(r.responsible)) IN (LOWER(?), LOWER(?)))))`)
+    .get(responseId, user.id, user.id, user.name, user.employeeCode))
 }
 
 function inspectionForUser(user, inspection) {
   if (!inspection || user.role === 'admin') return inspection
   const isInspector = Boolean(db.prepare('SELECT id FROM inspections WHERE id = ? AND inspector_id = ?').get(inspection.id, user.id))
-  return isInspector ? inspection : { ...inspection, items: inspection.items.filter((item) => item.result === 'NG' && [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase())) }
+  return isInspector ? inspection : { ...inspection, items: inspection.items.filter((item) => item.result === 'NG' && (item.responsibleUserId === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase()))) }
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
@@ -799,6 +826,11 @@ app.get('/api/suggestions', requireAuth, (req, res) => {
   })
 })
 
+app.get('/api/assignees', requireAuth, (_req, res) => {
+  const users = db.prepare("SELECT id, username, display_name, employee_code, role, is_active FROM users WHERE is_active = 1 AND role IN ('leader', 'employee') ORDER BY display_name COLLATE NOCASE").all()
+  res.json({ assignees: users.map(safeUser) })
+})
+
 app.get('/api/my-tasks', requireAuth, (req, res) => {
   const user = req.session.user
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIME_ZONE || 'Asia/Bangkok' }).format(new Date())
@@ -812,12 +844,12 @@ app.get('/api/my-tasks', requireAuth, (req, res) => {
       (SELECT COUNT(*) FROM attachments a WHERE a.response_id = r.id AND a.attachment_type = 'after') AS after_photos
     FROM responses r JOIN inspections i ON i.id = r.inspection_id
     WHERE r.result = 'NG' AND r.follow_up_status != 'แก้ไขแล้ว'
-      AND LOWER(TRIM(r.responsible)) IN (LOWER(?), LOWER(?))
+      AND (r.responsible_user_id = ? OR LOWER(TRIM(r.responsible)) IN (LOWER(?), LOWER(?)))
     ORDER BY CASE WHEN r.due_date != '' AND r.due_date < ? THEN 0 ELSE 1 END,
       CASE r.follow_up_status WHEN 'ยังไม่แก้ไข' THEN 0 ELSE 1 END,
       CASE WHEN r.due_date = '' THEN 1 ELSE 0 END, r.due_date, i.inspection_date DESC, i.created_at DESC
     LIMIT 200
-  `).all(user.name, user.employeeCode, today).map((row) => ({
+  `).all(user.id, user.name, user.employeeCode, today).map((row) => ({
     id: row.id, inspectionId: row.inspection_id, date: row.date, time: row.time,
     inspector: row.inspector, employeeCode: row.employee_code, area: row.area, shift: row.shift,
     title: row.title, description: row.description, issueDetails: row.issue_details,
@@ -1162,8 +1194,14 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
   for (const item of checklist) {
     const response = submitted.get(item.key)
     if (!item.choices.includes(response.result)) return res.status(400).json({ error: `หัวข้อ ${item.title} ไม่รองรับคำตอบนี้` })
-    if (response.result === 'NG' && (!String(response.issueDetails || '').trim() || !String(response.responsible || '').trim())) {
+    if (response.result === 'NG' && (!String(response.issueDetails || '').trim() || !String(response.responsibleUserId || '').trim())) {
       return res.status(400).json({ error: `หัวข้อ ${item.title} ที่พบ NG ต้องกรอกรายละเอียดและผู้รับผิดชอบ` })
+    }
+    if (response.result === 'NG') {
+      const assignee = db.prepare("SELECT id, display_name FROM users WHERE id = ? AND is_active = 1 AND role IN ('leader', 'employee')").get(String(response.responsibleUserId))
+      if (!assignee) return res.status(400).json({ error: 'เลือกบัญชีผู้รับผิดชอบที่เปิดใช้งานจากรายชื่อ' })
+      response.responsibleUserId = assignee.id
+      response.responsible = assignee.display_name
     }
     if (response.result === 'NG' && response.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(response.dueDate))) return res.status(400).json({ error: `กำหนดเสร็จของหัวข้อ ${item.title} ไม่ถูกต้อง` })
     if (String(response.issueDetails || '').length > 4000 || String(response.responsible || '').length > 120) return res.status(400).json({ error: `รายละเอียดของหัวข้อ ${item.title} ยาวเกินไป` })
@@ -1205,8 +1243,8 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(inspectionId, inspectionDate, inspectionTime, req.session.user.id, inspectorName, employeeCode, area, shift, createdAt, createdAt)
     const insertResponse = db.prepare(`INSERT INTO responses
-      (id, inspection_id, item_key, item_title, item_description, order_index, result, issue_details, responsible, follow_up_status, due_date, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, inspection_id, item_key, item_title, item_description, order_index, result, issue_details, responsible, responsible_user_id, follow_up_status, due_date, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     for (const item of checklist) {
       const response = submitted.get(item.key)
       insertResponse.run(
@@ -1214,6 +1252,7 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
         response.result,
         response.result === 'NG' ? String(response.issueDetails || '').trim() : '',
         response.result === 'NG' ? String(response.responsible || '').trim() : '',
+        response.result === 'NG' ? String(response.responsibleUserId || '') : '',
         response.result === 'NG' ? 'ยังไม่แก้ไข' : 'ไม่เกี่ยวข้อง',
         response.result === 'NG' ? String(response.dueDate || '') : '',
         createdAt,
@@ -1244,15 +1283,24 @@ app.patch('/api/responses/:id', requireAuth, upload.array('photos', 10), async (
   if (response.result !== 'NG') return res.status(400).json({ error: 'ติดตามสถานะได้เฉพาะรายการ NG' })
   const user = req.session.user
   const isAdmin = user.role === 'admin'
-  const assignedToUser = [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === String(response.responsible || '').trim().toLocaleLowerCase())
+  const assignedToUser = response.responsible_user_id === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === String(response.responsible || '').trim().toLocaleLowerCase())
   if (!isAdmin && !assignedToUser) return res.status(403).json({ error: 'เฉพาะผู้รับผิดชอบงานนี้เท่านั้นที่อัปเดตได้' })
   if (!isAdmin && response.follow_up_status === 'แก้ไขแล้ว') return res.status(403).json({ error: 'รายการนี้ปิดงานแล้ว' })
   const followUpStatus = String(req.body.followUpStatus || response.follow_up_status)
   const dueDate = isAdmin ? String(req.body.dueDate || '') : response.due_date
+  const requestedAssigneeId = String(req.body.responsibleUserId || response.responsible_user_id || '')
+  if (!isAdmin && requestedAssigneeId && requestedAssigneeId !== (response.responsible_user_id || '') && requestedAssigneeId !== user.id) {
+    return res.status(403).json({ error: 'ไม่สามารถเปลี่ยนผู้รับผิดชอบของงานนี้ได้' })
+  }
   if (!isAdmin && req.body.responsible && String(req.body.responsible).trim().toLocaleLowerCase() !== String(response.responsible || '').trim().toLocaleLowerCase()) {
     return res.status(403).json({ error: 'ไม่สามารถเปลี่ยนผู้รับผิดชอบของงานนี้ได้' })
   }
-  const responsible = isAdmin ? String(req.body.responsible || response.responsible).trim() : response.responsible
+  const selectedAssignee = isAdmin && requestedAssigneeId
+    ? db.prepare("SELECT id, display_name FROM users WHERE id = ? AND is_active = 1 AND role IN ('leader', 'employee')").get(requestedAssigneeId)
+    : null
+  if (isAdmin && requestedAssigneeId && !selectedAssignee) return res.status(400).json({ error: 'เลือกบัญชีผู้รับผิดชอบที่เปิดใช้งานจากรายชื่อ' })
+  const responsibleUserId = isAdmin ? (selectedAssignee?.id || response.responsible_user_id || '') : (response.responsible_user_id || (requestedAssigneeId === user.id ? user.id : ''))
+  const responsible = isAdmin ? String(selectedAssignee?.display_name || response.responsible).trim() : response.responsible
   const resolutionNote = String(req.body.resolutionNote || '').trim()
   const files = req.files || []
   if (!FOLLOW_UP_STATUSES.includes(followUpStatus)) return res.status(400).json({ error: 'สถานะการแก้ไขไม่ถูกต้อง' })
@@ -1273,8 +1321,8 @@ app.patch('/api/responses/:id', requireAuth, upload.array('photos', 10), async (
       }))
     }
     db.exec('BEGIN')
-    db.prepare(`UPDATE responses SET follow_up_status = ?, due_date = ?, responsible = ?, resolution_note = ?, updated_at = ? WHERE id = ?`)
-      .run(followUpStatus, dueDate, responsible, resolutionNote, nowIso(), response.id)
+    db.prepare(`UPDATE responses SET follow_up_status = ?, due_date = ?, responsible = ?, responsible_user_id = ?, resolution_note = ?, updated_at = ? WHERE id = ?`)
+      .run(followUpStatus, dueDate, responsible, responsibleUserId, resolutionNote, nowIso(), response.id)
     stored.forEach(insertPhoto)
     addAudit(req.session.user.id, 'อัปเดตสถานะ NG', 'response', response.id, { status: followUpStatus })
     db.exec('COMMIT')
