@@ -162,6 +162,18 @@ db.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS training_views (
+    id TEXT PRIMARY KEY,
+    material_id TEXT NOT NULL REFERENCES training_materials(id) ON DELETE CASCADE,
+    employee_code TEXT NOT NULL,
+    employee_name TEXT NOT NULL,
+    viewed_at TEXT NOT NULL,
+    UNIQUE(material_id, employee_code)
+  );
+  CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL DEFAULT ''
+  );
   CREATE INDEX IF NOT EXISTS idx_inspections_date ON inspections(inspection_date);
   CREATE INDEX IF NOT EXISTS idx_responses_inspection ON responses(inspection_id);
   CREATE INDEX IF NOT EXISTS idx_responses_result_status ON responses(result, follow_up_status);
@@ -172,6 +184,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_assessment_questions_parent ON assessment_questions(assessment_id, order_index);
   CREATE INDEX IF NOT EXISTS idx_assessment_submissions_parent ON assessment_submissions(assessment_id, submitted_at DESC);
   CREATE INDEX IF NOT EXISTS idx_assessment_submissions_employee ON assessment_submissions(employee_code);
+  CREATE INDEX IF NOT EXISTS idx_training_views_employee ON training_views(employee_code, viewed_at DESC);
 `)
 
 const checklistColumns = db.prepare('PRAGMA table_info(checklist_items)').all()
@@ -295,6 +308,58 @@ await seedUser({
   employeeCode: 'LEADER-01',
   role: 'leader',
 })
+
+db.prepare("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sample_safety_content_seeded', '0')").run()
+if (db.prepare("SELECT setting_value FROM app_settings WHERE setting_key = 'sample_safety_content_seeded'").get()?.setting_value !== '1') {
+  const adminId = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY created_at LIMIT 1").get()?.id
+  if (!adminId) throw new Error('Cannot add sample safety content without an active administrator account.')
+  const timestamp = nowIso()
+  const assessmentId = 'sample-safety-basics-v1'
+  const sampleQuestions = [
+    ['ถุงมือป้องกันบาดมีรอยฉีกก่อนเริ่มงาน ควรทำอย่างไร?', ['ใช้ต่อจนกว่าจะจบกะ', 'เปลี่ยนเป็นถุงมือที่สมบูรณ์ก่อนเริ่มงาน', 'พันเทปปิดรอยฉีก', 'ถอดถุงมือแล้วทำงานต่อ'], 1],
+    ['เมื่อต้องทำความสะอาดเครื่องจักรที่ยังมีพลังงาน ควรทำอย่างไรเป็นอันดับแรก?', ['รีบเช็ดเฉพาะจุดที่เข้าถึงได้', 'หยุดเครื่อง แยกพลังงาน ล็อกและติดป้าย พร้อมตรวจยืนยัน', 'ขอให้เพื่อนคอยกดปุ่มหยุด', 'ใส่ถุงมือหนาขึ้นแล้วเริ่มงาน'], 1],
+    ['พบฝาครอบเครื่องจักรหลวมระหว่างเดินเครื่อง ควรทำอย่างไร?', ['หยุดเครื่องและแจ้งผู้รับผิดชอบ', 'ใช้มือดันฝาครอบกลับเข้าที่', 'ทำงานต่อโดยเพิ่มความระมัดระวัง', 'ถอดฝาครอบออกเพื่อไม่ให้สั่น'], 0],
+    ['พบภาชนะสารเคมีไม่มีฉลาก ควรทำอย่างไร?', ['ดมกลิ่นเพื่อระบุชนิด', 'ย้ายไปเทรวมกับสารที่คล้ายกัน', 'หยุดใช้ แยกพื้นที่ และแจ้งหัวหน้างานเพื่อระบุสารอย่างปลอดภัย', 'เปิดฝาทิ้งไว้ให้กลิ่นจาง'], 2],
+    ['หากสารเคมีกระเด็นเข้าตา ควรทำอย่างไร?', ['ขยี้ตาแล้วกลับไปทำงาน', 'ล้างตาทันทีที่จุดล้างตาตามขั้นตอน และขอความช่วยเหลือ', 'เช็ดด้วยผ้าแห้ง', 'รอให้หายระคายเคืองเอง'], 1],
+    ['ทางเดินมีน้ำมันหกและยังไม่ได้ทำความสะอาด ควรทำอย่างไร?', ['เดินอ้อมโดยไม่ต้องแจ้งใคร', 'กั้นหรือเตือนพื้นที่ แจ้งผู้รับผิดชอบ และทำความสะอาดตามวิธีที่ปลอดภัย', 'โรยกระดาษแล้วเดินผ่าน', 'รอให้แห้งเอง'], 1],
+    ['เมื่อต้องยกของหนักด้วยมือ ควรเริ่มจากข้อใด?', ['ประเมินน้ำหนักและเส้นทาง ใช้อุปกรณ์ช่วยหรือขอคนช่วยเมื่อจำเป็น', 'ก้มหลังแล้วยกให้เร็วที่สุด', 'บิดลำตัวขณะยกเพื่อประหยัดเวลา', 'ยกของให้ห่างจากลำตัว'], 0],
+    ['คนเดินเท้าควรปฏิบัติอย่างไรเมื่ออยู่ใกล้รถยก?', ['เดินตัดหน้ารถเพื่อให้ผู้ขับเห็น', 'ใช้ทางเดินหรือทางข้ามที่กำหนด และรอจนผู้ขับรับรู้', 'เดินหลังรถยกขณะถอย', 'ยืนใต้ของที่รถยกกำลังยก'], 1],
+    ['วิธีใช้ถังดับเพลิงเบื้องต้นที่ถูกต้องคือข้อใด?', ['ดึงสลัก เล็งที่ฐานไฟ บีบคันบีบ และกวาดหัวฉีด', 'เล็งที่เปลวไฟด้านบนแล้วฉีดต่อเนื่อง', 'เขย่าถังแล้วเปิดฝาทิ้งไว้', 'เข้าใกล้ไฟให้มากที่สุดก่อนฉีด'], 0],
+    ['หากพบผู้ถูกไฟฟ้าดูด ควรช่วยอย่างไรเป็นอันดับแรก?', ['จับตัวผู้ประสบเหตุแล้วดึงออกทันที', 'ตัดแหล่งจ่ายไฟโดยไม่สัมผัสตัวผู้ประสบเหตุ และเรียกทีมช่วยเหลือ', 'สาดน้ำเพื่อให้ผู้ประสบเหตุฟื้น', 'ใช้โลหะเขี่ยสายไฟ'], 1],
+    ['ก่อนเริ่มงานเชื่อม ควรทำสิ่งใด?', ['เริ่มงานทันทีถ้ามีหน้ากากเชื่อม', 'ขออนุญาตงานร้อน เคลียร์เชื้อเพลิง เตรียมถังดับเพลิงและผู้เฝ้าระวัง', 'เปิดประตูไว้เพียงอย่างเดียว', 'ให้เพื่อนยืนดูห่าง ๆ โดยไม่ต้องเตรียมอุปกรณ์'], 1],
+    ['ก่อนเข้าทำงานในที่อับอากาศต้องมีอะไร?', ['เพื่อนร่วมงานหนึ่งคนยืนใกล้ทางเข้า', 'ใบอนุญาต ตรวจวัดบรรยากาศ ผู้เฝ้าระวัง และแผนช่วยเหลือ', 'หน้ากากผ้าทั่วไป', 'ทำงานให้เสร็จภายในห้านาที'], 1],
+    ['เหตุเกือบเกิดอุบัติเหตุแต่ไม่มีผู้บาดเจ็บ ควรทำอย่างไร?', ['ไม่ต้องรายงานเพราะไม่มีความเสียหาย', 'รายงานหัวหน้างานเพื่อแก้สาเหตุและป้องกันการเกิดซ้ำ', 'เล่าให้เพื่อนฟังหลังเลิกงาน', 'รอให้เกิดเหตุซ้ำก่อน'], 1],
+    ['หลังล็อกและติดป้ายแยกพลังงานแล้ว ควรทำอะไรต่อก่อนซ่อม?', ['ตรวจยืนยันว่าเครื่องไม่สามารถเริ่มทำงานและไม่มีพลังงานค้าง', 'ถอดป้ายออกเพื่อให้เห็นชัด', 'ฝากกุญแจไว้กับเพื่อนแล้วเริ่มซ่อม', 'ทดลองหมุนชิ้นส่วนด้วยมือ'], 0],
+    ['หากทำงานในพื้นที่เสียงดัง ควรปฏิบัติอย่างไร?', ['ใช้ที่อุดหูหรือครอบหูตามข้อกำหนดของพื้นที่', 'เพิ่มเสียงวิทยุเพื่อกลบเสียงเครื่องจักร', 'ถอดอุปกรณ์ป้องกันเป็นช่วง ๆ', 'อยู่ใกล้แหล่งเสียงให้น้อยลงโดยไม่ต้องแจ้งหัวหน้า'], 0],
+    ['ควรทิ้งผ้าเปื้อนสารเคมีที่ใด?', ['ถังขยะทั่วไป', 'ภาชนะของเสียอันตรายที่กำหนดและติดป้าย', 'ท่อระบายน้ำ', 'วางไว้ข้างเครื่องจักร'], 1],
+    ['เมื่อได้กลิ่นควันและสัญญาณเตือนดัง ควรทำอย่างไร?', ['เก็บของส่วนตัวก่อน', 'อพยพตามเส้นทางไปจุดรวมพลและรอคำสั่ง', 'ใช้ลิฟต์ลงชั้นล่าง', 'กลับไปตรวจหาต้นเหตุด้วยตนเอง'], 1],
+    ['หากไม่แน่ใจวิธีทำงานหรือพบสภาพไม่ปลอดภัย ควรทำอย่างไร?', ['หยุดงานและสอบถามหัวหน้างานก่อนทำต่อ', 'ทดลองทำอย่างช้า ๆ', 'ทำตามที่เคยเห็นโดยไม่ต้องถาม', 'ให้เพื่อนรับผิดชอบแทน'], 0],
+  ]
+  const existingAssessment = db.prepare('SELECT id FROM assessments WHERE id = ?').get(assessmentId)
+  if (!existingAssessment) {
+    db.prepare(`INSERT INTO assessments
+      (id, public_token, title, description, instructions, is_published, allow_multiple_attempts, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`)
+      .run(assessmentId, newPublicToken(), 'แบบประเมินความรู้ความปลอดภัยพื้นฐาน', 'ทบทวนความรู้เรื่อง PPE เครื่องจักร สารเคมี การยกเคลื่อนย้าย และเหตุฉุกเฉิน', 'เลือกคำตอบที่ถูกต้องที่สุดเพียงข้อเดียว แบบประเมินนี้มี 18 ข้อ และส่งคำตอบได้หนึ่งครั้งต่อรหัสพนักงาน', adminId, timestamp, timestamp)
+    const insertQuestion = db.prepare(`INSERT INTO assessment_questions
+      (id, assessment_id, prompt, question_type, options_json, correct_option, is_required, order_index)
+      VALUES (?, ?, ?, 'choice', ?, ?, 1, ?)`)
+    sampleQuestions.forEach(([prompt, options, correctOption], index) => insertQuestion.run(randomUUID(), assessmentId, prompt, JSON.stringify(options), correctOption, index + 1))
+  }
+
+  const trainingId = 'sample-safety-training-v1'
+  if (!db.prepare('SELECT id FROM training_materials WHERE id = ?').get(trainingId)) {
+    const originalName = 'safety-essentials-training-th.pdf'
+    const storedName = 'safety-essentials-training-th.pdf'
+    const sourcePath = path.join(root, 'seed', originalName)
+    await writeFile(path.join(trainingUploadDir, storedName), await readFile(sourcePath))
+    db.prepare(`INSERT INTO training_materials
+      (id, public_token, title, description, original_name, stored_name, mime_type, is_active, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'application/pdf', 1, ?, ?, ?)`)
+      .run(trainingId, newPublicToken(), 'คู่มืออบรมความปลอดภัยพื้นฐานในสถานที่ทำงาน', 'สื่ออบรม 3 หน้า: PPE เครื่องจักร สารเคมี งานเสี่ยง และการตอบสนองเหตุฉุกเฉิน', originalName, storedName, adminId, timestamp, timestamp)
+  }
+  db.prepare("UPDATE app_settings SET setting_value = '1' WHERE setting_key = 'sample_safety_content_seeded'").run()
+}
 
 db.exec(`
   UPDATE responses
@@ -1185,10 +1250,16 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
   const inspectionTime = String(payload.time || '')
   const area = String(payload.area || '').trim()
   const shift = String(payload.shift || '').trim()
-  const inspectorName = String(payload.inspectorName || req.session.user.name).trim()
-  const employeeCode = String(payload.employeeCode || req.session.user.employeeCode).trim()
+  let inspectorName = String(payload.inspectorName || req.session.user.name).trim()
+  const inputEmployeeCode = String(payload.employeeCode || req.session.user.employeeCode).trim().toUpperCase()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(inspectionDate) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(inspectionTime) || !area || !shift || !inspectorName) return res.status(400).json({ error: 'กรุณากรอกวันที่ เวลา พื้นที่/แผนก กะ และชื่อผู้ตรวจให้ถูกต้อง' })
-  if ([area, shift, inspectorName, employeeCode].some((value) => value.length > 120)) return res.status(400).json({ error: 'ข้อมูลผู้ตรวจ พื้นที่ หรือกะยาวเกินไป' })
+  if ([area, shift, inspectorName, inputEmployeeCode].some((value) => value.length > 120)) return res.status(400).json({ error: 'ข้อมูลผู้ตรวจ พื้นที่ หรือกะยาวเกินไป' })
+  const directoryEmployee = db.prepare('SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(inputEmployeeCode)
+  const foldEmployeeName = (name) => String(name || '').normalize('NFC').trim().toLocaleLowerCase()
+  if (!directoryEmployee || ![directoryEmployee.name_th, directoryEmployee.name_en].some((name) => name && foldEmployeeName(name) === foldEmployeeName(inspectorName))) {
+    return res.status(400).json({ error: 'ผู้ตรวจและรหัสพนักงานไม่ตรงกับรายชื่อพนักงาน' })
+  }
+  const employeeCode = directoryEmployee.employee_code
   const submitted = new Map(payload.responses.map((item) => [item.key, item]))
   if (!checklist.length || submitted.size !== checklist.length || checklist.some((item) => !submitted.has(item.key))) return res.status(400).json({ error: `กรุณาตรวจให้ครบทั้ง ${checklist.length} หัวข้อ` })
   for (const item of checklist) {
@@ -1419,6 +1490,25 @@ app.get('/api/public/training-materials/:token', (req, res) => {
   res.set('Cache-Control', 'no-store').json({ material: { ...trainingMaterialDto(material), fileUrl: `/api/public/training-materials/${material.public_token}/file` } })
 })
 
+app.post('/api/public/training-materials/:token/views', (req, res) => {
+  const material = db.prepare('SELECT id FROM training_materials WHERE public_token = ? AND is_active = 1').get(req.params.token)
+  if (!material) return res.status(404).json({ error: 'ไม่พบเอกสารหรือปิดการเผยแพร่แล้ว' })
+  const employeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
+  const employeeName = String(req.body?.employeeName || '').trim()
+  if (!employeeCode || !employeeName || employeeName.length > 160) return res.status(400).json({ error: 'กรุณาเลือกชื่อและรหัสพนักงานจากรายการทะเบียน' })
+  const employee = db.prepare(`SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?`).get(employeeCode)
+  const foldName = (name) => String(name || '').normalize('NFC').trim().toLocaleLowerCase()
+  if (!employee || ![employee.name_th, employee.name_en].some((name) => name && foldName(name) === foldName(employeeName))) {
+    return res.status(400).json({ error: 'ชื่อและรหัสพนักงานไม่ตรงกับฐานข้อมูล' })
+  }
+  const viewedAt = nowIso()
+  db.prepare(`INSERT INTO training_views (id, material_id, employee_code, employee_name, viewed_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(material_id, employee_code) DO UPDATE SET employee_name = excluded.employee_name, viewed_at = excluded.viewed_at`)
+    .run(randomUUID(), material.id, employee.employee_code, employee.name_th || employee.name_en, viewedAt)
+  res.status(201).json({ ok: true, viewedAt })
+})
+
 app.get('/api/public/training-materials/:token/file', (req, res, next) => {
   const material = db.prepare('SELECT stored_name, original_name, mime_type FROM training_materials WHERE public_token = ? AND is_active = 1').get(req.params.token)
   if (!material) return res.status(404).json({ error: 'ไม่พบเอกสารหรือปิดการเผยแพร่แล้ว' })
@@ -1631,6 +1721,66 @@ app.delete('/api/admin/employees/:code', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM employee_directory WHERE employee_code = ?').run(code)
   addAudit(req.session.user.id, 'ลบข้อมูลพนักงาน', 'employee', code, { nameTh: existing.name_th, nameEn: existing.name_en })
   res.json({ ok: true })
+})
+
+app.get('/api/admin/employees/:code/report', requireAdmin, (req, res) => {
+  const code = String(req.params.code || '').trim().toUpperCase()
+  const employeeRow = db.prepare('SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(code)
+  if (!employeeRow) return res.status(404).json({ error: 'ไม่พบข้อมูลพนักงาน' })
+  const employee = employeeDto(employeeRow)
+  const accountIds = db.prepare('SELECT id FROM users WHERE UPPER(TRIM(employee_code)) = ?').all(employee.employeeCode).map((row) => row.id)
+  const responsibleNames = [...new Set([employee.name_th, employee.name_en].filter(Boolean).map((name) => name.trim().toLocaleLowerCase()))]
+  const assignmentClauses = []
+  const assignmentParams = []
+  if (accountIds.length) {
+    assignmentClauses.push(`r.responsible_user_id IN (${accountIds.map(() => '?').join(',')})`)
+    assignmentParams.push(...accountIds)
+  }
+  if (responsibleNames.length) {
+    assignmentClauses.push(`LOWER(TRIM(r.responsible)) IN (${responsibleNames.map(() => '?').join(',')})`)
+    assignmentParams.push(...responsibleNames)
+  }
+  const assignmentWhere = `r.result = 'NG' AND (${assignmentClauses.join(' OR ') || '0'})`
+  const summary = {
+    inspections: db.prepare('SELECT COUNT(*) AS count FROM inspections WHERE UPPER(TRIM(employee_code)) = ?').get(employee.employeeCode).count,
+    correctiveTasks: db.prepare(`SELECT COUNT(*) AS count FROM responses r WHERE ${assignmentWhere}`).get(...assignmentParams).count,
+    openTasks: db.prepare(`SELECT COUNT(*) AS count FROM responses r WHERE ${assignmentWhere} AND r.follow_up_status != 'แก้ไขแล้ว'`).get(...assignmentParams).count,
+    assessments: db.prepare('SELECT COUNT(*) AS count FROM assessment_submissions WHERE UPPER(TRIM(employee_code)) = ?').get(employee.employeeCode).count,
+    trainingViews: db.prepare('SELECT COUNT(*) AS count FROM training_views WHERE UPPER(TRIM(employee_code)) = ?').get(employee.employeeCode).count,
+  }
+  const inspections = db.prepare(`SELECT i.id, i.inspection_date, i.inspection_time, i.department_area, i.shift,
+      SUM(CASE WHEN r.result = 'OK' THEN 1 ELSE 0 END) AS ok_count,
+      SUM(CASE WHEN r.result = 'NG' THEN 1 ELSE 0 END) AS ng_count,
+      SUM(CASE WHEN r.result = 'N/A' THEN 1 ELSE 0 END) AS na_count
+    FROM inspections i LEFT JOIN responses r ON r.inspection_id = i.id
+    WHERE UPPER(TRIM(i.employee_code)) = ? GROUP BY i.id
+    ORDER BY i.inspection_date DESC, i.inspection_time DESC, i.created_at DESC LIMIT 100`)
+    .all(employee.employeeCode).map((row) => ({
+      id: row.id, date: row.inspection_date, time: row.inspection_time, area: row.department_area, shift: row.shift,
+      counts: { ok: row.ok_count || 0, ng: row.ng_count || 0, na: row.na_count || 0 },
+    }))
+  const correctiveTasks = db.prepare(`SELECT r.id, i.id AS inspection_id, i.inspection_date, i.inspection_time, i.department_area,
+      r.item_title, r.issue_details, r.follow_up_status, r.due_date, r.resolution_note,
+      (SELECT COUNT(*) FROM attachments a WHERE a.response_id = r.id AND a.attachment_type = 'before') AS before_photos,
+      (SELECT COUNT(*) FROM attachments a WHERE a.response_id = r.id AND a.attachment_type = 'after') AS after_photos
+    FROM responses r JOIN inspections i ON i.id = r.inspection_id
+    WHERE ${assignmentWhere}
+    ORDER BY CASE WHEN r.follow_up_status = 'แก้ไขแล้ว' THEN 1 ELSE 0 END, i.inspection_date DESC, i.inspection_time DESC LIMIT 200`)
+    .all(...assignmentParams).map((row) => ({
+      id: row.id, inspectionId: row.inspection_id, date: row.inspection_date, time: row.inspection_time,
+      area: row.department_area, title: row.item_title, issueDetails: row.issue_details,
+      followUpStatus: row.follow_up_status, dueDate: row.due_date, resolutionNote: row.resolution_note,
+      beforePhotos: row.before_photos, afterPhotos: row.after_photos,
+    }))
+  const assessments = db.prepare(`SELECT s.id, a.title, s.score, s.max_score, s.submitted_at
+    FROM assessment_submissions s JOIN assessments a ON a.id = s.assessment_id
+    WHERE UPPER(TRIM(s.employee_code)) = ? ORDER BY s.submitted_at DESC LIMIT 200`)
+    .all(employee.employeeCode).map((row) => ({ id: row.id, title: row.title, score: row.score, maxScore: row.max_score, submittedAt: row.submitted_at }))
+  const trainingViews = db.prepare(`SELECT v.id, m.title, v.viewed_at FROM training_views v
+    JOIN training_materials m ON m.id = v.material_id
+    WHERE UPPER(TRIM(v.employee_code)) = ? ORDER BY v.viewed_at DESC LIMIT 200`)
+    .all(employee.employeeCode).map((row) => ({ id: row.id, title: row.title, viewedAt: row.viewed_at }))
+  res.set('Cache-Control', 'no-store').json({ employee, summary, inspections, correctiveTasks, assessments, trainingViews })
 })
 
 app.get('/api/admin/users', requireAdmin, (_req, res) => {

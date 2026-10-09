@@ -68,6 +68,8 @@ html { min-width: 320px; background: var(--background); }
 body { min-width: 320px; margin: 0; background: var(--background); color: var(--foreground); }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
+[data-slot="button"] { height: 40px !important; min-height: 40px !important; }
+[data-slot="button"][data-size^="icon"] { width: 40px !important; min-width: 40px !important; padding-inline: 0 !important; }
 ::selection { background: #d5ece6; color: #143b36; }
 
 .app-shell { min-height: 100vh; }

@@ -21,6 +21,7 @@ export function PublicAssessmentPage({ token }: { token: string }) {
   const [loadError, setLoadError] = useState('')
   const [employeeName, setEmployeeName] = useState('')
   const [employeeCode, setEmployeeCode] = useState('')
+  const [selectedEmployeeCode, setSelectedEmployeeCode] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [suggestions, setSuggestions] = useState<PublicEmployeeSuggestion[]>([])
   const [suggesting, setSuggesting] = useState(false)
@@ -54,6 +55,7 @@ export function PublicAssessmentPage({ token }: { token: string }) {
   function chooseEmployee(employee: PublicEmployeeSuggestion) {
     setEmployeeName(employee.name)
     setEmployeeCode(employee.employeeCode)
+    setSelectedEmployeeCode(employee.employeeCode)
     setSearchTerm('')
     setSuggestions([])
   }
@@ -62,9 +64,9 @@ export function PublicAssessmentPage({ token }: { token: string }) {
     event.preventDefault()
     if (!assessment || submitting) return
     setAttempted(true)
-    if (!employeeName.trim() || !employeeCode.trim()) {
+    if (!employeeName.trim() || !employeeCode.trim() || selectedEmployeeCode !== employeeCode.trim().toUpperCase()) {
       document.getElementById('participant-details')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      toast.error(t('กรุณากรอกชื่อและรหัสพนักงาน'))
+      toast.error(t('กรุณาเลือกชื่อและรหัสพนักงานจากรายการทะเบียน'))
       return
     }
     const missing = assessment.questions.find((question) => question.required && !answers[question.id]?.trim())
@@ -101,8 +103,8 @@ export function PublicAssessmentPage({ token }: { token: string }) {
                 <section id="participant-details" className="space-y-4 rounded-xl border p-4 sm:p-5">
                   <div className="flex items-center gap-2 font-semibold"><UserRound size={18} className="text-primary" />{t('ข้อมูลผู้ทำแบบประเมิน')}</div>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="relative grid gap-1.5"><Label htmlFor="assessment-employee-name">{t('ชื่อพนักงาน')} *</Label><Input id="assessment-employee-name" aria-invalid={attempted && !employeeName.trim()} value={employeeName} autoComplete="off" onChange={(event) => { setEmployeeName(event.target.value); setSearchTerm(event.target.value) }} placeholder={t('พิมพ์ชื่อเพื่อค้นหา')} maxLength={160} className="h-12" /></div>
-                    <div className="grid gap-1.5"><Label htmlFor="assessment-employee-code">{t('รหัสพนักงาน')} *</Label><Input id="assessment-employee-code" aria-invalid={attempted && !employeeCode.trim()} value={employeeCode} autoComplete="off" onChange={(event) => { setEmployeeCode(event.target.value); setSearchTerm(event.target.value) }} placeholder={t('พิมพ์รหัสเพื่อค้นหา')} maxLength={80} className="h-12 uppercase" /></div>
+                    <div className="relative grid gap-1.5"><Label htmlFor="assessment-employee-name">{t('ชื่อพนักงาน')} *</Label><Input id="assessment-employee-name" aria-invalid={attempted && (!employeeName.trim() || selectedEmployeeCode !== employeeCode.trim().toUpperCase())} value={employeeName} autoComplete="off" onChange={(event) => { setEmployeeName(event.target.value); setSelectedEmployeeCode(''); setSearchTerm(event.target.value) }} placeholder={t('พิมพ์ชื่อเพื่อค้นหา')} maxLength={160} className="h-12" /></div>
+                    <div className="grid gap-1.5"><Label htmlFor="assessment-employee-code">{t('รหัสพนักงาน')} *</Label><Input id="assessment-employee-code" aria-invalid={attempted && (!employeeCode.trim() || selectedEmployeeCode !== employeeCode.trim().toUpperCase())} value={employeeCode} autoComplete="off" onChange={(event) => { setEmployeeCode(event.target.value); setSelectedEmployeeCode(''); setSearchTerm(event.target.value) }} placeholder={t('พิมพ์รหัสเพื่อค้นหา')} maxLength={80} className="h-12 uppercase" /></div>
                   </div>
                   {(suggestions.length > 0 || suggesting) && <div className="max-h-56 overflow-y-auto rounded-xl border bg-white shadow-sm" role="listbox" aria-label={t('รายชื่อพนักงาน')}>
                     {suggesting && <div className="p-3 text-sm text-muted-foreground">{t('กำลังค้นหา…')}</div>}

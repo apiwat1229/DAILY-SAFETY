@@ -70,6 +70,15 @@ export type Employee = {
   updatedAt: string
 }
 
+export type EmployeeActivityReport = {
+  employee: Employee
+  summary: { inspections: number; correctiveTasks: number; openTasks: number; assessments: number; trainingViews: number }
+  inspections: { id: string; date: string; time: string; area: string; shift: string; counts: { ok: number; ng: number; na: number } }[]
+  correctiveTasks: { id: string; inspectionId: string; date: string; time: string; area: string; title: string; issueDetails: string; followUpStatus: string; dueDate: string; resolutionNote: string; beforePhotos: number; afterPhotos: number }[]
+  assessments: { id: string; title: string; score: number; maxScore: number; submittedAt: string }[]
+  trainingViews: { id: string; title: string; viewedAt: string }[]
+}
+
 export type AssessmentQuestion = {
   id: string
   prompt: string

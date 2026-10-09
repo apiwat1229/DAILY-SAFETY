@@ -1,4 +1,4 @@
-import type { Assignee, Assessment, AssessmentQuestion, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, Filters, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
+import type { Assignee, Assessment, AssessmentQuestion, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
@@ -59,6 +59,7 @@ export const api = {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   }),
   deleteEmployee: (code: string) => request<{ ok: boolean }>(`/api/admin/employees/${encodeURIComponent(code)}`, { method: 'DELETE' }),
+  employeeReport: (code: string) => request<EmployeeActivityReport>(`/api/admin/employees/${encodeURIComponent(code)}/report`),
   assessments: () => request<{ assessments: Assessment[] }>('/api/admin/assessments'),
   createAssessment: (input: { title: string; description: string; instructions: string; allowMultipleAttempts: boolean; questions: Omit<AssessmentQuestion, 'id' | 'order'>[] }) => request<{ assessment: Assessment }>('/api/admin/assessments', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
@@ -78,6 +79,9 @@ export const api = {
   updateTrainingMaterial: (id: string, body: FormData) => request<{ material: TrainingMaterial }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
   deleteTrainingMaterial: (id: string) => request<{ ok: boolean }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   publicTrainingMaterial: (token: string) => request<{ material: TrainingMaterial & { fileUrl: string } }>(`/api/public/training-materials/${encodeURIComponent(token)}`),
+  markTrainingViewed: (token: string, input: { employeeCode: string; employeeName: string }) => request<{ ok: boolean; viewedAt: string }>(`/api/public/training-materials/${encodeURIComponent(token)}/views`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
 }
 
 export function assessmentExportUrl(id: string) {

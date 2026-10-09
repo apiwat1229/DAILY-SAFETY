@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowRight, Camera, CheckCircle2, CircleHelp, ClipboardCheck, Images, ImagePlus, LoaderCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, localDateString, localTimeString } from '@/lib/api'
-import type { Assignee, ChecklistItem, InspectionSuggestions, User } from '@/lib/types'
+import type { Assignee, ChecklistItem, InspectionSuggestions, PublicEmployeeSuggestion, User } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -86,12 +86,14 @@ export function InspectionFormPage({ user, onCreated }: Props) {
   const [time, setTime] = useState(localTimeString())
   const [inspectorName, setInspectorName] = useState(user.name)
   const [employeeCode, setEmployeeCode] = useState(user.employeeCode)
+  const [selectedEmployeeCode, setSelectedEmployeeCode] = useState('')
   const [area, setArea] = useState('')
   const [shift, setShift] = useState('')
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [checklistLoading, setChecklistLoading] = useState(true)
   const [responses, setResponses] = useState<Record<string, DraftResponse>>({})
   const [suggestions, setSuggestions] = useState<InspectionSuggestions>({ areas: [], shifts: [], inspectors: [], employeeCodes: [], responsibles: [] })
+  const [employeeSuggestions, setEmployeeSuggestions] = useState<PublicEmployeeSuggestion[]>([])
   const [assignees, setAssignees] = useState<Assignee[]>([])
   const [busy, setBusy] = useState(false)
   const [invalidTarget, setInvalidTarget] = useState<string | null>(null)
@@ -106,6 +108,43 @@ export function InspectionFormPage({ user, onCreated }: Props) {
   }, [])
   useEffect(() => { api.suggestions(language).then(setSuggestions).catch(() => undefined) }, [language])
   useEffect(() => { api.assignees().then(({ assignees: rows }) => setAssignees(rows)).catch((error) => toast.error(error.message)) }, [])
+  useEffect(() => {
+    const query = employeeCode.trim().length >= 2 ? employeeCode.trim() : inspectorName.trim()
+    if (query.length < 2) { setEmployeeSuggestions([]); return }
+    let current = true
+    const timer = window.setTimeout(() => {
+      api.publicEmployeeSuggestions(query, language).then(({ employees }) => { if (current) setEmployeeSuggestions(employees) })
+        .catch(() => { if (current) setEmployeeSuggestions([]) })
+    }, 220)
+    return () => { current = false; window.clearTimeout(timer) }
+  }, [employeeCode, inspectorName, language])
+
+  useEffect(() => {
+    const match = employeeSuggestions.find((employee) => employee.employeeCode.toLocaleUpperCase() === employeeCode.trim().toLocaleUpperCase())
+    if (!match) return
+    setInspectorName(match.name)
+    setSelectedEmployeeCode(match.employeeCode)
+  }, [employeeCode, employeeSuggestions])
+
+  function chooseInspectorName(value: string) {
+    setInspectorName(value)
+    clearInvalidTarget('inspector-name')
+    const match = employeeSuggestions.find((employee) => [employee.name, employee.nameTh, employee.nameEn].some((name) => name && name.toLocaleLowerCase() === value.trim().toLocaleLowerCase()))
+    if (match) { setEmployeeCode(match.employeeCode); setSelectedEmployeeCode(match.employeeCode) }
+    else setSelectedEmployeeCode('')
+  }
+
+  function chooseInspectorCode(value: string) {
+    const match = employeeSuggestions.find((employee) => employee.employeeCode.toLocaleUpperCase() === value.trim().toLocaleUpperCase())
+    if (match) {
+      setEmployeeCode(match.employeeCode)
+      setInspectorName(match.name)
+      setSelectedEmployeeCode(match.employeeCode)
+    } else {
+      setEmployeeCode(value.toLocaleUpperCase())
+      setSelectedEmployeeCode('')
+    }
+  }
 
   const answered = useMemo(() => Object.values(responses).filter((response) => response.result).length, [responses])
   const ngCount = useMemo(() => Object.values(responses).filter((response) => response.result === 'NG').length, [responses])
@@ -143,6 +182,11 @@ export function InspectionFormPage({ user, onCreated }: Props) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!employeeCode.trim() || selectedEmployeeCode !== employeeCode.trim().toLocaleUpperCase()) {
+      toast.error(t('กรุณาเลือกผู้ตรวจจากทะเบียนพนักงาน'))
+      moveToInvalid('employee-code')
+      return
+    }
     if (!checklist.length) return toast.error(t('ยังไม่มีหัวข้อตรวจที่เปิดใช้งาน'))
     const missingField = [
       [date, 'inspection-date'], [time, 'inspection-time'], [inspectorName.trim(), 'inspector-name'], [area.trim(), 'area'], [shift.trim(), 'shift'],
@@ -204,8 +248,8 @@ export function InspectionFormPage({ user, onCreated }: Props) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <FormField label={t('วันที่ตรวจ')} htmlFor="inspection-date"><DatePicker id="inspection-date" ariaLabel={t('วันที่ตรวจ')} value={date} maxDate={today} onChange={(value) => { setDate(value); clearInvalidTarget('inspection-date') }} className={`h-10 ${invalidTarget === 'inspection-date' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
         <FormField label={t('เวลาตรวจ')} htmlFor="inspection-time"><TimePicker id="inspection-time" value={time} onChange={(value) => { setTime(value); clearInvalidTarget('inspection-time') }} className={`h-10 ${invalidTarget === 'inspection-time' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
-        <FormField label={t('ผู้ตรวจ')} htmlFor="inspector-name"><AutocompleteInput id="inspector-name" value={inspectorName} onValueChange={(value) => { setInspectorName(value); clearInvalidTarget('inspector-name') }} suggestions={suggestions.inspectors} required className={`h-10 ${invalidTarget === 'inspector-name' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
-        <FormField label={t('รหัสพนักงาน')} htmlFor="employee-code"><AutocompleteInput id="employee-code" value={employeeCode} onValueChange={setEmployeeCode} suggestions={suggestions.employeeCodes} className="h-10" /></FormField>
+        <FormField label={t('ผู้ตรวจ')} htmlFor="inspector-name"><AutocompleteInput id="inspector-name" value={inspectorName} onValueChange={chooseInspectorName} suggestions={[...suggestions.inspectors, ...employeeSuggestions.flatMap((employee) => [employee.name, employee.nameTh, employee.nameEn])].filter(Boolean)} required className={`h-10 ${invalidTarget === 'inspector-name' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
+        <FormField label={t('รหัสพนักงาน')} htmlFor="employee-code"><AutocompleteInput id="employee-code" value={employeeCode} onValueChange={chooseInspectorCode} suggestions={[...suggestions.employeeCodes, ...employeeSuggestions.map((employee) => employee.employeeCode)]} required className={`h-10 uppercase ${invalidTarget === 'employee-code' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
         <FormField label={t('แผนก / พื้นที่')} htmlFor="area"><AutocompleteInput id="area" value={area} onValueChange={(value) => { setArea(value); clearInvalidTarget('area') }} suggestions={suggestions.areas} placeholder={t('เช่น แผนกผลิต / โซน A')} required className={`h-10 ${invalidTarget === 'area' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
         <FormField label={t('กะ')} htmlFor="shift"><AutocompleteInput id="shift" value={shift} onValueChange={(value) => { setShift(value); clearInvalidTarget('shift') }} suggestions={suggestions.shifts} placeholder={t('เช่น กะเช้า')} required className={`h-10 ${invalidTarget === 'shift' ? 'border-red-500 ring-2 ring-red-200' : ''}`} /></FormField>
       </div>
