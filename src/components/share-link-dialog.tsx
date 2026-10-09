@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { publicLink } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 
-export function ShareLinkDialog({ kind, token, title, open, onOpenChange }: { kind: 'assessment' | 'training'; token: string; title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ShareLinkDialog({ kind, token, title, open, onOpenChange }: { kind: 'assessment' | 'training' | 'hiyari'; token: string; title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useI18n()
   const [qrImage, setQrImage] = useState('')
   const [copied, setCopied] = useState(false)

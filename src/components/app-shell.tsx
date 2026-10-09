@@ -13,10 +13,11 @@ import { EmployeesPage } from '@/pages/employees-page'
 import { AssessmentsPage } from '@/pages/assessments-page'
 import { AssessmentReportsPage } from '@/pages/assessment-reports-page'
 import { TrainingMaterialsPage } from '@/pages/training-materials-page'
+import { HiyariPage } from '@/pages/hiyari-page'
 import { useI18n } from '@/lib/i18n'
 import { LanguageSwitch } from '@/components/language-switch'
 
-export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials'
+export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials' | 'hiyari'
 type Props = { user: User; page: PageKey; onPage: (page: PageKey) => void; onUserChange: (user: User | null) => void }
 
 export function AppShell({ user, page, onPage, onUserChange }: Props) {
@@ -32,6 +33,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
     assessments: { title: t('แบบประเมิน'), subtitle: t('สร้างข้อสอบและจัดการลิงก์สำหรับผู้ทำแบบประเมิน') },
     'assessment-reports': { title: t('รายงานแบบประเมิน'), subtitle: t('ตรวจคำตอบและส่งออกผลประเมินเป็น Excel') },
     'training-materials': { title: t('สื่ออบรม'), subtitle: t('จัดการเอกสารและสื่อสำหรับแชร์ให้พนักงาน') },
+    hiyari: { title: t('รายงาน Hiyari Hat'), subtitle: t('สร้างลิงก์สาธารณะ ติดตามรายงาน และส่งออกตามภาษาที่ผู้กรอกเลือก') },
   }
   const navItems = user.role === 'admin'
     ? [
@@ -49,6 +51,9 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
         { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
         { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
       ]
+  const standaloneNavItems = user.role === 'admin'
+    ? [{ key: 'hiyari' as const, label: t('Hiyari Hat'), icon: FileSpreadsheet }]
+    : []
 
   async function handleLogout() {
     try { await api.logout() } catch { /* session may already have expired */ }
@@ -61,7 +66,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[280px] shrink-0 flex-col px-4 py-5 md:flex">
         <Brand />
         <div className="mt-9 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-[#7e9c97]">{t('เมนูหลัก')}</div>
-        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
+        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}{standaloneNavItems.length > 0 && <div className="mt-4 border-t border-white/10 pt-3"><div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-[#7e9c97]">{t('แบบฟอร์มออนไลน์')}</div>{standaloneNavItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}</div>}</nav>
         <ProfileBlock user={user} onLogout={handleLogout} />
       </aside>
 
@@ -89,6 +94,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           {page === 'assessments' && user.role === 'admin' ? <AssessmentsPage /> : null}
           {page === 'assessment-reports' && user.role === 'admin' ? <AssessmentReportsPage /> : null}
           {page === 'training-materials' && user.role === 'admin' ? <TrainingMaterialsPage /> : null}
+          {page === 'hiyari' && user.role === 'admin' ? <HiyariPage /> : null}
         </main>
       </div>
 
@@ -96,7 +102,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
         <aside className="sidebar flex h-full w-[280px] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between"><Brand /><Button variant="ghost" size="icon" className="text-[#bad0cc] hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
           <div className="mt-8 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-[#7e9c97]">{t('เมนูหลัก')}</div>
-          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
+          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}{standaloneNavItems.length > 0 && <div className="mt-4 border-t border-white/10 pt-3"><div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-[#7e9c97]">{t('แบบฟอร์มออนไลน์')}</div>{standaloneNavItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</div>}</nav>
           <ProfileBlock user={user} onLogout={handleLogout} />
         </aside>
       </div>}

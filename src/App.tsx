@@ -7,9 +7,10 @@ import { LoginScreen } from '@/components/login-screen'
 import { LanguageProvider, useI18n } from '@/lib/i18n'
 import { PublicAssessmentPage } from '@/pages/public-assessment-page'
 import { PublicTrainingPage } from '@/pages/public-training-page'
+import { PublicHiyariPage } from '@/pages/public-hiyari-page'
 
-function getPublicRoute(): { type: 'assessment' | 'training'; token: string } | null {
-  const match = window.location.pathname.match(/^\/(assessment|training)\/([^/]+)\/?$/)
+function getPublicRoute(): { type: 'assessment' | 'training' | 'hiyari'; token: string } | null {
+  const match = window.location.pathname.match(/^\/(assessment|training|hiyari)\/([^/]+)\/?$/)
   if (!match) return null
   try { return { type: match[1] as 'assessment' | 'training', token: decodeURIComponent(match[2]) } } catch { return null }
 }
@@ -34,7 +35,7 @@ function AppContent() {
   }, [publicRoute])
 
   if (publicRoute) return <>
-    {publicRoute.type === 'assessment' ? <PublicAssessmentPage token={publicRoute.token} /> : <PublicTrainingPage token={publicRoute.token} />}
+    {publicRoute.type === 'assessment' ? <PublicAssessmentPage token={publicRoute.token} /> : publicRoute.type === 'training' ? <PublicTrainingPage token={publicRoute.token} /> : <PublicHiyariPage token={publicRoute.token} />}
     <Toaster position="top-right" richColors closeButton />
   </>
 

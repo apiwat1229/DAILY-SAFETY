@@ -17,6 +17,7 @@ const appRoot = path.resolve(root, '..')
 const dataDir = path.join(appRoot, 'data')
 const uploadDir = path.join(dataDir, 'uploads')
 const trainingUploadDir = path.join(uploadDir, 'training')
+const hiyariTemplatePath = path.join(root, 'templates', 'hiyari-hat-template.xlsx')
 const dbPath = path.join(dataDir, 'daily-safety.sqlite')
 const port = Number(process.env.PORT || 4000)
 const host = process.env.HOST || '127.0.0.1'
@@ -172,6 +173,31 @@ db.exec(`
     viewed_at TEXT NOT NULL,
     UNIQUE(material_id, employee_code)
   );
+  CREATE TABLE IF NOT EXISTS hiyari_forms (
+    id TEXT PRIMARY KEY,
+    public_token TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS hiyari_submissions (
+    id TEXT PRIMARY KEY,
+    form_id TEXT NOT NULL REFERENCES hiyari_forms(id) ON DELETE CASCADE,
+    employee_code TEXT NOT NULL,
+    employee_name TEXT NOT NULL,
+    department TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL CHECK(language IN ('th', 'en', 'my')),
+    report_date TEXT NOT NULL,
+    when_text TEXT NOT NULL,
+    where_text TEXT NOT NULL,
+    what_happened TEXT NOT NULL,
+    suggestions TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    submitted_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS app_settings (
     setting_key TEXT PRIMARY KEY,
     setting_value TEXT NOT NULL DEFAULT ''
@@ -187,6 +213,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_assessment_submissions_parent ON assessment_submissions(assessment_id, submitted_at DESC);
   CREATE INDEX IF NOT EXISTS idx_assessment_submissions_employee ON assessment_submissions(employee_code);
   CREATE INDEX IF NOT EXISTS idx_training_views_employee ON training_views(employee_code, viewed_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_hiyari_submissions_form ON hiyari_submissions(form_id, submitted_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_hiyari_submissions_employee ON hiyari_submissions(employee_code, submitted_at DESC);
 `)
 
 const trainingMaterialColumns = db.prepare('PRAGMA table_info(training_materials)').all()
@@ -386,9 +414,20 @@ if (!db.prepare('SELECT id FROM training_materials WHERE id = ?').get(fireTraini
     (id, public_token, title, description, original_name, stored_name, mime_type,
       companion_original_name, companion_stored_name, is_active, created_by, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, 'application/pdf', ?, ?, 1, ?, ?, ?)`)
-    .run(fireTrainingId, newPublicToken(), 'การป้องกันอัคคีภัยและการอพยพฉุกเฉิน',
+  .run(fireTrainingId, newPublicToken(), 'การป้องกันอัคคีภัยและการอพยพฉุกเฉิน',
       'สื่ออบรม 8 สไลด์ พร้อมไฟล์ PowerPoint สำหรับนำไปใช้ประกอบการอบรม',
       originalName, storedName, companionOriginalName, companionStoredName, adminId, timestamp, timestamp)
+}
+
+if (!db.prepare('SELECT id FROM hiyari_forms WHERE id = ?').get('hiyari-fm-sft-42')) {
+  const adminId = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY created_at LIMIT 1").get()?.id
+  if (!adminId) throw new Error('Cannot create the Hiyari Hat form without an active administrator account.')
+  const timestamp = nowIso()
+  db.prepare(`INSERT INTO hiyari_forms
+    (id, public_token, title, description, is_active, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?, ?)`)
+    .run('hiyari-fm-sft-42', newPublicToken(), 'Hiyari Hat Report · FM-SFT-42 Rev.01',
+      'รายงานสภาพหรือเหตุการณ์ที่อาจก่อให้เกิดอุบัติเหตุ เพื่อปรับปรุงและป้องกันการเกิดซ้ำ', adminId, timestamp, timestamp)
 }
 
 db.exec(`
@@ -537,6 +576,25 @@ function parseJson(value, fallback) {
   try { return JSON.parse(value) } catch { return fallback }
 }
 
+function formatBangkokTimestamp(value) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(value))
+  const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `Time ${fields.hour}:${fields.minute}, Date ${fields.day}-${fields.month}-${fields.year} Timezone +Bangkok`
+}
+
+function styleReportSheet(sheet, columnCount, rowCount) {
+  const header = sheet.getRow(1)
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF11675D' } }
+  header.alignment = { vertical: 'middle', wrapText: true }
+  header.height = 30
+  if (rowCount > 0) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columnCount } }
+  for (let index = 2; index <= sheet.rowCount; index += 1) sheet.getRow(index).alignment = { vertical: 'top', wrapText: true }
+}
+
 function newPublicToken() {
   return randomBytes(24).toString('base64url')
 }
@@ -623,6 +681,38 @@ function trainingMaterialDto(row) {
     isActive: Boolean(row.is_active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function hiyariFormDto(row) {
+  return {
+    id: row.id,
+    token: row.public_token,
+    title: row.title,
+    description: row.description,
+    isActive: Boolean(row.is_active),
+    submissionCount: row.submission_count ?? db.prepare('SELECT COUNT(*) AS count FROM hiyari_submissions WHERE form_id = ?').get(row.id).count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function hiyariSubmissionDto(row) {
+  return {
+    id: row.id,
+    formId: row.form_id,
+    formTitle: row.form_title || '',
+    employeeCode: row.employee_code,
+    employeeName: row.employee_name,
+    department: row.department,
+    language: row.language,
+    reportDate: row.report_date,
+    whenText: row.when_text,
+    whereText: row.where_text,
+    whatHappened: row.what_happened,
+    suggestions: row.suggestions,
+    note: row.note,
+    submittedAt: row.submitted_at,
   }
 }
 
@@ -929,7 +1019,7 @@ app.get('/api/assignees', requireAuth, (_req, res) => {
 
 app.get('/api/my-tasks', requireAuth, (req, res) => {
   const user = req.session.user
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIME_ZONE || 'Asia/Bangkok' }).format(new Date())
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
   const tasks = db.prepare(`
     SELECT r.id, i.id AS inspection_id, i.inspection_date AS date, i.inspection_time AS time,
       i.inspector_name AS inspector, i.employee_code AS employee_code,
@@ -962,13 +1052,11 @@ app.get('/api/my-tasks', requireAuth, (req, res) => {
 })
 
 app.get('/api/dashboard', requireAdmin, (req, res) => {
-  const today = new Date()
-  const end = new Date(today)
-  const start = new Date(today)
-  start.setDate(start.getDate() - 6)
-  const toDateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-  const from = String(req.query.from || toDateKey(start))
-  const to = String(req.query.to || toDateKey(end))
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
+  const [year, month, day] = todayKey.split('-').map(Number)
+  const startKey = new Date(Date.UTC(year, month - 1, day - 6)).toISOString().slice(0, 10)
+  const from = String(req.query.from || startKey)
+  const to = String(req.query.to || todayKey)
   const filters = { ...req.query, from, to }
   const where = buildInspectionWhere(filters, req.session.user)
   const total = db.prepare(`SELECT COUNT(*) AS n FROM inspections i ${where.sql}`).get(...where.params).n
@@ -979,7 +1067,6 @@ app.get('/api/dashboard', requireAdmin, (req, res) => {
       SUM(CASE WHEN r.result = 'NG' AND r.follow_up_status = 'แก้ไขแล้ว' THEN 1 ELSE 0 END) AS resolved
     FROM inspections i LEFT JOIN responses r ON r.inspection_id = i.id ${where.sql}
   `).get(...where.params)
-  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIME_ZONE || 'Asia/Bangkok' }).format(new Date())
   const overdue = db.prepare(`
     SELECT COUNT(*) AS n FROM responses r JOIN inspections i ON i.id = r.inspection_id
     WHERE i.inspection_date >= ? AND i.inspection_date <= ? AND r.result = 'NG'
@@ -1002,7 +1089,7 @@ app.get('/api/dashboard', requireAdmin, (req, res) => {
     WHERE i.inspection_date >= ? AND i.inspection_date <= ?
     GROUP BY i.inspection_date ORDER BY i.inspection_date
   `).all(from, to)
-  const recent = inspectionRows({ from, to }, req.session.user, 5)
+  const recent = inspectionRows({ from, to }, req.session.user, 10)
   res.json({
     from, to,
     stats: {
@@ -1448,7 +1535,7 @@ app.get('/api/public/employees', (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 80) return res.json({ employees: [] })
   const pattern = `%${query}%`
-  const rows = db.prepare(`SELECT employee_code, name_th, name_en FROM employee_directory
+  const rows = db.prepare(`SELECT employee_code, name_th, name_en, department_th, department_en FROM employee_directory
     WHERE employee_code LIKE ? OR name_th LIKE ? COLLATE NOCASE OR name_en LIKE ? COLLATE NOCASE
     ORDER BY name_th COLLATE NOCASE LIMIT 20`).all(pattern, pattern, pattern)
   res.set('Cache-Control', 'no-store').json({ employees: rows.map((row) => ({
@@ -1456,7 +1543,55 @@ app.get('/api/public/employees', (req, res) => {
     nameTh: row.name_th,
     nameEn: row.name_en,
     name: (req.query.lang === 'en' ? row.name_en || row.name_th : row.name_th || row.name_en),
+    departmentTh: row.department_th || '',
+    departmentEn: row.department_en || '',
   })) })
+})
+
+app.get('/api/public/hiyari/:token', (req, res) => {
+  const form = db.prepare('SELECT * FROM hiyari_forms WHERE public_token = ? AND is_active = 1').get(req.params.token)
+  if (!form) return res.status(404).json({ error: 'ไม่พบแบบฟอร์มหรือปิดรับรายงานแล้ว' })
+  res.set('Cache-Control', 'no-store').json({ form: { title: form.title, description: form.description } })
+})
+
+app.post('/api/public/hiyari/:token/submissions', (req, res) => {
+  const form = db.prepare('SELECT id FROM hiyari_forms WHERE public_token = ? AND is_active = 1').get(req.params.token)
+  if (!form) return res.status(404).json({ error: 'ไม่พบแบบฟอร์มหรือปิดรับรายงานแล้ว' })
+  const employeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
+  const employeeName = String(req.body?.employeeName || '').trim()
+  const language = String(req.body?.language || '')
+  const reportDate = String(req.body?.reportDate || '')
+  const whenText = String(req.body?.whenText || '').trim()
+  const whereText = String(req.body?.whereText || '').trim()
+  const whatHappened = String(req.body?.whatHappened || '').trim()
+  const suggestions = String(req.body?.suggestions || '').trim()
+  const note = String(req.body?.note || '').trim()
+  if (!employeeCode || employeeCode.length > 80 || !employeeName || employeeName.length > 160) return res.status(400).json({ error: 'กรุณาเลือกชื่อและรหัสพนักงานจากทะเบียน' })
+  if (!['th', 'en', 'my'].includes(language)) return res.status(400).json({ error: 'กรุณาเลือกภาษาของแบบฟอร์ม' })
+  const parsedReportDate = new Date(`${reportDate}T00:00:00Z`)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate) || Number.isNaN(parsedReportDate.getTime()) || parsedReportDate.toISOString().slice(0, 10) !== reportDate) {
+    return res.status(400).json({ error: 'กรุณาระบุวันที่รายงาน' })
+  }
+  if (!whenText || whenText.length > 2000 || !whereText || whereText.length > 2000 || !whatHappened || whatHappened.length > 5000 || suggestions.length > 5000 || note.length > 3000) {
+    return res.status(400).json({ error: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบ และตรวจสอบความยาวข้อความ' })
+  }
+  const employee = db.prepare('SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(employeeCode)
+  const foldName = (name) => String(name || '').normalize('NFC').trim().toLocaleLowerCase()
+  if (!employee || ![employee.name_th, employee.name_en].some((name) => name && foldName(name) === foldName(employeeName))) {
+    return res.status(400).json({ error: 'ชื่อและรหัสพนักงานไม่ตรงกับฐานข้อมูล' })
+  }
+  const department = language === 'en' || language === 'my'
+    ? employee.department_en || employee.department_th || ''
+    : employee.department_th || employee.department_en || ''
+  const id = randomUUID()
+  const submittedAt = nowIso()
+  db.prepare(`INSERT INTO hiyari_submissions
+    (id, form_id, employee_code, employee_name, department, language, report_date,
+      when_text, where_text, what_happened, suggestions, note, submitted_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, form.id, employee.employee_code, employeeName, department, language, reportDate,
+      whenText, whereText, whatHappened, suggestions, note, submittedAt)
+  res.status(201).json({ ok: true, submittedAt })
 })
 
 app.get('/api/public/assessments/:token', (req, res) => {
@@ -1564,6 +1699,162 @@ app.get('/api/public/training-materials/:token/presentation', (req, res, next) =
   res.sendFile(path.join(trainingUploadDir, material.companion_stored_name), (error) => error && next(error))
 })
 
+app.get('/api/admin/hiyari-forms', requireAdmin, (_req, res) => {
+  const forms = db.prepare(`SELECT f.*, COUNT(s.id) AS submission_count
+    FROM hiyari_forms f LEFT JOIN hiyari_submissions s ON s.form_id = f.id
+    GROUP BY f.id ORDER BY f.created_at DESC, f.title COLLATE NOCASE`).all()
+  res.json({ forms: forms.map(hiyariFormDto) })
+})
+
+app.post('/api/admin/hiyari-forms', requireAdmin, (req, res) => {
+  const title = String(req.body?.title || '').trim()
+  const description = String(req.body?.description || '').trim()
+  if (!title || title.length > 200 || description.length > 2000) return res.status(400).json({ error: 'กรุณาตรวจสอบชื่อและรายละเอียดแบบฟอร์ม' })
+  const id = randomUUID()
+  const timestamp = nowIso()
+  db.prepare(`INSERT INTO hiyari_forms
+    (id, public_token, title, description, is_active, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?, ?)`)
+    .run(id, newPublicToken(), title, description, req.session.user.id, timestamp, timestamp)
+  addAudit(req.session.user.id, 'สร้างแบบฟอร์ม Hiyari Hat', 'hiyari_form', id, { title })
+  res.status(201).json({ form: hiyariFormDto(db.prepare('SELECT * FROM hiyari_forms WHERE id = ?').get(id)) })
+})
+
+app.patch('/api/admin/hiyari-forms/:id', requireAdmin, (req, res) => {
+  const existing = db.prepare('SELECT * FROM hiyari_forms WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบแบบฟอร์ม Hiyari Hat' })
+  const title = String(req.body?.title ?? existing.title).trim()
+  const description = String(req.body?.description ?? existing.description).trim()
+  const isActive = req.body?.isActive === undefined ? Boolean(existing.is_active) : Boolean(req.body.isActive)
+  if (!title || title.length > 200 || description.length > 2000) return res.status(400).json({ error: 'กรุณาตรวจสอบชื่อและรายละเอียดแบบฟอร์ม' })
+  db.prepare('UPDATE hiyari_forms SET title = ?, description = ?, is_active = ?, updated_at = ? WHERE id = ?')
+    .run(title, description, isActive ? 1 : 0, nowIso(), existing.id)
+  addAudit(req.session.user.id, 'แก้ไขแบบฟอร์ม Hiyari Hat', 'hiyari_form', existing.id, { title, isActive })
+  const form = db.prepare(`SELECT f.*, COUNT(s.id) AS submission_count FROM hiyari_forms f
+    LEFT JOIN hiyari_submissions s ON s.form_id = f.id WHERE f.id = ? GROUP BY f.id`).get(existing.id)
+  res.json({ form: hiyariFormDto(form) })
+})
+
+app.delete('/api/admin/hiyari-forms/:id', requireAdmin, (req, res) => {
+  const existing = db.prepare('SELECT * FROM hiyari_forms WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบแบบฟอร์ม Hiyari Hat' })
+  const count = db.prepare('SELECT COUNT(*) AS count FROM hiyari_submissions WHERE form_id = ?').get(existing.id).count
+  if (count) return res.status(409).json({ error: 'แบบฟอร์มมีรายงานที่บันทึกแล้ว กรุณาปิดลิงก์แทนการลบ' })
+  db.prepare('DELETE FROM hiyari_forms WHERE id = ?').run(existing.id)
+  addAudit(req.session.user.id, 'ลบแบบฟอร์ม Hiyari Hat', 'hiyari_form', existing.id, { title: existing.title })
+  res.json({ ok: true })
+})
+
+app.get('/api/admin/hiyari-submissions', requireAdmin, (req, res) => {
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 500, 1), 2000)
+  const formId = String(req.query.formId || '').trim()
+  const rows = formId
+    ? db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s
+        JOIN hiyari_forms f ON f.id = s.form_id WHERE s.form_id = ? ORDER BY s.submitted_at DESC LIMIT ?`).all(formId, limit)
+    : db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s
+        JOIN hiyari_forms f ON f.id = s.form_id ORDER BY s.submitted_at DESC LIMIT ?`).all(limit)
+  res.json({ submissions: rows.map(hiyariSubmissionDto) })
+})
+
+app.get('/api/admin/hiyari-submissions/:id/export.xlsx', requireAdmin, async (req, res, next) => {
+  try {
+    const row = db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s
+      JOIN hiyari_forms f ON f.id = s.form_id WHERE s.id = ?`).get(req.params.id)
+    if (!row) return res.status(404).json({ error: 'ไม่พบรายงาน Hiyari Hat' })
+
+    const labels = {
+      th: {
+        title: 'รายงาน Hiyari Hat', sender: 'ชื่อผู้ส่ง', code: 'รหัสพนักงาน', department: 'แผนก', date: 'วันที่',
+        when: 'เมื่อไหร่', where: 'ที่ไหน', what: 'เกิดอะไรขึ้น', suggestions: 'ข้อเสนอแนะเพื่อปรับปรุง', note: 'หมายเหตุ',
+        senderSign: 'ลงชื่อ ผู้รายงาน', safetySign: 'ลงชื่อ หัวหน้าความปลอดภัย', headSign: 'ลงชื่อ หัวหน้าแผนก',
+      },
+      en: {
+        title: 'Hiyari Hat Report', sender: 'Sender name', code: 'Employee ID', department: 'Department', date: 'Date',
+        when: 'When', where: 'Where', what: 'What happened', suggestions: 'Suggestions for improvement', note: 'Note',
+        senderSign: 'Signature / Sender', safetySign: 'Signature / Safety leader', headSign: 'Signature / Department head',
+      },
+      my: {
+        title: 'ဟိယာရီ ဟတ် အစီရင်ခံစာ', sender: 'တင်ပြသူအမည်', code: 'ဝန်ထမ်းအမှတ်', department: 'ဌာန', date: 'ရက်စွဲ',
+        when: 'ဘယ်အချိန်', where: 'ဘယ်နေရာ', what: 'ဘာဖြစ်ခဲ့သလဲ', suggestions: 'တိုးတက်ကောင်းမွန်ရေး အကြံပြုချက်', note: 'မှတ်ချက်',
+        senderSign: 'လက်မှတ် / တင်ပြသူ', safetySign: 'လက်မှတ် / ဘေးကင်းရေးခေါင်းဆောင်', headSign: 'လက်မှတ် / ဌာနမှူး',
+      },
+    }[row.language]
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(hiyariTemplatePath)
+    const sheet = workbook.worksheets[0]
+    const fontName = row.language === 'my' ? 'Myanmar Text' : 'Tahoma'
+    const normalFont = { name: fontName, size: 11, color: { argb: 'FF1F2937' } }
+    const dateLocale = row.language === 'th' ? 'th-TH' : row.language === 'my' ? 'my-MM-u-ca-gregory' : 'en-GB'
+    const dateText = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(new Date(`${row.report_date}T12:00:00+07:00`))
+
+    sheet.getCell('A1').value = labels.title
+    sheet.getCell('A2').value = labels.sender
+    sheet.getCell('B2').value = row.employee_name
+    sheet.getCell('A3').value = labels.code
+    sheet.getCell('B3').value = row.employee_code
+    sheet.getCell('A4').value = labels.department
+    sheet.getCell('B4').value = row.department
+    sheet.getCell('A5').value = labels.date
+    sheet.getCell('B5').value = dateText
+
+    const border = { style: 'thin', color: { argb: 'FF9CA3AF' } }
+    const sections = [
+      { label: labels.when, text: row.when_text, from: 7, to: 9 },
+      { label: labels.where, text: row.where_text, from: 10, to: 13 },
+      { label: labels.what, text: row.what_happened, from: 14, to: 18 },
+      { label: labels.suggestions, text: row.suggestions, from: 19, to: 24 },
+      { label: labels.note, text: row.note, from: 25, to: 29 },
+    ]
+    for (const section of sections) {
+      for (let rowIndex = section.from; rowIndex <= section.to; rowIndex++) sheet.getCell(rowIndex, 1).value = ''
+      sheet.getCell(section.from, 1).value = section.label
+      const range = `B${section.from}:E${section.to}`
+      sheet.mergeCells(range)
+      const cell = sheet.getCell(`B${section.from}`)
+      cell.value = section.text
+      cell.font = normalFont
+      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+      const lineCount = section.text ? section.text.split(/\r?\n/).reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 72)), 0) : 1
+      const totalHeight = Math.max((section.to - section.from + 1) * 20.25, lineCount * 14 + 12)
+      const perRow = totalHeight / (section.to - section.from + 1)
+      for (let rowIndex = section.from; rowIndex <= section.to; rowIndex++) sheet.getRow(rowIndex).height = perRow
+      for (let rowIndex = section.from; rowIndex <= section.to; rowIndex++) {
+        for (let columnIndex = 2; columnIndex <= 5; columnIndex++) {
+          const current = sheet.getCell(rowIndex, columnIndex)
+          current.border = {
+            ...(rowIndex === section.from ? { top: border } : {}),
+            ...(rowIndex === section.to ? { bottom: border } : {}),
+            ...(columnIndex === 2 ? { left: border } : {}),
+            ...(columnIndex === 5 ? { right: border } : {}),
+          }
+        }
+      }
+      sheet.getCell(section.from, 1).alignment = { vertical: 'top', wrapText: true }
+    }
+    sheet.getCell('A31').value = labels.senderSign
+    sheet.getCell('A32').value = labels.safetySign
+    sheet.getCell('A33').value = labels.headSign
+    for (let rowIndex = 1; rowIndex <= 33; rowIndex++) {
+      for (let columnIndex = 1; columnIndex <= 5; columnIndex++) {
+        const cell = sheet.getCell(rowIndex, columnIndex)
+        if (cell.value !== null && cell.value !== undefined && cell.value !== '') cell.font = { ...cell.font, name: fontName }
+      }
+    }
+    sheet.pageSetup.fitToWidth = 1
+    sheet.pageSetup.fitToHeight = 0
+    sheet.pageSetup.fitToPage = true
+    sheet.pageSetup.printArea = 'A1:E33'
+    workbook.creator = 'Daily Safety | Y.T. Rubber'
+    workbook.title = labels.title
+    workbook.subject = `FM-SFT-42 Rev.01 · ${labels.title}`
+    const buffer = await workbook.xlsx.writeBuffer()
+    const safeCode = row.employee_code.replace(/[^A-Za-z0-9_-]/g, '_')
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="hiyari-${row.language}-${safeCode}-${row.report_date}.xlsx"`)
+    res.send(Buffer.from(buffer))
+  } catch (error) { next(error) }
+})
+
 app.get('/api/admin/assessments', requireAdmin, (_req, res) => {
   const rows = db.prepare('SELECT * FROM assessments ORDER BY updated_at DESC, title COLLATE NOCASE').all()
   res.json({ assessments: rows.map(assessmentDto) })
@@ -1638,7 +1929,7 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
   try {
     const assessment = db.prepare('SELECT id, title FROM assessments WHERE id = ?').get(req.params.id)
     if (!assessment) return res.status(404).json({ error: 'ไม่พบแบบประเมิน' })
-    const questions = db.prepare('SELECT id, prompt FROM assessment_questions WHERE assessment_id = ? ORDER BY order_index, id').all(assessment.id)
+    const questions = db.prepare('SELECT id, prompt, options_json, correct_option, order_index FROM assessment_questions WHERE assessment_id = ? ORDER BY order_index, id').all(assessment.id)
     const rows = db.prepare('SELECT employee_code, employee_name, answers_json, score, max_score, submitted_at FROM assessment_submissions WHERE assessment_id = ? ORDER BY submitted_at DESC').all(assessment.id)
     if (rows.length > 20000) return res.status(413).json({ error: 'รายงานมีมากกว่า 20,000 รายการ กรุณาส่งออกข้อมูลเป็นช่วง' })
     const workbook = new ExcelJS.Workbook()
@@ -1651,17 +1942,33 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
     summary.addRow(['Assessment report', assessment.title])
     summary.addRow(['Total submissions', rows.length])
     summary.addRow(['Employees', new Set(rows.map((row) => row.employee_code)).size])
-    summary.addRow(['Exported at', nowIso()])
-    const sheet = workbook.addWorksheet('Responses', { views: [{ state: 'frozen', ySplit: 1, showGridLines: false }] })
-    const headers = ['Submitted at', 'Employee ID', 'Employee name', 'Score', 'Max score', ...questions.map((question) => question.prompt)]
-    sheet.columns = headers.map((header, index) => ({ header, key: `col${index}`, width: index === 0 ? 24 : index < 5 ? 22 : 38 }))
-    sheet.addRows(rows.map((row) => {
-      const answers = new Map(parseJson(row.answers_json, []).map((answer) => [answer.questionId, answer.answer]))
-      return [row.submitted_at, row.employee_code, row.employee_name, row.score, row.max_score, ...questions.map((question) => answers.get(question.id) || '')]
-    }))
-    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF11675D' } }
-    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } }
+    summary.addRow(['Incorrect answers', rows.reduce((count, row) => count + parseJson(row.answers_json, []).filter((answer) => answer.isScored && !answer.isCorrect).length, 0)])
+    summary.addRow(['Exported at (+Bangkok)', formatBangkokTimestamp(nowIso())])
+    const submissions = workbook.addWorksheet('Submissions', { views: [{ state: 'frozen', ySplit: 1, showGridLines: false }] })
+    const submissionHeaders = ['Submitted at (+Bangkok)', 'Employee ID', 'Employee name', 'Score', 'Max score']
+    submissions.columns = submissionHeaders.map((header, index) => ({ header, key: `col${index}`, width: index === 0 ? 45 : index < 3 ? 24 : 14 }))
+    submissions.addRows(rows.map((row) => [formatBangkokTimestamp(row.submitted_at), row.employee_code, row.employee_name, row.score, row.max_score]))
+    styleReportSheet(submissions, submissionHeaders.length, rows.length)
+
+    const wrongAnswers = workbook.addWorksheet('Incorrect answers', { views: [{ state: 'frozen', ySplit: 1, showGridLines: false }] })
+    const wrongHeaders = ['Submitted at (+Bangkok)', 'Employee ID', 'Employee name', 'Score', 'Max score', 'Question', 'Submitted answer', 'Correct answer']
+    wrongAnswers.columns = wrongHeaders.map((header, index) => ({ header, key: `col${index}`, width: [45, 18, 26, 12, 12, 42, 30, 30][index] }))
+    const questionById = new Map(questions.map((question) => [question.id, question]))
+    const incorrectRows = []
+    for (const row of rows) {
+      for (const answer of parseJson(row.answers_json, [])) {
+        const question = questionById.get(answer.questionId)
+        if (!question || !answer.isScored || answer.isCorrect) continue
+        const options = parseJson(question.options_json, [])
+        incorrectRows.push([
+          formatBangkokTimestamp(row.submitted_at), row.employee_code, row.employee_name, row.score, row.max_score,
+          question.prompt, answer.answer || '', options[question.correct_option] ?? '',
+        ])
+      }
+    }
+    wrongAnswers.addRows(incorrectRows)
+    if (!incorrectRows.length) wrongAnswers.addRow(['No incorrect answers', '', '', '', '', '', '', ''])
+    styleReportSheet(wrongAnswers, wrongHeaders.length, incorrectRows.length)
     const buffer = await workbook.xlsx.writeBuffer()
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename="assessment-report-${assessment.id}.xlsx"`)
@@ -1795,6 +2102,7 @@ app.get('/api/admin/employees/:code/report', requireAdmin, (req, res) => {
     openTasks: db.prepare(`SELECT COUNT(*) AS count FROM responses r WHERE ${assignmentWhere} AND r.follow_up_status != 'แก้ไขแล้ว'`).get(...assignmentParams).count,
     assessments: db.prepare('SELECT COUNT(*) AS count FROM assessment_submissions WHERE UPPER(TRIM(employee_code)) = ?').get(employee.employeeCode).count,
     trainingViews: db.prepare('SELECT COUNT(*) AS count FROM training_views WHERE UPPER(TRIM(employee_code)) = ?').get(employee.employeeCode).count,
+    hiyariReports: db.prepare('SELECT COUNT(*) AS count FROM hiyari_submissions WHERE UPPER(TRIM(employee_code)) = ?').get(employee.employeeCode).count,
   }
   const inspections = db.prepare(`SELECT i.id, i.inspection_date, i.inspection_time, i.department_area, i.shift,
       SUM(CASE WHEN r.result = 'OK' THEN 1 ELSE 0 END) AS ok_count,
@@ -1828,7 +2136,16 @@ app.get('/api/admin/employees/:code/report', requireAdmin, (req, res) => {
     JOIN training_materials m ON m.id = v.material_id
     WHERE UPPER(TRIM(v.employee_code)) = ? ORDER BY v.viewed_at DESC LIMIT 200`)
     .all(employee.employeeCode).map((row) => ({ id: row.id, title: row.title, viewedAt: row.viewed_at }))
-  res.set('Cache-Control', 'no-store').json({ employee, summary, inspections, correctiveTasks, assessments, trainingViews })
+  const hiyariReports = db.prepare(`SELECT s.id, f.title, s.language, s.report_date, s.when_text, s.where_text,
+      s.what_happened, s.suggestions, s.note, s.submitted_at
+    FROM hiyari_submissions s JOIN hiyari_forms f ON f.id = s.form_id
+    WHERE UPPER(TRIM(s.employee_code)) = ? ORDER BY s.submitted_at DESC LIMIT 200`)
+    .all(employee.employeeCode).map((row) => ({
+      id: row.id, title: row.title, language: row.language, reportDate: row.report_date,
+      whenText: row.when_text, whereText: row.where_text, whatHappened: row.what_happened,
+      suggestions: row.suggestions, note: row.note, submittedAt: row.submitted_at,
+    }))
+  res.set('Cache-Control', 'no-store').json({ employee, summary, inspections, correctiveTasks, assessments, trainingViews, hiyariReports })
 })
 
 app.get('/api/admin/users', requireAdmin, (_req, res) => {

@@ -72,11 +72,12 @@ export type Employee = {
 
 export type EmployeeActivityReport = {
   employee: Employee
-  summary: { inspections: number; correctiveTasks: number; openTasks: number; assessments: number; trainingViews: number }
+  summary: { inspections: number; correctiveTasks: number; openTasks: number; assessments: number; trainingViews: number; hiyariReports: number }
   inspections: { id: string; date: string; time: string; area: string; shift: string; counts: { ok: number; ng: number; na: number } }[]
   correctiveTasks: { id: string; inspectionId: string; date: string; time: string; area: string; title: string; issueDetails: string; followUpStatus: string; dueDate: string; resolutionNote: string; beforePhotos: number; afterPhotos: number }[]
   assessments: { id: string; title: string; score: number; maxScore: number; submittedAt: string }[]
   trainingViews: { id: string; title: string; viewedAt: string }[]
+  hiyariReports: { id: string; title: string; language: HiyariLanguage; reportDate: string; whenText: string; whereText: string; whatHappened: string; suggestions: string; note: string; submittedAt: string }[]
 }
 
 export type AssessmentQuestion = {
@@ -129,7 +130,35 @@ export type TrainingMaterial = {
   updatedAt: string
 }
 
-export type PublicEmployeeSuggestion = { employeeCode: string; name: string; nameTh: string; nameEn: string }
+export type PublicEmployeeSuggestion = { employeeCode: string; name: string; nameTh: string; nameEn: string; departmentTh: string; departmentEn: string }
+
+export type HiyariLanguage = 'th' | 'en' | 'my'
+export type HiyariForm = {
+  id: string
+  token: string
+  title: string
+  description: string
+  isActive: boolean
+  submissionCount: number
+  createdAt: string
+  updatedAt: string
+}
+export type HiyariSubmission = {
+  id: string
+  formId: string
+  formTitle: string
+  employeeCode: string
+  employeeName: string
+  department: string
+  language: HiyariLanguage
+  reportDate: string
+  whenText: string
+  whereText: string
+  whatHappened: string
+  suggestions: string
+  note: string
+  submittedAt: string
+}
 
 export type MyTask = {
   id: string

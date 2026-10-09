@@ -17,9 +17,9 @@ import { AutocompleteInput } from '@/components/autocomplete-input'
 type Props = { user: User; initialFilter: Pick<Filters, 'from' | 'to' | 'category'> | null; onInitialFilterApplied: () => void }
 
 function dateBack(days: number) {
-  const date = new Date()
-  date.setDate(date.getDate() - days)
-  return localDateString(date)
+  const [year, month, day] = localDateString().split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day - days))
+  return date.toISOString().slice(0, 10)
 }
 
 const emptyFilters: Filters = { from: dateBack(30), to: localDateString(), area: '', inspector: '', employeeCode: '', shift: '', result: '', status: '', category: '' }

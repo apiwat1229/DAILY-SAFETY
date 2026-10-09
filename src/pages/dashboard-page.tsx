@@ -16,9 +16,8 @@ import { useI18n } from '@/lib/i18n'
 type Props = { user: User; onPage: (page: PageKey) => void }
 
 function addDays(date: string, days: number) {
-  const value = new Date(`${date}T12:00:00`)
-  value.setDate(value.getDate() + days)
-  return localDateString(value)
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
 }
 
 export function DashboardPage({ user, onPage }: Props) {
@@ -108,7 +107,7 @@ export function DashboardPage({ user, onPage }: Props) {
                   <div className="flex w-full max-w-[36px] flex-col-reverse overflow-hidden rounded-t-md bg-[#f0f3f3]" style={{ height }} aria-label={`${formatDate(point.date, language)}: ${point.ok} OK, ${point.ng} NG, ${point.na} N/A`}>
                     {segments.map((segment) => segment.count > 0 ? <div key={segment.key} className={`flex min-h-0 w-full items-center justify-center overflow-hidden text-[9px] font-semibold leading-none text-white ${segment.color}`} style={{ height: `${(segment.count / total) * 100}%` }}><span>{(segment.count / total) * height >= 17 ? segment.count : null}</span></div> : null)}
                   </div>
-                  <span className="text-[10px] text-muted-foreground">{new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' }).format(new Date(`${point.date}T12:00:00`))}</span>
+                  <span className="text-[10px] text-muted-foreground">{new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', { weekday: 'short', timeZone: 'Asia/Bangkok' }).format(new Date(`${point.date}T12:00:00+07:00`))}</span>
                 </div>
               })}
             </div> : <div className="grid h-[190px] place-items-center rounded-xl border border-dashed border-[#dfe7e6] bg-[#fafcfc] text-center"><div><div className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-[#edf5f3] text-primary"><Activity size={17} /></div><p className="text-xs font-medium">{t('ยังไม่มีข้อมูลในช่วงวันที่นี้')}</p><p className="mt-1 text-[11px] text-muted-foreground">{t('ข้อมูลจะแสดงหลังมีการส่งแบบตรวจ')}</p></div></div>}
@@ -136,16 +135,16 @@ export function DashboardPage({ user, onPage }: Props) {
 
       <Card className="rounded-2xl border-[#e8eeee]">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div><CardTitle className="text-[15px]">{t('รายการตรวจล่าสุด')}</CardTitle><CardDescription className="mt-1 text-xs">{t('ตรวจสอบพื้นที่และติดตามรายการที่ยังไม่ปิด')}</CardDescription></div>
+          <div><CardTitle className="text-[15px]">{t('รายการตรวจล่าสุด')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดงรายการตรวจล่าสุดไม่เกิน 10 รายการในช่วงเวลาที่เลือก')}</CardDescription></div>
           <Button variant="outline" size="sm" onClick={() => onPage('inspections')} className="h-8 gap-1.5 text-xs">{t('ดูทั้งหมด')} <ArrowRight size={14} /></Button>
         </CardHeader>
         <CardContent className="p-0">
-          {data?.recent.length ? <div className="divide-y divide-[#edf0f0]">{data.recent.map((record) => <Button key={record.id} variant="ghost" onClick={() => onPage('inspections')} className="grid h-auto w-full grid-cols-[1fr_auto] justify-stretch gap-3 rounded-none px-5 py-3.5 text-left whitespace-normal transition hover:bg-[#fafcfc] sm:grid-cols-[1fr_1fr_1fr_auto]">
-            <div className="min-w-0"><p className="truncate text-xs font-medium">{record.area}</p><p className="mt-1 truncate text-[10px] text-muted-foreground">{record.inspector} · {record.shift}</p></div>
-            <div className="hidden text-xs text-muted-foreground sm:block">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')}</div>
-            <div className="hidden text-xs text-muted-foreground sm:block">{record.ngCount} {t('รายการ NG')}</div>
-            <div className="flex items-center gap-2">{record.openCount > 0 ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[10px] text-amber-700">{t('ค้าง')} {record.openCount}</Badge> : record.ngCount > 0 ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">{t('ปิดครบ')}</Badge> : <Badge variant="outline" className="text-[10px] text-muted-foreground">{t('ปกติ')}</Badge>}<ArrowRight size={14} className="text-muted-foreground" /></div>
-          </Button>)}</div> : <div className="px-5 py-10 text-center"><p className="text-sm font-medium">{t('ยังไม่มีรายการตรวจ')}</p><p className="mt-1 text-xs text-muted-foreground">{t('เริ่มบันทึกแบบตรวจครั้งแรกได้เลย')}</p><Button className="mt-4 gap-2" size="sm" onClick={() => onPage('new')}><ArrowUpRight size={15} /> {t('บันทึกการตรวจ')}</Button></div>}
+          {data?.recent.length ? <div className="divide-y divide-[#edf0f0]">{data.recent.slice(0, 10).map((record) => <button key={record.id} type="button" onClick={() => onPage('inspections')} className="grid min-h-[76px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition hover:bg-[#fafcfc] sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(100px,.8fr)_auto] sm:gap-4 sm:px-5">
+            <div className="min-w-0"><p className="truncate text-sm font-medium">{record.area}</p><p className="mt-1 truncate text-xs text-muted-foreground">{record.inspector} · {record.shift}</p><p className="mt-1 truncate text-[11px] text-muted-foreground sm:hidden">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')} · {record.ngCount} {t('รายการ NG')}</p></div>
+            <div className="hidden text-sm text-muted-foreground sm:block">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')}</div>
+            <div className="hidden text-sm text-muted-foreground sm:block">{record.ngCount} {t('รายการ NG')}</div>
+            <div className="flex items-center justify-end gap-2">{record.openCount > 0 ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs text-amber-700">{t('ค้าง')} {record.openCount}</Badge> : record.ngCount > 0 ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-xs text-emerald-700">{t('ปิดครบ')}</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">{t('ปกติ')}</Badge>}<ArrowRight size={14} className="shrink-0 text-muted-foreground" /></div>
+          </button>)}</div> : <div className="px-5 py-10 text-center"><p className="text-sm font-medium">{t('ยังไม่มีรายการตรวจ')}</p><p className="mt-1 text-xs text-muted-foreground">{t('เริ่มบันทึกแบบตรวจครั้งแรกได้เลย')}</p><Button className="mt-4 gap-2" size="sm" onClick={() => onPage('new')}><ArrowUpRight size={15} /> {t('บันทึกการตรวจ')}</Button></div>}
         </CardContent>
       </Card>
       <div className="flex items-center justify-center gap-2 pb-2 text-[10px] text-muted-foreground"><ArrowDownRight size={13} /> {t('ช่วงเวลาที่เลือก:')} {formatDate(from, language)} {t('ถึง')} {formatDate(to, language)}</div>
