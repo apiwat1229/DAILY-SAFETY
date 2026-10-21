@@ -11,7 +11,7 @@
   <circle cx="70" cy="711" r="260" fill="#1C5552" fill-opacity=".25"/>
   <circle cx="1355" cy="70" r="225" fill="#2F7770" fill-opacity=".13"/>
   <path d="M0 630C227 541 366 702 612 597v163H0V630Z" fill="#174444" fill-opacity=".35"/>
-  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+  <g font-family="'Bai Jamjuree',Segoe UI,Arial,sans-serif">
     <g transform="translate(86 78)">
       <rect width="50" height="50" rx="15" fill="#DDF4EC"/>
       <path d="M25 9.5 38 14v10.2c0 8.3-5.5 13.4-13 16.3-7.5-3.2-13-8.4-13-16.3V14l13-4.5Z" stroke="#17685E" stroke-width="2.6" stroke-linejoin="round"/>
@@ -36,7 +36,7 @@
 
   <g filter="url(#shadow)">
     <rect x="606" y="99" width="713" height="577" rx="18" fill="#FFFFFF"/>
-    <g clip-path="url(#window)" font-family="Inter,Segoe UI,Arial,sans-serif">
+    <g clip-path="url(#window)" font-family="'Bai Jamjuree',Segoe UI,Arial,sans-serif">
       <rect x="606" y="99" width="151" height="577" fill="#123538"/>
       <rect x="606" y="99" width="713" height="55" fill="#FBFDFD"/>
       <path d="M757 154.5H1319" stroke="#E8EEEE"/>

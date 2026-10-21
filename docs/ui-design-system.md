@@ -34,7 +34,7 @@ Use the `.app-content-frame` and `.app-main-frame` classes to align signed-in pa
 
 ## Type and language
 
-- Use Geist Variable with Noto Sans Thai and system UI fallbacks.
+- Use Bai Jamjuree across the app, with Myanmar Text and system UI fallbacks for scripts it does not cover.
 - Use `page-heading`, `section-heading`, and `subsection-heading` for repeated heading sizes rather than styling every heading element globally.
 - Keep regular body copy at 16px. Compact text utilities resolve to at least 13px on desktop and 14px on mobile, with 15px for `text-sm`.
 - Set the correct `lang` attribute on public screens when the page language is known.

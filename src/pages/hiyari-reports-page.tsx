@@ -60,7 +60,7 @@ const documentLabels: Record<HiyariLanguage, DocumentLabels> = {
 }
 
 const paperStyles = `
-  .hiyari-paper{box-sizing:border-box;width:210mm;max-width:100%;min-height:297mm;margin:0 auto;padding:15mm;background:#fff;color:#000;font-family:Tahoma,"Noto Sans Thai","Myanmar Text",Arial,sans-serif;font-size:11pt;line-height:1.55}
+  .hiyari-paper{box-sizing:border-box;width:210mm;max-width:100%;min-height:297mm;margin:0 auto;padding:15mm;background:#fff;color:#000;font-family:"Bai Jamjuree","Myanmar Text","Noto Sans Thai",Arial,sans-serif;font-size:11pt;line-height:1.55}
   .hiyari-paper *{box-sizing:border-box}
   .hiyari-paper h1{margin:0 0 16px;font-size:15pt!important;line-height:1.3!important;letter-spacing:0!important;color:#000;font-weight:700}
   .hiyari-paper .section-title{margin:22px 0 8px;font-size:11pt;font-weight:700;color:#000}

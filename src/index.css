@@ -1,9 +1,20 @@
-@import "@fontsource-variable/geist";
+@import "@fontsource/bai-jamjuree/latin-400.css";
+@import "@fontsource/bai-jamjuree/latin-ext-400.css";
+@import "@fontsource/bai-jamjuree/thai-400.css";
+@import "@fontsource/bai-jamjuree/latin-500.css";
+@import "@fontsource/bai-jamjuree/latin-ext-500.css";
+@import "@fontsource/bai-jamjuree/thai-500.css";
+@import "@fontsource/bai-jamjuree/latin-600.css";
+@import "@fontsource/bai-jamjuree/latin-ext-600.css";
+@import "@fontsource/bai-jamjuree/thai-600.css";
+@import "@fontsource/bai-jamjuree/latin-700.css";
+@import "@fontsource/bai-jamjuree/latin-ext-700.css";
+@import "@fontsource/bai-jamjuree/thai-700.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @theme inline {
-  --font-sans: "Geist Variable", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+  --font-sans: "Bai Jamjuree", "Myanmar Text", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -44,7 +55,7 @@
 
 :root {
   color-scheme: light;
-  font-family: "Geist Variable", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+  font-family: "Bai Jamjuree", "Myanmar Text", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

@@ -35,7 +35,7 @@ const edge = { style: 'thin', color: { argb: palette.black } }
 export async function createHiyariWorkbook(row, uploadDir) {
   const language = ['th', 'en', 'my'].includes(row.language) ? row.language : 'th'
   const labels = labelsByLanguage[language]
-  const fontName = language === 'my' ? 'Myanmar Text' : 'Tahoma'
+  const fontName = language === 'my' ? 'Myanmar Text' : 'Bai Jamjuree'
   const baseFont = { name: fontName, size: 10, color: { argb: palette.black } }
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Daily Safety | Y.T. Rubber'
