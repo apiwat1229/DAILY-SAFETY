@@ -60,10 +60,10 @@ const documentLabels: Record<HiyariLanguage, DocumentLabels> = {
 }
 
 const paperStyles = `
-  .hiyari-paper{box-sizing:border-box;width:210mm;max-width:100%;min-height:297mm;margin:0 auto;padding:15mm;background:#fff;color:#000;font-family:"Bai Jamjuree","Myanmar Text","Noto Sans Thai",Arial,sans-serif;font-size:11pt;line-height:1.55}
+  .hiyari-paper{--paper-text-body:11pt;--paper-text-title:15pt;--paper-text-section:11pt;--paper-text-caption:8.5pt;--paper-text-signature:9pt;box-sizing:border-box;width:210mm;max-width:100%;min-height:297mm;margin:0 auto;padding:15mm;background:#fff;color:#000;font-family:"Bai Jamjuree","Myanmar Text","Noto Sans Thai",Arial,sans-serif;font-size:var(--paper-text-body);line-height:1.55}
   .hiyari-paper *{box-sizing:border-box}
-  .hiyari-paper h1{margin:0 0 16px;font-size:15pt!important;line-height:1.3!important;letter-spacing:0!important;color:#000;font-weight:700}
-  .hiyari-paper .section-title{margin:22px 0 8px;font-size:11pt;font-weight:700;color:#000}
+  .hiyari-paper h1{margin:0 0 16px;font-size:var(--paper-text-title)!important;line-height:1.3!important;letter-spacing:0!important;color:#000;font-weight:700}
+  .hiyari-paper .section-title{margin:22px 0 8px;font-size:var(--paper-text-section);font-weight:700;color:#000}
   .hiyari-paper table{width:100%;border-collapse:collapse;table-layout:fixed}
   .hiyari-paper th,.hiyari-paper td{border:1px solid #000;padding:8px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}
   .hiyari-paper .meta th{width:25%;background:#fff;color:#000;font-weight:700}
@@ -73,14 +73,14 @@ const paperStyles = `
   .hiyari-paper .photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .hiyari-paper .photo{margin:0;padding:7px;border:1px solid #000;break-inside:avoid}
   .hiyari-paper .photo img{display:block;width:100%;height:58mm;object-fit:contain;background:#fff}
-  .hiyari-paper .photo figcaption{padding-top:5px;color:#000;font-size:8.5pt;overflow-wrap:anywhere}
+  .hiyari-paper .photo figcaption{padding-top:5px;color:#000;font-size:var(--paper-text-caption);overflow-wrap:anywhere}
   .hiyari-paper .signature{margin-top:28px;break-inside:avoid}
-  .hiyari-paper .signature td{height:68px;padding-top:42px;text-align:center;font-size:9pt;color:#000}
-  .hiyari-paper .doc-footer{margin-top:20px;padding-top:8px;border-top:1px solid #000;color:#000;font-size:8.5pt;display:flex;justify-content:space-between;gap:12px}
+  .hiyari-paper .signature td{height:68px;padding-top:42px;text-align:center;font-size:var(--paper-text-signature);color:#000}
+  .hiyari-paper .doc-footer{margin-top:20px;padding-top:8px;border-top:1px solid #000;color:#000;font-size:var(--paper-text-caption);display:flex;justify-content:space-between;gap:12px}
   @media screen{.hiyari-paper{box-shadow:0 4px 20px rgba(0,0,0,.13);border:1px solid #000}}
   @media screen and (max-width:640px){
-    .hiyari-paper{width:100%;max-width:100%;min-height:0;padding:14px;font-size:10pt;line-height:1.5}
-    .hiyari-paper h1{margin:0 0 12px;font-size:14pt!important}
+    .hiyari-paper{--paper-text-body:10pt;--paper-text-title:14pt;width:100%;max-width:100%;min-height:0;padding:14px;line-height:1.5}
+    .hiyari-paper h1{margin:0 0 12px}
     .hiyari-paper .section-title{margin:16px 0 6px}
     .hiyari-paper .meta,.hiyari-paper .meta tbody{display:block}
     .hiyari-paper .meta tr{display:grid;grid-template-columns:minmax(88px,.8fr) minmax(0,1.4fr)}
@@ -94,7 +94,7 @@ const paperStyles = `
     .hiyari-paper .signature td{display:block;width:100%;height:auto;min-height:70px;padding:36px 8px 8px;text-align:left}
     .hiyari-paper .doc-footer{display:block;overflow-wrap:anywhere}
   }
-  @media print{@page{size:A4;margin:14mm}.hiyari-paper{width:auto;max-width:none;min-height:0;margin:0;padding:0;font-size:10.5pt;print-color-adjust:exact;-webkit-print-color-adjust:exact}.hiyari-paper .section-title{break-after:avoid}.hiyari-paper tr{break-inside:avoid}.hiyari-paper .signature{break-inside:avoid}.hiyari-paper .photo img{height:55mm}}
+  @media print{@page{size:A4;margin:14mm}.hiyari-paper{--paper-text-body:10.5pt;width:auto;max-width:none;min-height:0;margin:0;padding:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}.hiyari-paper .section-title{break-after:avoid}.hiyari-paper tr{break-inside:avoid}.hiyari-paper .signature{break-inside:avoid}.hiyari-paper .photo img{height:55mm}}
 `
 
 function escapeHtml(value: string) {

@@ -65,7 +65,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
     <div className="app-shell min-h-screen md:flex">
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
         <Brand />
-        <div className="mt-9 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
+        <div className="mt-9 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
         <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
         <ProfileBlock user={user} onLogout={handleLogout} />
       </aside>
@@ -102,7 +102,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
       {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
-          <div className="mt-8 px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
+          <div className="mt-8 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
           <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
           <ProfileBlock user={user} onLogout={handleLogout} />
         </aside>
@@ -115,7 +115,7 @@ function Brand() {
   const { t } = useI18n()
   return <div className="flex items-center gap-3 px-2">
     <div className="grid size-10 place-items-center rounded-lg bg-secondary text-primary"><ShieldCheck size={21} /></div>
-    <div><p className="text-[13px] font-semibold tracking-[.1em] text-sidebar-foreground">Y.T. RUBBER</p><p className="mt-0.5 text-[10px] text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
+    <div><p className="text-xs font-semibold tracking-[.1em] text-sidebar-foreground">Y.T. RUBBER</p><p className="mt-0.5 text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
   </div>
 }
 
@@ -124,7 +124,7 @@ function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) 
   return <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.05] p-3.5">
     <div className="flex items-center gap-2.5">
       <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-sidebar-soft text-xs font-semibold text-sidebar-foreground">{user.name.slice(0, 1)}</div>
-      <div className="min-w-0"><p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p><p className="mt-0.5 text-[10px] text-sidebar-muted">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
+      <div className="min-w-0"><p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p><p className="mt-0.5 text-xs text-sidebar-muted">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
       <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="ml-auto text-sidebar-muted hover:bg-white/10 hover:text-white"><LogOut size={15} /></Button>
     </div>
   </div>
@@ -132,7 +132,7 @@ function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) 
 
 type NavLinkProps = { label: string; icon: typeof Activity; active: boolean; onClick: () => void }
 function NavLink({ label, icon: Icon, active, onClick }: NavLinkProps) {
-  return <Button type="button" variant="ghost" data-active={active} onClick={onClick} className="side-link flex h-auto w-full items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium">
+  return <Button type="button" variant="ghost" data-active={active} onClick={onClick} className="side-link flex h-auto w-full items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-medium">
     <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{active && <span className="ml-auto size-1.5 rounded-full bg-sidebar-active" />}
   </Button>
 }

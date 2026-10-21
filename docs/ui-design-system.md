@@ -35,8 +35,21 @@ Use the `.app-content-frame` and `.app-main-frame` classes to align signed-in pa
 ## Type and language
 
 - Use Bai Jamjuree across the app, with Myanmar Text and system UI fallbacks for scripts it does not cover.
-- Use `page-heading`, `section-heading`, and `subsection-heading` for repeated heading sizes rather than styling every heading element globally.
-- Keep regular body copy at 16px. Compact text utilities resolve to at least 13px on desktop and 14px on mobile, with 15px for `text-sm`.
+- Set font sizes in the `--type-size-*` and `--type-line-*` tokens in `src/index.css`; Tailwind `text-*` utilities map to this shared scale.
+- Use `page-heading`, `section-heading`, and `subsection-heading` for repeated heading roles. Card, dialog, application-bar, and toast headings also use named shared tokens.
+- Shared UI type scale:
+
+  | Token / utility | Desktop | Mobile | Use |
+  | --- | ---: | ---: | --- |
+  | `text-xs` | 13px | 14px | Captions and hints |
+  | `text-sm` | 15px | 15px | Secondary copy and labels |
+  | `text-base` | 16px | 16px | Body copy and controls |
+  | `text-lg` / `text-xl` | 18px / 20px | 18px / 20px | Small headings |
+  | `text-2xl` / `text-3xl` | 24px / 30px | 24px / 30px | Section and display text |
+  | `text-4xl` / `text-5xl` | 36px / 48px | 36px / 48px | Large display text |
+
+- Page, card, dialog, app-bar, and toast title sizes use named role tokens with mobile adjustments.
+- Keep A4 report typography in the `--paper-text-*` tokens within `hiyari-reports-page.tsx`; use the shared `server/export-typography.js` point-size roles for Excel exports.
 - Set the correct `lang` attribute on public screens when the page language is known.
 
 ## Color roles

@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import sharp from 'sharp'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { EXPORT_FONT_FAMILY, EXPORT_FONT_SIZE } from './export-typography.js'
 
 const palette = {
   deepTeal: 'FF19796F', teal: 'FF36A397', softGray: 'FFF1F3F5', headerGray: 'FFE3E6E8',
@@ -79,7 +80,7 @@ function reportPhotos(value) {
   }
 }
 
-function styleMergedBar(sheet, rowNumber, lastColumn, value, fontSize = 11) {
+function styleMergedBar(sheet, rowNumber, lastColumn, value, fontSize = EXPORT_FONT_SIZE.subtitle) {
   sheet.mergeCells(rowNumber, 1, rowNumber, lastColumn)
   for (let column = 1; column <= lastColumn; column += 1) {
     const cell = sheet.getCell(rowNumber, column)
@@ -88,7 +89,7 @@ function styleMergedBar(sheet, rowNumber, lastColumn, value, fontSize = 11) {
   }
   const cell = sheet.getCell(rowNumber, 1)
   cell.value = value
-  cell.font = { name: 'Bai Jamjuree', size: fontSize, bold: true, color: { argb: palette.text } }
+  cell.font = { name: EXPORT_FONT_FAMILY, size: fontSize, bold: true, color: { argb: palette.text } }
   cell.alignment = { vertical: 'middle', horizontal: 'left' }
 }
 
@@ -98,7 +99,7 @@ function styleTableRow(sheet, rowNumber, values, widths, { header = false, heigh
   row.height = height
   for (let column = 1; column <= widths.length; column += 1) {
     const cell = row.getCell(column)
-    cell.font = { name: 'Bai Jamjuree', size: header ? 9 : 10, bold: header, color: { argb: palette.text } }
+    cell.font = { name: EXPORT_FONT_FAMILY, size: header ? EXPORT_FONT_SIZE.compact : EXPORT_FONT_SIZE.body, bold: header, color: { argb: palette.text } }
     cell.fill = solidFill(header ? palette.headerGray : rowNumber % 2 === 0 ? palette.lightFill : palette.white)
     cell.alignment = { vertical: 'middle', horizontal: header || column === 1 ? 'center' : 'left', wrapText: true }
     cell.border = { top: edge, bottom: edge, left: edge, right: edge }
@@ -159,16 +160,16 @@ export async function createHiyariEmployeeSummaryWorkbook(rows, uploadDir, reque
   summary.pageSetup.fitToWidth = 1
   summary.pageSetup.fitToHeight = 0
   summary.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.15, footer: 0.15 }
-  styleMergedBar(summary, 1, 7, labels.title, 17)
+  styleMergedBar(summary, 1, 7, labels.title, EXPORT_FONT_SIZE.reportTitle)
   summary.getRow(1).height = 38
   summary.mergeCells('A2:G2')
   summary.getCell('A2').value = `${labels.generatedAt}: ${formatDateTime(new Date().toISOString(), language)}`
-  summary.getCell('A2').font = { name: 'Bai Jamjuree', size: 10, color: { argb: palette.text } }
+  summary.getCell('A2').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, color: { argb: palette.text } }
   summary.getCell('A2').alignment = { vertical: 'middle', horizontal: 'left' }
   summary.getRow(2).height = 25
   summary.mergeCells('A3:G3')
   summary.getCell('A3').value = `${labels.dateRange}: ${period}`
-  summary.getCell('A3').font = { name: 'Bai Jamjuree', size: 10, color: { argb: palette.muted } }
+  summary.getCell('A3').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, color: { argb: palette.muted } }
   summary.getCell('A3').alignment = { vertical: 'middle', horizontal: 'left' }
   summary.getRow(3).height = 22
   summary.mergeCells('A4:C4')
@@ -178,7 +179,7 @@ export async function createHiyariEmployeeSummaryWorkbook(rows, uploadDir, reque
   for (const cellAddress of ['A4', 'D4']) {
     const cell = summary.getCell(cellAddress)
     cell.fill = solidFill(palette.softGray)
-    cell.font = { name: 'Bai Jamjuree', size: 12, bold: true, color: { argb: palette.text } }
+    cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sectionHeading, bold: true, color: { argb: palette.text } }
     cell.alignment = { vertical: 'middle', horizontal: 'center' }
   }
   summary.getRow(4).height = 32
@@ -209,16 +210,16 @@ export async function createHiyariEmployeeSummaryWorkbook(rows, uploadDir, reque
     sheet.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.15, footer: 0.15 }
     sheet.headerFooter.oddFooter = '&CPage &P of &N'
 
-    styleMergedBar(sheet, 1, columns.length, labels.title, 16)
+    styleMergedBar(sheet, 1, columns.length, labels.title, EXPORT_FONT_SIZE.secondarySheetTitle)
     sheet.getRow(1).height = 36
     sheet.mergeCells(2, 1, 2, columns.length)
     sheet.getCell('A2').value = `${group.employee_name} · ${group.employee_code || '—'}`
-    sheet.getCell('A2').font = { name: 'Bai Jamjuree', size: 12, bold: true, color: { argb: palette.deepTeal } }
+    sheet.getCell('A2').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sectionHeading, bold: true, color: { argb: palette.deepTeal } }
     sheet.getCell('A2').alignment = { vertical: 'middle', horizontal: 'left' }
     sheet.getRow(2).height = 28
     sheet.mergeCells(3, 1, 3, lastColumn)
     sheet.getCell('A3').value = period
-    sheet.getCell('A3').font = { name: 'Bai Jamjuree', size: 10, color: { argb: palette.muted } }
+    sheet.getCell('A3').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, color: { argb: palette.muted } }
     sheet.getCell('A3').alignment = { vertical: 'middle', horizontal: 'left' }
     sheet.getRow(3).height = 22
     styleMergedBar(sheet, 4, lastColumn, labels.profile)
@@ -236,7 +237,7 @@ export async function createHiyariEmployeeSummaryWorkbook(rows, uploadDir, reque
     sheet.mergeCells('K5:L5')
     for (let column = 1; column <= columns.length; column += 1) {
       const cell = profileRow.getCell(column)
-      cell.font = { name: 'Bai Jamjuree', size: 10, bold: [1, 6, 9].includes(column), color: { argb: [1, 6, 9].includes(column) ? palette.muted : palette.text } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: [1, 6, 9].includes(column), color: { argb: [1, 6, 9].includes(column) ? palette.muted : palette.text } }
       cell.fill = solidFill([1, 6, 9].includes(column) ? palette.softGray : palette.white)
       cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }
       cell.border = { top: edge, bottom: edge, left: edge, right: edge }
@@ -294,13 +295,13 @@ export async function createHiyariEmployeeSummaryWorkbook(rows, uploadDir, reque
     styleTableRow(summary, 7 + index, summaryRow, summaryWidths, { height: 30 })
     const sheetCell = summary.getCell(7 + index, 7)
     sheetCell.value = { text: sheetName, hyperlink: `#'${sheetName.replace(/'/g, "''")}'!A1`, tooltip: sheetName }
-    sheetCell.font = { name: 'Bai Jamjuree', size: 10, color: { argb: palette.deepTeal }, underline: true }
+    sheetCell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, color: { argb: palette.deepTeal }, underline: true }
   }
 
   if (!people.length) {
     summary.mergeCells('A7:G7')
     summary.getCell('A7').value = labels.empty
-    summary.getCell('A7').font = { name: 'Bai Jamjuree', size: 11, color: { argb: palette.text } }
+    summary.getCell('A7').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.subtitle, color: { argb: palette.text } }
     summary.getCell('A7').alignment = { horizontal: 'center', vertical: 'middle' }
     summary.getRow(7).height = 32
   }

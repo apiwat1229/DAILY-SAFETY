@@ -13,6 +13,7 @@ import sharp from 'sharp'
 import { CHECKLIST, FOLLOW_UP_STATUSES, RESULTS } from './checklist.js'
 import { createHiyariWorkbook } from './hiyari-export.js'
 import { createHiyariEmployeeSummaryWorkbook } from './hiyari-summary-export.js'
+import { EXPORT_FONT_FAMILY, EXPORT_FONT_SIZE } from './export-typography.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const appRoot = path.resolve(root, '..')
@@ -608,12 +609,16 @@ function formatBangkokParts(value) {
 
 function styleReportSheet(sheet, columnCount, rowCount) {
   const header = sheet.getRow(1)
-  header.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  header.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FFFFFFFF' } }
   header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF11675D' } }
   header.alignment = { vertical: 'middle', wrapText: true }
   header.height = 30
   if (rowCount > 0) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columnCount } }
-  for (let index = 2; index <= sheet.rowCount; index += 1) sheet.getRow(index).alignment = { vertical: 'top', wrapText: true }
+  for (let index = 2; index <= sheet.rowCount; index += 1) {
+    const row = sheet.getRow(index)
+    row.eachCell((cell) => { cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.compact } })
+    row.alignment = { vertical: 'top', wrapText: true }
+  }
 }
 
 function newPublicToken() {
@@ -1263,13 +1268,13 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     sheet.columns = columns.map((width) => ({ width }))
     sheet.mergeCells('A1:P1')
     sheet.getCell('A1').value = english ? 'DAILY SAFETY INSPECTION REPORT' : 'รายงานแบบตรวจความปลอดภัยประจำวัน'
-    sheet.getCell('A1').font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: 'FFFFFFFF' } }
+    sheet.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sheetTitle, bold: true, color: { argb: 'FFFFFFFF' } }
     sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14574E' } }
     sheet.getCell('A1').alignment = { vertical: 'middle' }
     sheet.getRow(1).height = 34
     sheet.mergeCells('A2:P2')
     sheet.getCell('A2').value = `${english ? 'Exported' : 'ส่งออกเมื่อ'} ${new Intl.DateTimeFormat(english ? 'en-GB' : 'th-TH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(new Date())} · ${english ? 'Records' : 'รายการ'} ${rows.length}${filters.from ? ` · ${english ? 'From' : 'ตั้งแต่'} ${filters.from}` : ''}${filters.to ? ` · ${english ? 'To' : 'ถึง'} ${filters.to}` : ''}`
-    sheet.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: 'FF52645F' } }
+    sheet.getCell('A2').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, color: { argb: 'FF52645F' } }
     sheet.getCell('A2').alignment = { vertical: 'middle' }
     sheet.getRow(2).height = 22
     sheet.getRow(3).height = 8
@@ -1277,7 +1282,7 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     headerRow.values = headers
     headerRow.height = 30
     headerRow.eachCell((cell) => {
-      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FFFFFFFF' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276D63' } }
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
       cell.border = { bottom: { style: 'medium', color: { argb: 'FF14574E' } } }
@@ -1320,13 +1325,13 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
       dataRow.values = values
       dataRow.height = 62
       dataRow.eachCell((cell, colNumber) => {
-        cell.font = { name: 'Aptos', size: 9, color: { argb: 'FF24332F' } }
+        cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.compact, color: { argb: 'FF24332F' } }
         cell.alignment = { vertical: 'middle', wrapText: true }
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFDCE7E4' } } }
         if (index % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F9F8' } }
         if (colNumber === 9) {
           const color = row.result === 'OK' ? 'FF13804C' : row.result === 'NG' ? 'FFB42318' : 'FF64748B'
-          cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: color } }
+          cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: color } }
           cell.alignment = { horizontal: 'center', vertical: 'middle' }
         }
         if (colNumber === 15 && photos.before.length) cell.note = english ? `${photos.before.length} before photo(s). All are listed on the Photo evidence sheet.` : `แนบรูปก่อนแก้ไข ${photos.before.length} รูป ดูรูปทั้งหมดได้ที่ชีตหลักฐานรูปภาพ`
@@ -1351,7 +1356,7 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     photoSheet.columns = [8, 14, 24, 28, 20, 32, 30].map((width) => ({ width }))
     photoSheet.mergeCells('A1:G1')
     photoSheet.getCell('A1').value = english ? 'PHOTO EVIDENCE GALLERY' : 'แกลเลอรีหลักฐานรูปภาพ'
-    photoSheet.getCell('A1').font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
+    photoSheet.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.secondarySheetTitle, bold: true, color: { argb: 'FFFFFFFF' } }
     photoSheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14574E' } }
     photoSheet.getRow(1).height = 32
     const photoHeaders = english ? ['No.', 'Date', 'Area', 'Checklist item', 'Photo type', 'File name', 'Preview'] : ['ลำดับ', 'วันที่ตรวจ', 'พื้นที่', 'หัวข้อตรวจ', 'ประเภทภาพ', 'ชื่อไฟล์', 'รูปภาพ']
@@ -1359,7 +1364,7 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     photoHeader.values = photoHeaders
     photoHeader.height = 28
     photoHeader.eachCell((cell) => {
-      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FFFFFFFF' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276D63' } }
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
     })
@@ -1379,7 +1384,7 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
         photo.attachment_type === 'before' ? (english ? 'Before correction' : 'ก่อนแก้ไข') : (english ? 'After correction' : 'หลังแก้ไข'), photo.original_name, '']
       photoRow.height = 94
       photoRow.eachCell((cell) => {
-        cell.font = { name: 'Aptos', size: 9, color: { argb: 'FF24332F' } }
+        cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.compact, color: { argb: 'FF24332F' } }
         cell.alignment = { vertical: 'middle', wrapText: true }
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFDCE7E4' } } }
         if (index % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F9F8' } }
@@ -2018,13 +2023,13 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
     summary.columns = [{ width: 22 }, { width: 22 }, { width: 22 }, { width: 22 }]
     summary.mergeCells('A1:D1')
     summary.getCell('A1').value = 'ASSESSMENT SUMMARY'
-    summary.getCell('A1').font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: 'FFFFFFFF' } }
+    summary.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sheetTitle, bold: true, color: { argb: 'FFFFFFFF' } }
     summary.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF105C54' } }
     summary.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
     summary.getRow(1).height = 38
     summary.mergeCells('A2:D2')
     summary.getCell('A2').value = assessment.title
-    summary.getCell('A2').font = { name: 'Aptos', size: 12, bold: true, color: { argb: 'FF23423F' } }
+    summary.getCell('A2').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sectionHeading, bold: true, color: { argb: 'FF23423F' } }
     summary.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF3F1' } }
     summary.getCell('A2').alignment = { vertical: 'middle', indent: 1, wrapText: true }
     summary.getRow(2).height = 30
@@ -2039,11 +2044,11 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
       const labelCell = summary.getCell(labelRange.split(':')[0])
       const valueCell = summary.getCell(valueRange.split(':')[0])
       labelCell.value = label
-      labelCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF4E6965' } }
+      labelCell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FF4E6965' } }
       labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F6F5' } }
       labelCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
       valueCell.value = value
-      valueCell.font = { name: 'Aptos Display', size: 22, bold: true, color: { argb: 'FF105C54' } }
+      valueCell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.metric, bold: true, color: { argb: 'FF105C54' } }
       valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFCFC' } }
       valueCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
       for (const range of [labelRange, valueRange]) {
@@ -2062,7 +2067,7 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
     summary.getCell('D8').value = 'Exported date'
     for (const ref of ['C8', 'D8']) {
       const cell = summary.getCell(ref)
-      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF4E6965' } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FF4E6965' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F6F5' } }
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
       cell.border = { top: border, bottom: border, left: border, right: border }
@@ -2073,7 +2078,7 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
     summary.getCell('D9').value = exportedAt.date
     for (const ref of ['C9', 'D9']) {
       const cell = summary.getCell(ref)
-      cell.font = { name: 'Aptos Display', size: 15, bold: true, color: { argb: 'FF105C54' } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.highlight, bold: true, color: { argb: 'FF105C54' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFCFC' } }
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
       cell.border = { top: border, bottom: border, left: border, right: border }
@@ -2086,7 +2091,7 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
     summary.getRow(10).height = 27
     summary.mergeCells('A12:D12')
     summary.getCell('A12').value = 'Y.T. RUBBER  ·  Daily Safety System'
-    summary.getCell('A12').font = { name: 'Aptos', size: 9, color: { argb: 'FF728481' }, italic: true }
+    summary.getCell('A12').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.compact, color: { argb: 'FF728481' }, italic: true }
     summary.getCell('A12').alignment = { horizontal: 'right' }
     summary.getRow(12).height = 22
     summary.pageSetup = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }

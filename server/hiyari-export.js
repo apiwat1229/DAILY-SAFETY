@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import sharp from 'sharp'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { EXPORT_FONT_FAMILY, EXPORT_FONT_SIZE } from './export-typography.js'
 
 const labelsByLanguage = {
   th: {
@@ -35,8 +36,8 @@ const edge = { style: 'thin', color: { argb: palette.black } }
 export async function createHiyariWorkbook(row, uploadDir) {
   const language = ['th', 'en', 'my'].includes(row.language) ? row.language : 'th'
   const labels = labelsByLanguage[language]
-  const fontName = language === 'my' ? 'Myanmar Text' : 'Bai Jamjuree'
-  const baseFont = { name: fontName, size: 10, color: { argb: palette.black } }
+  const fontName = language === 'my' ? 'Myanmar Text' : EXPORT_FONT_FAMILY
+  const baseFont = { name: fontName, size: EXPORT_FONT_SIZE.body, color: { argb: palette.black } }
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Daily Safety | Y.T. Rubber'
   workbook.company = 'Y.T. Rubber'
@@ -69,14 +70,14 @@ export async function createHiyariWorkbook(row, uploadDir) {
   sheet.mergeCells('A1:D1')
   for (let column = 1; column <= 4; column += 1) sheet.getCell(1, column).fill = solidFill(palette.black)
   sheet.getCell('A1').value = labels.title
-  sheet.getCell('A1').font = { name: fontName, size: 18, bold: true, color: { argb: palette.white } }
+  sheet.getCell('A1').font = { name: fontName, size: EXPORT_FONT_SIZE.sheetTitle, bold: true, color: { argb: palette.white } }
   sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.getRow(1).height = 38
 
   sheet.mergeCells('A2:D2')
   for (let column = 1; column <= 4; column += 1) sheet.getCell(2, column).fill = solidFill(palette.white)
   sheet.getCell('A2').value = row.form_title
-  sheet.getCell('A2').font = { name: fontName, size: 11, color: { argb: palette.black }, italic: true }
+  sheet.getCell('A2').font = { name: fontName, size: EXPORT_FONT_SIZE.subtitle, color: { argb: palette.black }, italic: true }
   sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
   sheet.getRow(2).height = 30
 
@@ -87,7 +88,7 @@ export async function createHiyariWorkbook(row, uploadDir) {
     for (let column = 1; column <= 4; column += 1) sheet.getCell(rowNumber, column).fill = solidFill(palette.black)
     const cell = sheet.getCell(rowNumber, 1)
     cell.value = text
-    cell.font = { name: fontName, size: 10, bold: true, color: { argb: palette.white } }
+    cell.font = { name: fontName, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: palette.white } }
     cell.alignment = { vertical: 'middle', horizontal: 'left' }
     sheet.getRow(rowNumber).height = 25
   }
@@ -137,7 +138,7 @@ export async function createHiyariWorkbook(row, uploadDir) {
   tableRow(21, labels.headSign, '____________________________________________', 38)
   sheet.mergeCells('A23:D23')
   sheet.getCell('A23').value = row.employee_code
-  sheet.getCell('A23').font = { name: fontName, size: 8, color: { argb: palette.black } }
+  sheet.getCell('A23').font = { name: fontName, size: EXPORT_FONT_SIZE.footnote, color: { argb: palette.black } }
   sheet.getCell('A23').alignment = { horizontal: 'right', vertical: 'middle' }
   sheet.getRow(23).height = 18
 
@@ -157,7 +158,7 @@ export async function createHiyariWorkbook(row, uploadDir) {
     photoSheet.mergeCells('A1:D1')
     for (let column = 1; column <= 4; column += 1) photoSheet.getCell(1, column).fill = solidFill(palette.black)
     photoSheet.getCell('A1').value = labels.photoSheet
-    photoSheet.getCell('A1').font = { name: fontName, size: 16, bold: true, color: { argb: palette.white } }
+    photoSheet.getCell('A1').font = { name: fontName, size: EXPORT_FONT_SIZE.secondarySheetTitle, bold: true, color: { argb: palette.white } }
     photoSheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
     photoSheet.getRow(1).height = 34
     photoSheet.getRow(2).values = [labels.number, labels.fileName, labels.fileType, labels.preview]
@@ -165,7 +166,7 @@ export async function createHiyariWorkbook(row, uploadDir) {
     for (let column = 1; column <= 4; column += 1) {
       const cell = photoSheet.getCell(2, column)
       cell.fill = solidFill(palette.black)
-      cell.font = { name: fontName, size: 9, bold: true, color: { argb: palette.white } }
+      cell.font = { name: fontName, size: EXPORT_FONT_SIZE.compact, bold: true, color: { argb: palette.white } }
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
       cell.border = { top: edge, bottom: edge, left: edge, right: edge }
     }

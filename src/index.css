@@ -15,6 +15,32 @@
 
 @theme inline {
   --font-sans: "Bai Jamjuree", "Myanmar Text", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+  --text-xs: var(--type-size-xs);
+  --text-xs--line-height: var(--type-line-xs);
+  --text-sm: var(--type-size-sm);
+  --text-sm--line-height: var(--type-line-sm);
+  --text-base: var(--type-size-base);
+  --text-base--line-height: var(--type-line-base);
+  --text-lg: var(--type-size-lg);
+  --text-lg--line-height: var(--type-line-lg);
+  --text-xl: var(--type-size-xl);
+  --text-xl--line-height: var(--type-line-xl);
+  --text-2xl: var(--type-size-2xl);
+  --text-2xl--line-height: var(--type-line-2xl);
+  --text-3xl: var(--type-size-3xl);
+  --text-3xl--line-height: var(--type-line-3xl);
+  --text-4xl: var(--type-size-4xl);
+  --text-4xl--line-height: var(--type-line-4xl);
+  --text-5xl: var(--type-size-5xl);
+  --text-5xl--line-height: var(--type-line-5xl);
+  --text-6xl: var(--type-size-6xl);
+  --text-6xl--line-height: var(--type-line-6xl);
+  --text-7xl: var(--type-size-7xl);
+  --text-7xl--line-height: var(--type-line-7xl);
+  --text-8xl: var(--type-size-8xl);
+  --text-8xl--line-height: var(--type-line-8xl);
+  --text-9xl: var(--type-size-9xl);
+  --text-9xl--line-height: var(--type-line-9xl);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -60,6 +86,50 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Central typography scale. Tailwind text utilities below resolve to these tokens. */
+  --type-size-xs: .8125rem;
+  --type-line-xs: 1.35rem;
+  --type-size-sm: .9375rem;
+  --type-line-sm: 1.5rem;
+  --type-size-base: 1rem;
+  --type-line-base: 1.5rem;
+  --type-size-lg: 1.125rem;
+  --type-line-lg: 1.75rem;
+  --type-size-xl: 1.25rem;
+  --type-line-xl: 1.75rem;
+  --type-size-2xl: 1.5rem;
+  --type-line-2xl: 2rem;
+  --type-size-3xl: 1.875rem;
+  --type-line-3xl: 2.25rem;
+  --type-size-4xl: 2.25rem;
+  --type-line-4xl: 2.5rem;
+  --type-size-5xl: 3rem;
+  --type-line-5xl: 1;
+  --type-size-6xl: 3.75rem;
+  --type-line-6xl: 1;
+  --type-size-7xl: 4.5rem;
+  --type-line-7xl: 1;
+  --type-size-8xl: 6rem;
+  --type-line-8xl: 1;
+  --type-size-9xl: 8rem;
+  --type-line-9xl: 1;
+  --type-line-label: 1.4;
+  --type-size-page-heading: clamp(1.5rem, 2vw, 1.75rem);
+  --type-line-page-heading: 1.25;
+  --type-size-section-heading: 1.125rem;
+  --type-line-section-heading: 1.35;
+  --type-size-subsection-heading: 1rem;
+  --type-line-subsection-heading: 1.4;
+  --type-size-card-title: 1.125rem;
+  --type-line-card-title: 1.4;
+  --type-size-dialog-title: 1.25rem;
+  --type-line-dialog-title: 1.4;
+  --type-size-app-title: 1.25rem;
+  --type-line-app-title: 1.3;
+  --type-size-toast-title: 1rem;
+  --type-size-toast-description: .9375rem;
+  --type-line-toast: 1.5;
 
   /* Shared color roles. Keep component colors here so every screen follows one theme. */
   --background: #f4f7f8;
@@ -110,8 +180,8 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: var(--type-size-base);
+  line-height: var(--type-line-base);
 }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
@@ -126,7 +196,7 @@ button { cursor: pointer; }
   min-height: var(--control-height);
   border-radius: var(--radius);
 }
-label { line-height: 1.4; }
+label { line-height: var(--type-line-label); }
 ::selection { background: #d5ece6; color: #143b36; }
 
 /* App-wide content frame keeps navigation, page headers, and page content aligned. */
@@ -147,9 +217,9 @@ label { line-height: 1.4; }
 }
 .app-main-frame { padding-block: 2rem 3rem; }
 .page-stack { display: flex; flex-direction: column; gap: var(--page-section-gap); }
-.page-heading { font-size: clamp(1.5rem, 2vw, 1.75rem) !important; line-height: 1.25 !important; letter-spacing: -.025em; }
-.section-heading { font-size: 1.125rem !important; line-height: 1.35 !important; }
-.subsection-heading { font-size: 1rem !important; line-height: 1.4 !important; }
+.page-heading { font-size: var(--type-size-page-heading) !important; line-height: var(--type-line-page-heading) !important; letter-spacing: -.025em; }
+.section-heading { font-size: var(--type-size-section-heading) !important; line-height: var(--type-line-section-heading) !important; }
+.subsection-heading { font-size: var(--type-size-subsection-heading) !important; line-height: var(--type-line-subsection-heading) !important; }
 .sidebar { background: var(--sidebar); color: var(--sidebar-foreground); }
 .side-link { color: var(--sidebar-muted); transition: background .18s ease, color .18s ease; }
 .side-link:hover, .side-link[data-active="true"] { background: var(--sidebar-soft); color: #fff; }
@@ -157,16 +227,10 @@ label { line-height: 1.4; }
 .soft-grid { background-image: radial-gradient(rgba(21, 90, 81, .09) 1px, transparent 1px); background-size: 18px 18px; }
 .safe-area-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 
-/* Type scale is intentionally readable for Thai and English, including dense tables. */
-[data-slot="card-title"]:not(.page-heading) { font-size: 1.125rem !important; line-height: 1.4 !important; }
-[data-slot="dialog-title"] { font-size: 1.25rem !important; line-height: 1.4 !important; }
-.app-shell-title { font-size: 1.25rem !important; line-height: 1.3 !important; }
-.text-xs, [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"], [class~="text-[12px]"], [class~="text-[13px]"], [class~="text-[0.8rem]"] {
-  font-size: .8125rem !important;
-  line-height: 1.35rem !important;
-}
-.text-sm { font-size: .9375rem !important; line-height: 1.5rem !important; }
-[class~="text-[15px]"] { font-size: .9375rem !important; line-height: 1.5rem !important; }
+/* Semantic heading roles share centrally configurable sizes across pages and dialogs. */
+[data-slot="card-title"]:not(.page-heading) { font-size: var(--type-size-card-title) !important; line-height: var(--type-line-card-title) !important; }
+[data-slot="dialog-title"] { font-size: var(--type-size-dialog-title) !important; line-height: var(--type-line-dialog-title) !important; }
+.app-shell-title { font-size: var(--type-size-app-title) !important; line-height: var(--type-line-app-title) !important; }
 
 /* Consistent focus visibility for keyboard and assistive technology users. */
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
@@ -194,29 +258,26 @@ label { line-height: 1.4; }
 /* Sonner feedback uses the same reading scale and width as the rest of the app. */
 [data-sonner-toaster] { --width: min(420px, calc(100vw - 24px)); }
 [data-sonner-toast] { min-height: 60px !important; padding: 14px 18px !important; }
-[data-sonner-toast] [data-title] { font-size: 1rem !important; line-height: 1.5 !important; }
-[data-sonner-toast] [data-description] { font-size: .9375rem !important; line-height: 1.5 !important; }
+[data-sonner-toast] [data-title] { font-size: var(--type-size-toast-title) !important; line-height: var(--type-line-toast) !important; }
+[data-sonner-toast] [data-description] { font-size: var(--type-size-toast-description) !important; line-height: var(--type-line-toast) !important; }
 
 @media (max-width: 767px) {
-  :root { --page-section-gap: 1rem; }
-  body { font-size: 1rem; }
-  .app-main-frame { padding-block: 1.5rem 2.5rem; }
-  .page-heading { font-size: 1.5rem !important; }
-  .section-heading { font-size: 1.0625rem !important; }
-  .subsection-heading { font-size: 1rem !important; }
-  [data-slot="card-title"]:not(.page-heading) { font-size: 1.0625rem !important; }
-  [data-slot="dialog-title"] { font-size: 1.1875rem !important; }
-  .app-shell-title { font-size: 1.125rem !important; }
-  .text-xs, [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"], [class~="text-[12px]"], [class~="text-[13px]"], [class~="text-[0.8rem]"] {
-    font-size: .875rem !important;
-    line-height: 1.45rem !important;
+  :root {
+    --page-section-gap: 1rem;
+    --type-size-xs: .875rem;
+    --type-line-xs: 1.45rem;
+    --type-size-page-heading: 1.5rem;
+    --type-size-section-heading: 1.0625rem;
+    --type-size-card-title: 1.0625rem;
+    --type-size-dialog-title: 1.1875rem;
+    --type-size-app-title: 1.125rem;
+    --type-size-toast-title: 1.0625rem;
+    --type-size-toast-description: 1rem;
   }
-  .text-sm, [class~="text-[15px]"] { font-size: .9375rem !important; line-height: 1.5rem !important; }
+  .app-main-frame { padding-block: 1.5rem 2.5rem; }
   [data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] {
     min-height: 2.75rem;
-    font-size: 1rem !important;
+    font-size: var(--type-size-base) !important;
   }
   [data-sonner-toast] { min-height: 64px !important; padding: 15px 18px !important; }
-  [data-sonner-toast] [data-title] { font-size: 1.0625rem !important; }
-  [data-sonner-toast] [data-description] { font-size: 1rem !important; }
 }
