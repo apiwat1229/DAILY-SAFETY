@@ -24,6 +24,8 @@ const dbPath = path.join(dataDir, 'daily-safety.sqlite')
 const port = Number(process.env.PORT || 4000)
 const host = process.env.HOST || '127.0.0.1'
 const isProduction = process.env.NODE_ENV === 'production'
+const defaultSessionMaxAge = 1000 * 60 * 60 * 10
+const rememberedSessionMaxAge = 1000 * 60 * 60 * 24 * 30
 
 if (isProduction && (!process.env.SESSION_SECRET || !process.env.ADMIN_PASSWORD || !process.env.LEADER_PASSWORD)) {
   throw new Error('Production requires SESSION_SECRET, ADMIN_PASSWORD, and LEADER_PASSWORD environment variables.')
@@ -472,7 +474,7 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
     secure: isProduction,
-    maxAge: 1000 * 60 * 60 * 10,
+    maxAge: defaultSessionMaxAge,
   },
 }))
 
@@ -965,6 +967,7 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' })
   }
   loginAttempts.delete(ip)
+  req.session.cookie.maxAge = req.body?.rememberMe === true ? rememberedSessionMaxAge : defaultSessionMaxAge
   req.session.user = safeUser(row)
   req.session.save((error) => {
     if (error) return res.status(500).json({ error: 'เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง' })

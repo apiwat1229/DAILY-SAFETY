@@ -6,6 +6,7 @@ import type { User } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useI18n } from '@/lib/i18n'
 import { LanguageSwitch } from '@/components/language-switch'
 
@@ -14,6 +15,7 @@ type Props = { onLogin: (user: User) => void }
 export function LoginScreen({ onLogin }: Props) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const { t } = useI18n()
@@ -22,7 +24,7 @@ export function LoginScreen({ onLogin }: Props) {
     event.preventDefault()
     setBusy(true)
     try {
-      const { user } = await api.login(username, password)
+      const { user } = await api.login(username, password, rememberMe)
       onLogin(user)
       toast.success(`${t('ยินดีต้อนรับ')} ${user.name}`)
     } catch (error) {
@@ -65,6 +67,10 @@ export function LoginScreen({ onLogin }: Props) {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2"><Label htmlFor="username">{t('ชื่อผู้ใช้')}</Label><Input id="username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder={t('กรอกชื่อผู้ใช้')} required className="h-11 bg-white" /></div>
             <div className="space-y-2"><Label htmlFor="password">{t('รหัสผ่าน')}</Label><div className="relative"><Input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder={t('กรอกรหัสผ่าน')} required className="h-11 bg-white pr-12" /><Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-0 h-full w-11 text-muted-foreground hover:bg-transparent hover:text-foreground" aria-label={t(showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
+            <label htmlFor="remember-me" className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-muted-foreground">
+              <Checkbox id="remember-me" checked={rememberMe} onCheckedChange={(checked) => setRememberMe(checked === true)} />
+              <span>{t('จดจำฉัน')}</span>
+            </label>
             <Button type="submit" disabled={busy} className="h-11 w-full gap-2 text-sm">{busy ? t('กำลังเข้าสู่ระบบ…') : t('เข้าสู่ระบบ')} {!busy && <ArrowRight size={16} />}</Button>
           </form>
           <p className="mt-5 text-center text-xs leading-5 text-muted-foreground">{t('ใช้บัญชีและรหัสผ่านที่ผู้ดูแลระบบกำหนด')}<br />{t('หากลืมรหัสผ่าน โปรดติดต่อผู้ดูแลระบบ')}</p>

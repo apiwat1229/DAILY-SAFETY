@@ -12,8 +12,8 @@ async function request<T>(url: string, options: ApiOptions = {}): Promise<T> {
 
 export const api = {
   me: () => request<{ user: User | null }>('/api/auth/me'),
-  login: (username: string, password: string) => request<{ user: User }>('/api/auth/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
+  login: (username: string, password: string, rememberMe: boolean) => request<{ user: User }>('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, rememberMe }),
   }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   dashboard: (filters?: Partial<Filters> & { categoryResult?: 'NG' | 'N/A' }) => request<DashboardData>(`/api/dashboard${toQuery(filters)}`),
