@@ -78,9 +78,9 @@ export function DashboardPage({ user, onPage }: Props) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(({ title, value, note, icon: Icon, tone }) => <Card key={title} className="metric-card rounded-2xl border-border">
-          <CardContent className="flex items-start justify-between p-4">
-            <div><p className="text-xs font-medium text-muted-foreground">{title}</p><p className="mt-1.5 text-2xl font-semibold tracking-tight">{loading ? '—' : value.toLocaleString('th-TH')}</p><p className="mt-1 text-xs text-muted-foreground">{note}</p></div>
+        {metrics.map(({ title, value, note, icon: Icon, tone }) => <Card key={title} className="metric-card rounded-2xl border-border py-0">
+          <CardContent className="flex items-center justify-between gap-3 px-4 py-2.5">
+            <div className="min-w-0 flex-1"><p className="text-xs font-medium text-muted-foreground">{title}</p><div className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2"><p className="shrink-0 text-xl font-semibold tracking-tight">{loading ? '—' : value.toLocaleString('th-TH')}</p><p className="truncate text-xs text-muted-foreground">{note}</p></div></div>
             <div className={`grid size-9 place-items-center rounded-xl ${tone === 'red' ? 'bg-destructive/10 text-destructive' : tone === 'amber' ? 'bg-warning/10 text-warning' : tone === 'green' ? 'bg-success/10 text-success' : 'bg-secondary text-primary'}`}><Icon size={17} /></div>
           </CardContent>
         </Card>)}

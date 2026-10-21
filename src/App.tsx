@@ -8,6 +8,8 @@ import { LanguageProvider, useI18n } from '@/lib/i18n'
 import { PublicAssessmentPage } from '@/pages/public-assessment-page'
 import { PublicTrainingPage } from '@/pages/public-training-page'
 import { PublicHiyariPage } from '@/pages/public-hiyari-page'
+import { InspectionFormPage } from '@/pages/inspection-form-page'
+import { LanguageSwitch } from '@/components/language-switch'
 
 function getPublicRoute(): { type: 'assessment' | 'training' | 'hiyari'; token: string } | null {
   const parts = window.location.pathname.split('/').filter(Boolean)
@@ -19,20 +21,30 @@ function isDailyInspectionRoute() {
   return window.location.pathname.replace(/\/+$/, '') === '/daily-inspection'
 }
 
+function getAppLocation() {
+  return { publicRoute: getPublicRoute(), dailyInspectionRoute: isDailyInspectionRoute() }
+}
+
 function App() {
   return <LanguageProvider><AppContent /></LanguageProvider>
 }
 
 function AppContent() {
-  const [publicRoute] = useState(getPublicRoute)
-  const [dailyInspectionRoute] = useState(isDailyInspectionRoute)
+  const [appLocation, setAppLocation] = useState(getAppLocation)
+  const { publicRoute, dailyInspectionRoute } = appLocation
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(!publicRoute)
+  const [loading, setLoading] = useState(!publicRoute && !dailyInspectionRoute)
   const [page, setPage] = useState<PageKey>(() => dailyInspectionRoute ? 'new' : 'dashboard')
   const { t } = useI18n()
 
   useEffect(() => {
-    if (publicRoute) return
+    const updateLocation = () => setAppLocation(getAppLocation())
+    window.addEventListener('popstate', updateLocation)
+    return () => window.removeEventListener('popstate', updateLocation)
+  }, [])
+
+  useEffect(() => {
+    if (publicRoute || dailyInspectionRoute) return
     api.me().then(({ user: currentUser }) => {
       setUser(currentUser)
       if (currentUser && (currentUser.role !== 'admin' || dailyInspectionRoute)) setPage('new')
@@ -41,6 +53,14 @@ function AppContent() {
 
   if (publicRoute) return <>
     {publicRoute.type === 'assessment' ? <PublicAssessmentPage token={publicRoute.token} /> : publicRoute.type === 'training' ? <PublicTrainingPage token={publicRoute.token} /> : <PublicHiyariPage token={publicRoute.token} />}
+    <Toaster position="top-right" richColors closeButton />
+  </>
+
+  if (dailyInspectionRoute) return <>
+    <main className="min-h-screen bg-background px-4 py-5 sm:px-7 sm:py-8">
+      <div className="mx-auto mb-4 flex max-w-6xl justify-end"><LanguageSwitch /></div>
+      <InspectionFormPage user={null} publicMode onCreated={() => undefined} />
+    </main>
     <Toaster position="top-right" richColors closeButton />
   </>
 

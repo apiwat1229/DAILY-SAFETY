@@ -52,19 +52,19 @@ export function LoginScreen({ onLogin }: Props) {
         </div>
         <p className="relative text-xs text-sidebar-muted">{t('บันทึกครบ ตรวจสอบย้อนหลังได้')}</p>
       </section>
-      <section className="relative flex min-h-screen items-center justify-center px-5 py-12 sm:px-8">
-        <LanguageSwitch className="absolute right-5 top-5 sm:right-8 sm:top-8" />
+      <section className="relative flex min-h-screen items-center justify-center px-5 py-8 sm:px-8">
+        <LanguageSwitch compact className="absolute right-5 top-5 rounded-full bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-primary sm:right-8 sm:top-8" />
         <div className="w-full max-w-[430px]">
-          <div className="mb-9 flex items-center gap-3 lg:hidden">
+          <div className="mb-6 flex items-center gap-3 lg:hidden">
             <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23} /></div>
             <div><p className="text-sm font-semibold">Y.T. RUBBER</p><p className="text-xs text-muted-foreground">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
           </div>
-          <div className="mb-8">
+          <div className="mb-6">
             <p className="mb-2 text-sm font-medium text-primary">{t('ยินดีต้อนรับ')}</p>
             <h2 className="text-3xl font-semibold tracking-tight">{t('เข้าสู่ระบบ')}</h2>
             <p className="mt-2 text-sm text-muted-foreground">{t('ใช้บัญชีหัวหน้างานหรือผู้ดูแลระบบเพื่อดำเนินการต่อ')}</p>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2"><Label htmlFor="username">{t('ชื่อผู้ใช้')}</Label><Input id="username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder={t('กรอกชื่อผู้ใช้')} required className="h-11 bg-white" /></div>
             <div className="space-y-2"><Label htmlFor="password">{t('รหัสผ่าน')}</Label><div className="relative"><Input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder={t('กรอกรหัสผ่าน')} required className="h-11 bg-white pr-12" /><Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-0 h-full w-11 text-muted-foreground hover:bg-transparent hover:text-foreground" aria-label={t(showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
             <label htmlFor="remember-me" className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-muted-foreground">

@@ -6,6 +6,7 @@ import type { Employee, EmployeeActivityReport } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,6 +24,8 @@ export function EmployeesPage() {
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState<{ employee: Employee | null; key: string } | null>(null)
   const [reportEmployee, setReportEmployee] = useState<Employee | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -43,14 +46,17 @@ export function EmployeesPage() {
 
   function openCreate() { setEditor({ employee: null, key: 'new' }) }
   function openEdit(employee: Employee) { setEditor({ employee, key: employee.employeeCode }) }
-  async function remove(employee: Employee) {
-    const name = language === 'en' ? employee.nameEn || employee.nameTh : employee.nameTh || employee.nameEn
-    if (!window.confirm(`${t('ลบข้อมูลพนักงาน')} ${name} (${employee.employeeCode})?`)) return
+  async function remove() {
+    if (!deleteTarget || deleting) return
+    const employee = deleteTarget
+    setDeleting(true)
     try {
       await api.deleteEmployee(employee.employeeCode)
       toast.success(t('ลบข้อมูลพนักงานแล้ว'))
+      setDeleteTarget(null)
       refresh()
     } catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบข้อมูลพนักงานไม่สำเร็จ')) }
+    finally { setDeleting(false) }
   }
 
   return <div className="page-stack">
@@ -68,10 +74,10 @@ export function EmployeesPage() {
       <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>{t('ฐานข้อมูลพนักงาน')}</CardTitle><CardDescription>{t('ค้นหาได้จากรหัส ชื่อ ตำแหน่ง หรือแผนก ทั้งภาษาไทยและอังกฤษ')}</CardDescription></div><div className="w-full sm:max-w-sm"><div className="relative"><Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-10" aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} /></div><p className="mt-1 text-xs text-muted-foreground">{t('แสดง')} {filteredEmployees.length} {t('จาก')} {employees.length} {t('คน')}</p></div></CardHeader>
       {filteredEmployees.length ? <>
         <div className="hidden overflow-x-auto md:block"><Table><TableHeader><TableRow className="bg-surface-subtle"><TableHead className="min-w-32 pl-5">{t('รหัสพนักงาน')}</TableHead><TableHead className="min-w-52">{t('ชื่อพนักงาน')}</TableHead><TableHead className="min-w-44">{t('ตำแหน่ง')}</TableHead><TableHead className="min-w-44">{t('แผนก')}</TableHead><TableHead className="min-w-44 pr-5 text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((employee) => <TableRow key={employee.employeeCode}><TableCell className="pl-5 font-medium"><Badge variant="outline" className="font-mono text-sm">{employee.employeeCode}</Badge></TableCell><TableCell><p className="font-medium">{employee.nameTh || employee.nameEn}</p>{employee.nameTh && employee.nameEn && <p className="mt-0.5 text-sm text-muted-foreground">{employee.nameEn}</p>}</TableCell><TableCell><p>{language === 'en' ? employee.positionEn || employee.positionTh : employee.positionTh || employee.positionEn}</p></TableCell><TableCell><p>{language === 'en' ? employee.departmentEn || employee.departmentTh : employee.departmentTh || employee.departmentEn}</p></TableCell><TableCell className="pr-5"><div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => setReportEmployee(employee)} className="gap-1.5"><FileBarChart2 size={14} /> {t('รายงาน')}</Button><Button variant="outline" size="sm" onClick={() => openEdit(employee)} className="gap-1.5"><Pencil size={14} /> {t('แก้ไข')}</Button><Button variant="outline" size="sm" onClick={() => remove(employee)} className="gap-1.5 text-destructive hover:text-destructive"><Trash2 size={14} /> {t('ลบ')}</Button></div></TableCell></TableRow>)}</TableBody>
+          <TableBody>{pagination.visibleItems.map((employee) => <TableRow key={employee.employeeCode}><TableCell className="pl-5 font-medium"><Badge variant="outline" className="font-mono text-sm">{employee.employeeCode}</Badge></TableCell><TableCell><p className="font-medium">{employee.nameTh || employee.nameEn}</p>{employee.nameTh && employee.nameEn && <p className="mt-0.5 text-sm text-muted-foreground">{employee.nameEn}</p>}</TableCell><TableCell><p>{language === 'en' ? employee.positionEn || employee.positionTh : employee.positionTh || employee.positionEn}</p></TableCell><TableCell><p>{language === 'en' ? employee.departmentEn || employee.departmentTh : employee.departmentTh || employee.departmentEn}</p></TableCell><TableCell className="pr-5"><div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => setReportEmployee(employee)} className="gap-1.5"><FileBarChart2 size={14} /> {t('รายงาน')}</Button><Button variant="outline" size="sm" onClick={() => openEdit(employee)} className="gap-1.5"><Pencil size={14} /> {t('แก้ไข')}</Button><Button variant="outline" size="sm" onClick={() => setDeleteTarget(employee)} className="gap-1.5 text-destructive hover:text-destructive"><Trash2 size={14} /> {t('ลบ')}</Button></div></TableCell></TableRow>)}</TableBody>
         </Table></div>
         <div className="divide-y md:hidden">{pagination.visibleItems.map((employee) => <div key={employee.employeeCode} className="space-y-3 p-4">
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><Badge variant="outline" className="font-mono">{employee.employeeCode}</Badge><p className="mt-2 font-semibold">{employee.nameTh || employee.nameEn}</p>{employee.nameTh && employee.nameEn && <p className="text-sm text-muted-foreground">{employee.nameEn}</p>}</div><div className="flex shrink-0 gap-1"><Button variant="outline" size="icon" aria-label={t('รายงาน')} onClick={() => setReportEmployee(employee)}><FileBarChart2 size={16} /></Button><Button variant="outline" size="icon" aria-label={t('แก้ไข')} onClick={() => openEdit(employee)}><Pencil size={16} /></Button><Button variant="outline" size="icon" aria-label={t('ลบ')} onClick={() => remove(employee)} className="text-destructive"><Trash2 size={16} /></Button></div></div>
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><Badge variant="outline" className="font-mono">{employee.employeeCode}</Badge><p className="mt-2 font-semibold">{employee.nameTh || employee.nameEn}</p>{employee.nameTh && employee.nameEn && <p className="text-sm text-muted-foreground">{employee.nameEn}</p>}</div><div className="flex shrink-0 gap-1"><Button variant="outline" size="icon" aria-label={t('รายงาน')} onClick={() => setReportEmployee(employee)}><FileBarChart2 size={16} /></Button><Button variant="outline" size="icon" aria-label={t('แก้ไข')} onClick={() => openEdit(employee)}><Pencil size={16} /></Button><Button variant="outline" size="icon" aria-label={t('ลบ')} onClick={() => setDeleteTarget(employee)} className="text-destructive"><Trash2 size={16} /></Button></div></div>
           <div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-muted-foreground">{t('ตำแหน่ง')}</p><p className="mt-0.5">{language === 'en' ? employee.positionEn || employee.positionTh || '—' : employee.positionTh || employee.positionEn || '—'}</p></div><div><p className="text-muted-foreground">{t('แผนก')}</p><p className="mt-0.5">{language === 'en' ? employee.departmentEn || employee.departmentTh || '—' : employee.departmentTh || employee.departmentEn || '—'}</p></div></div>
         </div>)}</div>
         <DataTablePagination total={filteredEmployees.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
@@ -79,6 +85,7 @@ export function EmployeesPage() {
     </Card>
     <EmployeeEditorDialog key={editor?.key || 'closed'} editor={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); refresh() }} />
     {reportEmployee && <EmployeeReportDialog key={reportEmployee.employeeCode} employee={reportEmployee} onClose={() => setReportEmployee(null)} />}
+    <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }} title={t('ลบข้อมูลพนักงาน')} description={deleteTarget ? `${language === 'en' ? deleteTarget.nameEn || deleteTarget.nameTh : deleteTarget.nameTh || deleteTarget.nameEn} (${deleteTarget.employeeCode}) · ${t('การลบนี้ไม่สามารถย้อนกลับได้')}` : ''} confirmLabel={t('ลบ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={remove} />
   </div>
 }
 

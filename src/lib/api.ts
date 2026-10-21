@@ -24,6 +24,7 @@ export const api = {
   myTasks: () => request<{ tasks: MyTask[]; counts: { total: number; notStarted: number; inProgress: number; overdue: number } }>('/api/my-tasks'),
   assignees: () => request<{ assignees: Assignee[] }>('/api/assignees'),
   checklist: () => request<{ items: ChecklistItem[] }>('/api/checklist'),
+  publicInspectionChecklist: () => request<{ items: ChecklistItem[] }>('/api/public/daily-inspection'),
   adminChecklist: () => request<{ items: ChecklistItem[] }>('/api/admin/checklist'),
   createChecklistItem: (input: Pick<ChecklistItem, 'title' | 'description' | 'choices' | 'order'>) => request<{ item: ChecklistItem }>('/api/admin/checklist', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
@@ -34,8 +35,10 @@ export const api = {
   archiveChecklistItem: (key: string) => request<{ ok: boolean }>(`/api/admin/checklist/${encodeURIComponent(key)}`, { method: 'DELETE' }),
   inspections: (filters?: Partial<Filters>) => request<{ inspections: InspectionSummary[] }>(`/api/inspections${toQuery(filters)}`),
   suggestions: (language: 'th' | 'en' = 'th') => request<InspectionSuggestions>(`/api/suggestions?lang=${language}`),
+  inspectionEmployees: (language: 'th' | 'en' = 'th') => request<{ employees: PublicEmployeeSuggestion[] }>(`/api/employees/directory?lang=${language}`),
   inspection: (id: string) => request<{ inspection: Inspection }>(`/api/inspections/${id}`),
   createInspection: (body: FormData) => request<{ inspection: Inspection }>('/api/inspections', { method: 'POST', body }),
+  createPublicInspection: (body: FormData) => request<{ ok: boolean }>('/api/public/daily-inspections', { method: 'POST', body }),
   updateResponse: (id: string, body: FormData) => request<{ inspection: Inspection }>(`/api/responses/${id}`, { method: 'PATCH', body }),
   users: () => request<{ users: User[] }>('/api/admin/users'),
   createUser: (input: { username: string; name: string; employeeCode: string; password: string; role: User['role'] }) => request<{ user: User }>('/api/admin/users', {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowRight, Camera, CheckCircle2, CircleHelp, ClipboardCheck, Images, ImagePlus, LoaderCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, localDateString, localTimeString } from '@/lib/api'
@@ -11,14 +11,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/date-picker'
 import { TimePicker } from '@/components/time-picker'
 import { AutocompleteInput } from '@/components/autocomplete-input'
+import { EmployeeCombobox } from '@/components/employee-combobox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/lib/i18n'
 
 type Result = ChecklistItem['choices'][number] | ''
-type DraftResponse = { result: Result; issueDetails: string; responsible: string; responsibleUserId: string; beforeFiles: File[] }
-type Props = { user: User; onCreated: () => void }
+type DraftResponse = { result: Result; issueDetails: string; responsible: string; responsibleUserId: string; responsibleEmployeeCode: string; beforeFiles: File[] }
+type Props = { user: User | null; publicMode?: boolean; onCreated: () => void }
 
-const blankResponse = (): DraftResponse => ({ result: '', issueDetails: '', responsible: '', responsibleUserId: '', beforeFiles: [] })
+const blankResponse = (): DraftResponse => ({ result: '', issueDetails: '', responsible: '', responsibleUserId: '', responsibleEmployeeCode: '', beforeFiles: [] })
 const today = localDateString()
 const MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
 const COMPRESSED_IMAGE_TARGET_BYTES = 7.5 * 1024 * 1024
@@ -81,12 +82,11 @@ async function compressLargeImage(file: File) {
   }
 }
 
-export function InspectionFormPage({ user, onCreated }: Props) {
+export function InspectionFormPage({ user, publicMode = false, onCreated }: Props) {
   const [date, setDate] = useState(today)
   const [time, setTime] = useState(localTimeString())
-  const [inspectorName, setInspectorName] = useState(user.name)
-  const [employeeCode, setEmployeeCode] = useState(user.employeeCode)
   const [selectedEmployeeCode, setSelectedEmployeeCode] = useState('')
+  const employeeDirectoryInitialized = useRef(false)
   const [area, setArea] = useState('')
   const [shift, setShift] = useState('')
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
@@ -96,59 +96,63 @@ export function InspectionFormPage({ user, onCreated }: Props) {
   const [employeeSuggestions, setEmployeeSuggestions] = useState<PublicEmployeeSuggestion[]>([])
   const [assignees, setAssignees] = useState<Assignee[]>([])
   const [busy, setBusy] = useState(false)
+  const [submittedPublicly, setSubmittedPublicly] = useState(false)
   const [invalidTarget, setInvalidTarget] = useState<string | null>(null)
   const { language, t } = useI18n()
+  const selectedEmployee = employeeSuggestions.find((employee) => employee.employeeCode.toLocaleUpperCase() === selectedEmployeeCode.toLocaleUpperCase())
+  const searchPublicEmployees = useCallback(async (query: string, currentLanguage: 'th' | 'en') => {
+    const { employees } = await api.publicEmployeeSuggestions(query, currentLanguage)
+    return employees
+  }, [])
+
+  function rememberEmployee(employee: PublicEmployeeSuggestion) {
+    setEmployeeSuggestions((current) => current.some((row) => row.employeeCode.toLocaleUpperCase() === employee.employeeCode.toLocaleUpperCase())
+      ? current.map((row) => row.employeeCode.toLocaleUpperCase() === employee.employeeCode.toLocaleUpperCase() ? employee : row)
+      : [employee, ...current])
+  }
 
   useEffect(() => {
-    api.checklist().then(({ items }) => {
+    const loadChecklist = publicMode ? api.publicInspectionChecklist() : api.checklist()
+    loadChecklist.then(({ items }) => {
       setChecklist(items)
       setResponses(Object.fromEntries(items.map((item) => [item.key, blankResponse()])))
     }).catch((error) => toast.error(error instanceof Error ? error.message : 'โหลดรายการตรวจไม่สำเร็จ'))
       .finally(() => setChecklistLoading(false))
-  }, [])
-  useEffect(() => { api.suggestions(language).then(setSuggestions).catch(() => undefined) }, [language])
-  useEffect(() => { api.assignees().then(({ assignees: rows }) => setAssignees(rows)).catch((error) => toast.error(error.message)) }, [])
+  }, [publicMode])
   useEffect(() => {
-    const query = employeeCode.trim().length >= 2 ? employeeCode.trim() : inspectorName.trim()
-    if (query.length < 2) { setEmployeeSuggestions([]); return }
+    if (publicMode) { setSuggestions({ areas: [], shifts: [], inspectors: [], employeeCodes: [], responsibles: [] }); return }
+    api.suggestions(language).then(setSuggestions).catch(() => undefined)
+  }, [language, publicMode])
+  useEffect(() => {
+    if (publicMode) return
+    api.assignees().then(({ assignees: rows }) => setAssignees(rows)).catch((error) => toast.error(error.message))
+  }, [publicMode])
+  useEffect(() => {
+    if (!user) { employeeDirectoryInitialized.current = true; return }
     let current = true
-    const timer = window.setTimeout(() => {
-      api.publicEmployeeSuggestions(query, language).then(({ employees }) => { if (current) setEmployeeSuggestions(employees) })
-        .catch(() => { if (current) setEmployeeSuggestions([]) })
-    }, 220)
-    return () => { current = false; window.clearTimeout(timer) }
-  }, [employeeCode, inspectorName, language])
+    api.inspectionEmployees(language).then(({ employees }) => {
+      if (!current) return
+      setEmployeeSuggestions(employees)
+      if (!employeeDirectoryInitialized.current) {
+        const currentUser = employees.find((employee) => employee.employeeCode.toLocaleUpperCase() === user.employeeCode.trim().toLocaleUpperCase())
+        setSelectedEmployeeCode(currentUser?.employeeCode || '')
+        employeeDirectoryInitialized.current = true
+      }
+    }).catch((error) => {
+      if (current) toast.error(t(error instanceof Error ? error.message : 'โหลดรายชื่อพนักงานไม่สำเร็จ'))
+    })
+    return () => { current = false }
+  }, [language, t, user?.employeeCode])
 
-  useEffect(() => {
-    const match = employeeSuggestions.find((employee) => employee.employeeCode.toLocaleUpperCase() === employeeCode.trim().toLocaleUpperCase())
-    if (!match) return
-    setInspectorName(match.name)
-    setSelectedEmployeeCode(match.employeeCode)
-  }, [employeeCode, employeeSuggestions])
-
-  function chooseInspectorName(value: string) {
-    setInspectorName(value)
+  function chooseInspector(employee: PublicEmployeeSuggestion) {
+    rememberEmployee(employee)
+    setSelectedEmployeeCode(employee.employeeCode)
     clearInvalidTarget('inspector-name')
-    const match = employeeSuggestions.find((employee) => [employee.name, employee.nameTh, employee.nameEn].some((name) => name && name.toLocaleLowerCase() === value.trim().toLocaleLowerCase()))
-    if (match) { setEmployeeCode(match.employeeCode); setSelectedEmployeeCode(match.employeeCode) }
-    else setSelectedEmployeeCode('')
-  }
-
-  function chooseInspectorCode(value: string) {
-    const match = employeeSuggestions.find((employee) => employee.employeeCode.toLocaleUpperCase() === value.trim().toLocaleUpperCase())
-    if (match) {
-      setEmployeeCode(match.employeeCode)
-      setInspectorName(match.name)
-      setSelectedEmployeeCode(match.employeeCode)
-    } else {
-      setEmployeeCode(value.toLocaleUpperCase())
-      setSelectedEmployeeCode('')
-    }
+    clearInvalidTarget('employee-code')
   }
 
   const answered = useMemo(() => Object.values(responses).filter((response) => response.result).length, [responses])
   const ngCount = useMemo(() => Object.values(responses).filter((response) => response.result === 'NG').length, [responses])
-  const progress = checklist.length ? Math.round((answered / checklist.length) * 100) : 0
 
   function moveToInvalid(targetId: string) {
     setInvalidTarget(targetId)
@@ -176,20 +180,20 @@ export function InspectionFormPage({ user, onCreated }: Props) {
     setInvalidTarget((current) => current?.startsWith(`item-${key}-`) ? null : current)
     const current = responses[key]
     updateResponse(key, result === 'NG'
-      ? { result, issueDetails: current.result === 'NG' ? current.issueDetails : '', responsible: current.result === 'NG' ? current.responsible : '', responsibleUserId: current.result === 'NG' ? current.responsibleUserId : '', beforeFiles: current.result === 'NG' ? current.beforeFiles : [] }
-      : { result, issueDetails: '', responsible: '', responsibleUserId: '', beforeFiles: [] })
+      ? { result, issueDetails: current.result === 'NG' ? current.issueDetails : '', responsible: current.result === 'NG' ? current.responsible : '', responsibleUserId: current.result === 'NG' ? current.responsibleUserId : '', responsibleEmployeeCode: current.result === 'NG' ? current.responsibleEmployeeCode : '', beforeFiles: current.result === 'NG' ? current.beforeFiles : [] }
+      : { result, issueDetails: '', responsible: '', responsibleUserId: '', responsibleEmployeeCode: '', beforeFiles: [] })
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!employeeCode.trim() || selectedEmployeeCode !== employeeCode.trim().toLocaleUpperCase()) {
+    if (!selectedEmployee) {
       toast.error(t('กรุณาเลือกผู้ตรวจจากทะเบียนพนักงาน'))
       moveToInvalid('employee-code')
       return
     }
     if (!checklist.length) return toast.error(t('ยังไม่มีหัวข้อตรวจที่เปิดใช้งาน'))
     const missingField = [
-      [date, 'inspection-date'], [time, 'inspection-time'], [inspectorName.trim(), 'inspector-name'], [area.trim(), 'area'], [shift.trim(), 'shift'],
+      [date, 'inspection-date'], [time, 'inspection-time'], [area.trim(), 'area'], [shift.trim(), 'shift'],
     ].find(([value]) => !value)
     if (missingField) {
       moveToInvalid(missingField[1])
@@ -200,12 +204,12 @@ export function InspectionFormPage({ user, onCreated }: Props) {
       moveToInvalid(`item-${unanswered.key}-card`)
       return toast.error(`${t('กรุณาเลือกผลตรวจให้ครบ')} · ${t(unanswered.title)}`)
     }
-    const invalidNg = checklist.find(({ key }) => responses[key].result === 'NG' && (!responses[key].issueDetails.trim() || !responses[key].responsibleUserId || responses[key].beforeFiles.length === 0))
+    const invalidNg = checklist.find(({ key }) => responses[key].result === 'NG' && (!responses[key].issueDetails.trim() || (publicMode ? !responses[key].responsibleEmployeeCode : !responses[key].responsibleUserId) || responses[key].beforeFiles.length === 0))
     if (invalidNg) {
       const response = responses[invalidNg.key]
       const targetId = !response.issueDetails.trim()
         ? `item-${invalidNg.key}-details`
-        : !response.responsibleUserId
+        : (publicMode ? !response.responsibleEmployeeCode : !response.responsibleUserId)
           ? `item-${invalidNg.key}-responsible`
           : `item-${invalidNg.key}-photo`
       moveToInvalid(targetId)
@@ -214,8 +218,8 @@ export function InspectionFormPage({ user, onCreated }: Props) {
 
     const body = new FormData()
     body.set('payload', JSON.stringify({
-      date, time, inspectorName: inspectorName.trim(), employeeCode: employeeCode.trim(), area: area.trim(), shift: shift.trim(),
-      responses: checklist.map(({ key }) => ({ key, result: responses[key].result, issueDetails: responses[key].issueDetails, responsible: responses[key].responsible, responsibleUserId: responses[key].responsibleUserId })),
+      date, time, inspectorName: selectedEmployee.name, employeeCode: selectedEmployee.employeeCode, area: area.trim(), shift: shift.trim(),
+      responses: checklist.map(({ key }) => ({ key, result: responses[key].result, issueDetails: responses[key].issueDetails, responsible: responses[key].responsible, responsibleUserId: responses[key].responsibleUserId, responsibleEmployeeCode: responses[key].responsibleEmployeeCode })),
     }))
     const photoMetadata: { key: string; type: 'before' }[] = []
     for (const item of checklist) {
@@ -227,29 +231,34 @@ export function InspectionFormPage({ user, onCreated }: Props) {
     body.set('photoMetadata', JSON.stringify(photoMetadata))
     setBusy(true)
     try {
-      await api.createInspection(body)
+      if (publicMode) await api.createPublicInspection(body)
+      else await api.createInspection(body)
       toast.success(t('บันทึกแบบตรวจเรียบร้อยแล้ว'))
+      if (publicMode) setSubmittedPublicly(true)
       onCreated()
     } catch (error) {
       toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ'))
     } finally { setBusy(false) }
   }
 
+  if (submittedPublicly) return <Card className="mx-auto grid min-h-64 max-w-xl place-items-center rounded-2xl border-border p-8 text-center"><div><div className="mx-auto grid size-12 place-items-center rounded-full bg-success/10 text-success"><CheckCircle2 size={26} /></div><h2 className="mt-4 text-xl font-semibold">{t('บันทึกแบบตรวจเรียบร้อยแล้ว')}</h2><p className="mt-2 text-sm text-muted-foreground">{t('ขอบคุณที่ร่วมตรวจสอบความปลอดภัย')}</p><Button type="button" onClick={() => window.location.reload()} className="mt-5">{t('กรอกแบบตรวจรายการใหม่')}</Button></div></Card>
+
   if (checklistLoading) return <div className="content-narrow rounded-xl border bg-white p-6 text-base text-muted-foreground">{t('กำลังโหลดรายการตรวจ…')}</div>
 
   return <form noValidate onSubmit={submit} className="inspection-form content-narrow page-stack">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div><h2 className="page-heading text-2xl font-semibold tracking-tight">{t('แบบตรวจความปลอดภัยประจำวัน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('เลือกผลตรวจในแต่ละหัวข้อ หากพบ NG ให้บันทึกรายละเอียดและแนบรูป')}</p></div>
-      <div className="flex items-center gap-3 rounded-xl border border-border bg-white px-3 py-2"><div className="grid size-8 place-items-center rounded-lg bg-secondary text-primary"><CheckCircle2 size={16} /></div><div className="w-[138px]"><div className="flex justify-between text-xs sm:text-xs"><span className="font-medium">{t('ความคืบหน้า')}</span><span className="text-muted-foreground">{answered}/{checklist.length}</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div></div></div>
-    </div>
-
-    <Card className={`rounded-2xl border p-4 transition-shadow sm:p-5 ${invalidTarget && invalidTarget.startsWith('inspection-') || ['inspector-name', 'area', 'shift'].includes(invalidTarget || '') ? 'border-destructive/50 ring-2 ring-destructive/20' : 'border-border'}`}>
-      <div className="mb-4 flex items-center gap-2"><div className="grid size-7 place-items-center rounded-lg bg-secondary text-primary"><ClipboardCheck size={14} /></div><div><p className="text-sm font-semibold sm:text-xs">{t('ข้อมูลการตรวจ')}</p><p className="text-xs text-muted-foreground sm:text-xs">{t('กรอกข้อมูลประจำวันและพื้นที่ตรวจ')}</p></div></div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid w-full gap-2 sm:w-[360px] sm:grid-cols-2">
         <FormField label={t('วันที่ตรวจ')} htmlFor="inspection-date"><DatePicker id="inspection-date" ariaLabel={t('วันที่ตรวจ')} value={date} maxDate={today} onChange={(value) => { setDate(value); clearInvalidTarget('inspection-date') }} className={`h-10 ${invalidTarget === 'inspection-date' ? 'border-destructive ring-2 ring-destructive/20' : ''}`} /></FormField>
         <FormField label={t('เวลาตรวจ')} htmlFor="inspection-time"><TimePicker id="inspection-time" value={time} onChange={(value) => { setTime(value); clearInvalidTarget('inspection-time') }} className={`h-10 ${invalidTarget === 'inspection-time' ? 'border-destructive ring-2 ring-destructive/20' : ''}`} /></FormField>
-        <FormField label={t('ผู้ตรวจ')} htmlFor="inspector-name"><AutocompleteInput id="inspector-name" value={inspectorName} onValueChange={chooseInspectorName} suggestions={[...suggestions.inspectors, ...employeeSuggestions.flatMap((employee) => [employee.name, employee.nameTh, employee.nameEn])].filter(Boolean)} required className={`h-10 ${invalidTarget === 'inspector-name' ? 'border-destructive ring-2 ring-destructive/20' : ''}`} /></FormField>
-        <FormField label={t('รหัสพนักงาน')} htmlFor="employee-code"><AutocompleteInput id="employee-code" value={employeeCode} onValueChange={chooseInspectorCode} suggestions={[...suggestions.employeeCodes, ...employeeSuggestions.map((employee) => employee.employeeCode)]} required className={`h-10 uppercase ${invalidTarget === 'employee-code' ? 'border-destructive ring-2 ring-destructive/20' : ''}`} /></FormField>
+      </div>
+    </div>
+
+    <Card className={`rounded-2xl border p-4 transition-shadow sm:p-5 ${invalidTarget && invalidTarget.startsWith('inspection-') || ['inspector-name', 'employee-code', 'area', 'shift'].includes(invalidTarget || '') ? 'border-destructive/50 ring-2 ring-destructive/20' : 'border-border'}`}>
+      <div className="mb-3 flex items-center gap-2"><div className="grid size-7 place-items-center rounded-lg bg-secondary text-primary"><ClipboardCheck size={14} /></div><div><p className="text-sm font-semibold sm:text-xs">{t('ข้อมูลการตรวจ')}</p><p className="text-xs text-muted-foreground sm:text-xs">{t('กรอกข้อมูลประจำวันและพื้นที่ตรวจ')}</p></div></div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <FormField label={t('ผู้ตรวจ')} htmlFor="inspector-name"><EmployeeCombobox id="inspector-name" value={selectedEmployeeCode} employees={employeeSuggestions} mode="name" onSearch={publicMode ? searchPublicEmployees : undefined} onSelect={chooseInspector} invalid={invalidTarget === 'inspector-name'} /></FormField>
+        <FormField label={t('รหัสพนักงาน')} htmlFor="employee-code"><EmployeeCombobox id="employee-code" value={selectedEmployeeCode} employees={employeeSuggestions} mode="code" onSearch={publicMode ? searchPublicEmployees : undefined} onSelect={chooseInspector} invalid={invalidTarget === 'employee-code'} /></FormField>
         <FormField label={t('แผนก / พื้นที่')} htmlFor="area"><AutocompleteInput id="area" value={area} onValueChange={(value) => { setArea(value); clearInvalidTarget('area') }} suggestions={suggestions.areas} placeholder={t('เช่น แผนกผลิต / โซน A')} required className={`h-10 ${invalidTarget === 'area' ? 'border-destructive ring-2 ring-destructive/20' : ''}`} /></FormField>
         <FormField label={t('กะ')} htmlFor="shift"><AutocompleteInput id="shift" value={shift} onValueChange={(value) => { setShift(value); clearInvalidTarget('shift') }} suggestions={suggestions.shifts} placeholder={t('เช่น กะเช้า')} required className={`h-10 ${invalidTarget === 'shift' ? 'border-destructive ring-2 ring-destructive/20' : ''}`} /></FormField>
       </div>
@@ -259,7 +268,7 @@ export function InspectionFormPage({ user, onCreated }: Props) {
 
     <div className="flex items-center justify-between"><div><h2 className="text-base font-semibold">{t('รายการตรวจ')} {checklist.length} {t('หัวข้อ')}</h2><p className="mt-1 text-xs text-muted-foreground">{t('ผลตรวจที่เลือกแล้ว')} {answered} / {checklist.length}</p></div><div className="flex gap-1.5"><Badge variant="outline" className="border-success/25 bg-success/10 text-xs text-success">OK {Object.values(responses).filter((item) => item.result === 'OK').length}</Badge><Badge variant="outline" className="border-destructive/25 bg-destructive/10 text-xs text-destructive">NG {ngCount}</Badge></div></div>
 
-    <div className="space-y-3">{checklist.map((item) => <ChecklistCard key={item.key} item={item} response={responses[item.key]} assignees={assignees} invalidTarget={invalidTarget} onChange={(update) => updateResponse(item.key, update)} onResult={(result) => chooseResult(item.key, result)} />)}</div>
+    <div className="space-y-3">{checklist.map((item) => <ChecklistCard key={item.key} item={item} response={responses[item.key]} assignees={assignees} publicMode={publicMode} employees={employeeSuggestions} onSearchEmployee={publicMode ? searchPublicEmployees : undefined} onEmployeeSelect={rememberEmployee} invalidTarget={invalidTarget} onChange={(update) => updateResponse(item.key, update)} onResult={(result) => chooseResult(item.key, result)} />)}</div>
 
     <div className="safe-area-bottom sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md sm:-mx-7 sm:px-7 lg:-mx-9 lg:px-9">
       <div className="content-narrow flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
@@ -274,7 +283,7 @@ function FormField({ label, htmlFor, children }: { label: string; htmlFor: strin
   return <div className="grid gap-1.5"><Label htmlFor={htmlFor} className="inspection-field-label text-xs text-muted-foreground sm:text-xs">{label}</Label>{children}</div>
 }
 
-function ChecklistCard({ item, response, assignees, invalidTarget, onChange, onResult }: { item: ChecklistItem; response: DraftResponse; assignees: Assignee[]; invalidTarget: string | null; onChange: (update: Partial<DraftResponse>) => void; onResult: (result: Result) => void }) {
+function ChecklistCard({ item, response, assignees, publicMode, employees, onSearchEmployee, onEmployeeSelect, invalidTarget, onChange, onResult }: { item: ChecklistItem; response: DraftResponse; assignees: Assignee[]; publicMode: boolean; employees: PublicEmployeeSuggestion[]; onSearchEmployee?: (query: string, language: 'th' | 'en') => Promise<PublicEmployeeSuggestion[]>; onEmployeeSelect: (employee: PublicEmployeeSuggestion) => void; invalidTarget: string | null; onChange: (update: Partial<DraftResponse>) => void; onResult: (result: Result) => void }) {
   const [previews, setPreviews] = useState<string[]>([])
   const [compressing, setCompressing] = useState(false)
   const cameraInput = useRef<HTMLInputElement>(null)
@@ -324,7 +333,7 @@ function ChecklistCard({ item, response, assignees, invalidTarget, onChange, onR
     {response.result === 'NG' && <div className="mt-4 grid gap-3 border-t border-destructive/20 pt-4 lg:grid-cols-[1.1fr_.9fr]">
       <div className="grid gap-3">
         <div className="grid gap-1.5"><Label htmlFor={`${itemTargetPrefix}details`} className="inspection-field-label text-xs font-medium sm:text-xs">{t('รายละเอียดที่พบ')} <span className="text-destructive">*</span></Label><Textarea id={`${itemTargetPrefix}details`} aria-invalid={invalidTarget === `${itemTargetPrefix}details`} value={response.issueDetails} onChange={(event) => onChange({ issueDetails: event.target.value })} rows={2} placeholder={t('ระบุสิ่งที่พบและจุดที่เกิดปัญหา')} className={`resize-y bg-white text-xs ${invalidTarget === `${itemTargetPrefix}details` ? 'border-destructive ring-2 ring-destructive/20' : ''}`} required /></div>
-        <div className="grid gap-1.5"><Label htmlFor={`${itemTargetPrefix}responsible`} className="inspection-field-label text-xs font-medium sm:text-xs">{t('ผู้รับผิดชอบ')} <span className="text-destructive">*</span></Label><Select value={response.responsibleUserId} onValueChange={(id) => { const assignee = assignees.find((candidate) => candidate.id === id); onChange({ responsibleUserId: id, responsible: assignee?.name || '' }) }}><SelectTrigger id={`${itemTargetPrefix}responsible`} aria-invalid={invalidTarget === `${itemTargetPrefix}responsible`} className={`h-10 w-full bg-white text-sm ${invalidTarget === `${itemTargetPrefix}responsible` ? 'border-destructive ring-2 ring-destructive/20' : ''}`}><SelectValue placeholder={t('เลือกบัญชีผู้รับผิดชอบ')} /></SelectTrigger><SelectContent>{assignees.map((assignee) => <SelectItem key={assignee.id} value={assignee.id}>{assignee.name} · {assignee.employeeCode}</SelectItem>)}</SelectContent></Select>{assignees.length === 0 && <p className="text-xs text-warning">{t('ยังไม่มีบัญชีพนักงานหรือหัวหน้างานที่ใช้งานได้')}</p>}</div>
+        <div className="grid gap-1.5"><Label htmlFor={`${itemTargetPrefix}responsible`} className="inspection-field-label text-xs font-medium sm:text-xs">{t('ผู้รับผิดชอบ')} <span className="text-destructive">*</span></Label>{publicMode ? <EmployeeCombobox id={`${itemTargetPrefix}responsible`} value={response.responsibleEmployeeCode} employees={employees} mode="name" onSearch={onSearchEmployee} onSelect={(employee) => { onEmployeeSelect(employee); onChange({ responsibleEmployeeCode: employee.employeeCode, responsible: employee.name, responsibleUserId: '' }) }} invalid={invalidTarget === `${itemTargetPrefix}responsible`} /> : <Select value={response.responsibleUserId} onValueChange={(id) => { const assignee = assignees.find((candidate) => candidate.id === id); onChange({ responsibleUserId: id, responsible: assignee?.name || '' }) }}><SelectTrigger id={`${itemTargetPrefix}responsible`} aria-invalid={invalidTarget === `${itemTargetPrefix}responsible`} className={`h-10 w-full bg-white text-sm ${invalidTarget === `${itemTargetPrefix}responsible` ? 'border-destructive ring-2 ring-destructive/20' : ''}`}><SelectValue placeholder={t('เลือกบัญชีผู้รับผิดชอบ')} /></SelectTrigger><SelectContent>{assignees.map((assignee) => <SelectItem key={assignee.id} value={assignee.id}>{assignee.name} · {assignee.employeeCode}</SelectItem>)}</SelectContent></Select>}{!publicMode && assignees.length === 0 && <p className="text-xs text-warning">{t('ยังไม่มีบัญชีพนักงานหรือหัวหน้างานที่ใช้งานได้')}</p>}</div>
       </div>
       <div id={`${itemTargetPrefix}photo`} className="grid content-start gap-1.5">
         <Label className="inspection-field-label text-xs font-medium sm:text-xs">{t('รูปก่อนแก้ไข')} <span className="text-destructive">*</span></Label>

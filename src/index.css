@@ -125,8 +125,6 @@
   --type-line-card-title: 1.4;
   --type-size-dialog-title: 1.25rem;
   --type-line-dialog-title: 1.4;
-  --type-size-app-title: 1.25rem;
-  --type-line-app-title: 1.3;
   --type-size-toast-title: 1rem;
   --type-size-toast-description: .9375rem;
   --type-line-toast: 1.5;
@@ -161,10 +159,9 @@
   --app-content-width: 90rem;
   --app-form-width: 68.75rem;
   --app-content-gutter: clamp(1rem, 2.5vw, 2.5rem);
-  --app-header-height: 4.5rem;
   --app-sidebar-width: 17.5rem;
-  --page-section-gap: 1.25rem;
-  --control-height: 2.5rem;
+  --page-section-gap: .75rem;
+  --control-height: 2.25rem;
 
   --sidebar: #132e32;
   --sidebar-soft: #1a3b3e;
@@ -199,7 +196,7 @@ button { cursor: pointer; }
 label { line-height: var(--type-line-label); }
 ::selection { background: #d5ece6; color: #143b36; }
 
-/* App-wide content frame keeps navigation, page headers, and page content aligned. */
+/* App-wide content frame keeps navigation and page content aligned. */
 .app-shell { min-height: 100vh; }
 .page-scroll { min-height: 100vh; }
 .app-content-frame {
@@ -209,13 +206,7 @@ label { line-height: var(--type-line-label); }
   padding-inline: var(--app-content-gutter);
 }
 .content-narrow { width: 100%; max-width: var(--app-form-width); margin-inline: auto; }
-.app-header-frame {
-  display: flex;
-  height: var(--app-header-height);
-  align-items: center;
-  justify-content: space-between;
-}
-.app-main-frame { padding-block: 2rem 3rem; }
+.app-main-frame { padding-block: 1rem 1.5rem; }
 .page-stack { display: flex; flex-direction: column; gap: var(--page-section-gap); }
 .page-heading { font-size: var(--type-size-page-heading) !important; line-height: var(--type-line-page-heading) !important; letter-spacing: -.025em; }
 .section-heading { font-size: var(--type-size-section-heading) !important; line-height: var(--type-line-section-heading) !important; }
@@ -230,7 +221,6 @@ label { line-height: var(--type-line-label); }
 /* Semantic heading roles share centrally configurable sizes across pages and dialogs. */
 [data-slot="card-title"]:not(.page-heading) { font-size: var(--type-size-card-title) !important; line-height: var(--type-line-card-title) !important; }
 [data-slot="dialog-title"] { font-size: var(--type-size-dialog-title) !important; line-height: var(--type-line-dialog-title) !important; }
-.app-shell-title { font-size: var(--type-size-app-title) !important; line-height: var(--type-line-app-title) !important; }
 
 /* Consistent focus visibility for keyboard and assistive technology users. */
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
@@ -263,18 +253,18 @@ label { line-height: var(--type-line-label); }
 
 @media (max-width: 767px) {
   :root {
-    --page-section-gap: 1rem;
+    --page-section-gap: .625rem;
+    --control-height: 2.5rem;
     --type-size-xs: .875rem;
     --type-line-xs: 1.45rem;
     --type-size-page-heading: 1.5rem;
     --type-size-section-heading: 1.0625rem;
     --type-size-card-title: 1.0625rem;
     --type-size-dialog-title: 1.1875rem;
-    --type-size-app-title: 1.125rem;
     --type-size-toast-title: 1.0625rem;
     --type-size-toast-description: 1rem;
   }
-  .app-main-frame { padding-block: 1.5rem 2.5rem; }
+  .app-main-frame { padding-block: .75rem 1.5rem; }
   [data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] {
     min-height: 2.75rem;
     font-size: var(--type-size-base) !important;

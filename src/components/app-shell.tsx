@@ -24,19 +24,6 @@ type Props = { user: User; page: PageKey; onPage: (page: PageKey) => void; onUse
 export function AppShell({ user, page, onPage, onUserChange }: Props) {
   const [mobileMenu, setMobileMenu] = useState(false)
   const { t } = useI18n()
-  const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
-    dashboard: { title: t('ภาพรวมความปลอดภัย'), subtitle: t('สรุปผลการตรวจและรายการที่ต้องติดตาม') },
-    inspections: { title: t('รายการตรวจ'), subtitle: t('ค้นหา ตรวจสอบ และติดตามรายการบันทึก') },
-    new: { title: t('บันทึกการตรวจ'), subtitle: t('แบบตรวจความปลอดภัยประจำวัน') },
-    users: { title: t('ผู้ใช้งาน'), subtitle: t('จัดการบัญชีและสิทธิ์การใช้งาน') },
-    employees: { title: t('รายชื่อพนักงาน'), subtitle: t('จัดการข้อมูลพนักงานและรหัสสำหรับค้นหาในรายงาน') },
-    checklist: { title: t('แบบตรวจความปลอดภัยประจำวัน'), subtitle: t('เพิ่มและจัดการหัวข้อตรวจ') },
-    assessments: { title: t('แบบประเมิน'), subtitle: t('สร้างข้อสอบและจัดการลิงก์สำหรับผู้ทำแบบประเมิน') },
-    'assessment-reports': { title: t('รายงานแบบประเมิน'), subtitle: t('ตรวจคำตอบและส่งออกผลประเมินเป็น Excel') },
-    'training-materials': { title: t('สื่ออบรม'), subtitle: t('จัดการเอกสารและสื่อสำหรับแชร์ให้พนักงาน') },
-    hiyari: { title: t('Hiyari Hat'), subtitle: t('จัดการแบบฟอร์มออนไลน์และลิงก์สำหรับพนักงาน') },
-    'hiyari-reports': { title: t('รายงาน Hiyari Hat'), subtitle: t('ค้นหา เปิดดู และดาวน์โหลดรายงานในรูปแบบ PDF') },
-  }
   const navItems = user.role === 'admin'
     ? [
         { key: 'dashboard' as const, label: t('ภาพรวม'), icon: Activity },
@@ -64,26 +51,16 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
   return (
     <div className="app-shell min-h-screen md:flex">
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
-        <Brand />
+        <div className="flex items-center justify-between gap-1"><Brand /><LanguageSwitch compact className="shrink-0 text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
         <div className="mt-9 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
         <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
         <ProfileBlock user={user} onLogout={handleLogout} />
       </aside>
 
       <div className="page-scroll min-w-0 flex-1">
-        <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-md">
-          <div className="app-content-frame app-header-frame">
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="icon" aria-label={t('เปิดเมนู')} onClick={() => setMobileMenu(true)} className="md:hidden"><Menu size={18} /></Button>
-              <div><h1 className="app-shell-title text-lg font-semibold tracking-tight md:text-xl">{pageMeta[page].title}</h1><p className="mt-0.5 hidden text-xs text-muted-foreground sm:block">{pageMeta[page].subtitle}</p></div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-2 rounded-full border border-border bg-white px-3 py-1.5 text-xs text-muted-foreground sm:flex"><span className="size-1.5 rounded-full bg-success" /> {t('ระบบพร้อมใช้งาน')}</div>
-              <LanguageSwitch />
-              <div className="grid size-9 place-items-center rounded-full bg-secondary text-xs font-semibold text-primary md:hidden">{user.name.slice(0, 1)}</div>
-            </div>
-          </div>
-        </header>
+        <div className="app-content-frame flex h-10 items-center md:hidden">
+          <Button variant="ghost" size="icon" aria-label={t('เปิดเมนู')} onClick={() => setMobileMenu(true)}><Menu size={18} /></Button>
+        </div>
         <main className="app-content-frame app-main-frame">
           {page === 'dashboard' && user.role === 'admin' ? <DashboardPage user={user} onPage={onPage} /> : null}
           {page === 'inspections' ? <InspectionsPage user={user} initialFilter={null} onInitialFilterApplied={() => undefined} /> : null}
@@ -101,7 +78,8 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
 
       {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-center justify-between"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
+          <div className="flex items-center justify-between gap-1"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
+          <div className="mt-2 flex justify-end"><LanguageSwitch compact className="text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
           <div className="mt-8 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
           <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
           <ProfileBlock user={user} onLogout={handleLogout} />
@@ -113,9 +91,9 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
 
 function Brand() {
   const { t } = useI18n()
-  return <div className="flex items-center gap-3 px-2">
+  return <div className="flex min-w-0 items-center gap-2.5">
     <div className="grid size-10 place-items-center rounded-lg bg-secondary text-primary"><ShieldCheck size={21} /></div>
-    <div><p className="text-xs font-semibold tracking-[.1em] text-sidebar-foreground">Y.T. RUBBER</p><p className="mt-0.5 text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
+    <p className="min-w-0 whitespace-nowrap text-[11px] text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p>
   </div>
 }
 

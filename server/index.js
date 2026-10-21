@@ -5,17 +5,22 @@ import bcrypt from 'bcryptjs'
 import multer from 'multer'
 import { DatabaseSync } from 'node:sqlite'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile, unlink, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import ExcelJS from 'exceljs'
 import sharp from 'sharp'
 import { CHECKLIST, FOLLOW_UP_STATUSES, RESULTS } from './checklist.js'
 import { createHiyariWorkbook } from './hiyari-export.js'
 import { createHiyariEmployeeSummaryWorkbook } from './hiyari-summary-export.js'
 import { EXPORT_FONT_FAMILY, EXPORT_FONT_SIZE } from './export-typography.js'
+import { ADDITIONAL_ASSESSMENTS } from './assessment-seeds.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
+const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(root, '..')
 const dataDir = path.join(appRoot, 'data')
 const uploadDir = path.join(dataDir, 'uploads')
@@ -52,7 +57,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     inspection_date TEXT NOT NULL,
     inspection_time TEXT NOT NULL DEFAULT '',
-    inspector_id TEXT NOT NULL REFERENCES users(id),
+    inspector_id TEXT REFERENCES users(id),
     inspector_name TEXT NOT NULL,
     employee_code TEXT NOT NULL DEFAULT '',
     department_area TEXT NOT NULL,
@@ -85,7 +90,7 @@ db.exec(`
     original_name TEXT NOT NULL,
     stored_name TEXT NOT NULL UNIQUE,
     mime_type TEXT NOT NULL,
-    uploaded_by TEXT NOT NULL REFERENCES users(id),
+    uploaded_by TEXT REFERENCES users(id),
     uploaded_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -243,6 +248,57 @@ if (!checklistColumns.some((column) => column.name === 'choices_json')) {
 const inspectionColumns = db.prepare('PRAGMA table_info(inspections)').all()
 if (!inspectionColumns.some((column) => column.name === 'inspection_time')) {
   db.exec("ALTER TABLE inspections ADD COLUMN inspection_time TEXT NOT NULL DEFAULT ''")
+}
+const inspectionSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'inspections'").get()?.sql || ''
+if (/inspector_id\s+TEXT\s+NOT NULL/i.test(inspectionSchema)) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    BEGIN IMMEDIATE;
+    CREATE TABLE inspections_public (
+      id TEXT PRIMARY KEY,
+      inspection_date TEXT NOT NULL,
+      inspection_time TEXT NOT NULL DEFAULT '',
+      inspector_id TEXT REFERENCES users(id),
+      inspector_name TEXT NOT NULL,
+      employee_code TEXT NOT NULL DEFAULT '',
+      department_area TEXT NOT NULL,
+      shift TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      submitted_at TEXT NOT NULL
+    );
+    INSERT INTO inspections_public (id, inspection_date, inspection_time, inspector_id, inspector_name, employee_code, department_area, shift, created_at, submitted_at)
+      SELECT id, inspection_date, inspection_time, inspector_id, inspector_name, employee_code, department_area, shift, created_at, submitted_at FROM inspections;
+    DROP TABLE inspections;
+    ALTER TABLE inspections_public RENAME TO inspections;
+    CREATE INDEX IF NOT EXISTS idx_inspections_date ON inspections(inspection_date);
+    COMMIT;
+    PRAGMA foreign_keys = ON;
+  `)
+}
+const attachmentSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attachments'").get()?.sql || ''
+if (/uploaded_by\s+TEXT\s+NOT NULL/i.test(attachmentSchema)) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    BEGIN IMMEDIATE;
+    CREATE TABLE attachments_public (
+      id TEXT PRIMARY KEY,
+      inspection_id TEXT NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      response_id TEXT NOT NULL REFERENCES responses(id) ON DELETE CASCADE,
+      attachment_type TEXT NOT NULL CHECK(attachment_type IN ('before', 'after')),
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      uploaded_by TEXT REFERENCES users(id),
+      uploaded_at TEXT NOT NULL
+    );
+    INSERT INTO attachments_public (id, inspection_id, response_id, attachment_type, original_name, stored_name, mime_type, uploaded_by, uploaded_at)
+      SELECT id, inspection_id, response_id, attachment_type, original_name, stored_name, mime_type, uploaded_by, uploaded_at FROM attachments;
+    DROP TABLE attachments;
+    ALTER TABLE attachments_public RENAME TO attachments;
+    CREATE INDEX IF NOT EXISTS idx_attachments_response ON attachments(response_id);
+    COMMIT;
+    PRAGMA foreign_keys = ON;
+  `)
 }
 const responseColumns = db.prepare('PRAGMA table_info(responses)').all()
 if (!responseColumns.some((column) => column.name === 'responsible_user_id')) {
@@ -409,6 +465,57 @@ if (db.prepare("SELECT setting_value FROM app_settings WHERE setting_key = 'samp
   db.prepare("UPDATE app_settings SET setting_value = '1' WHERE setting_key = 'sample_safety_content_seeded'").run()
 }
 
+const assessmentSeedAdminId = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY created_at LIMIT 1").get()?.id
+if (!assessmentSeedAdminId) throw new Error('Cannot add safety assessments without an active administrator account.')
+const insertSeedAssessment = db.prepare(`INSERT INTO assessments
+  (id, public_token, title, description, instructions, is_published, allow_multiple_attempts, created_by, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`)
+const insertSeedQuestion = db.prepare(`INSERT INTO assessment_questions
+  (id, assessment_id, prompt, question_type, options_json, correct_option, is_required, order_index)
+  VALUES (?, ?, ?, 'choice', ?, ?, 1, ?)`)
+if (ADDITIONAL_ASSESSMENTS.length !== 3 || ADDITIONAL_ASSESSMENTS.some((assessment) => assessment.questions.length !== 20)) {
+  throw new Error('Safety assessment seeds must contain one 20-question set for each of the three roles.')
+}
+for (const assessment of ADDITIONAL_ASSESSMENTS) {
+  const timestamp = nowIso()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const instructions = `เลือกคำตอบที่ถูกต้องที่สุดเพียงข้อเดียว แบบประเมินนี้มี ${assessment.questions.length} ข้อ และส่งคำตอบได้หนึ่งครั้งต่อรหัสพนักงาน`
+    const existing = db.prepare('SELECT * FROM assessments WHERE id = ?').get(assessment.id)
+    if (existing) {
+      if (existing.title !== assessment.title || existing.description !== assessment.description || existing.instructions !== instructions) {
+        db.prepare('UPDATE assessments SET title = ?, description = ?, instructions = ?, updated_at = ? WHERE id = ?')
+          .run(assessment.title, assessment.description, instructions, timestamp, assessment.id)
+      }
+    } else {
+      insertSeedAssessment.run(assessment.id, newPublicToken(), assessment.title, assessment.description,
+        instructions, assessmentSeedAdminId, timestamp, timestamp)
+    }
+
+    for (const legacyId of assessment.legacyIds) {
+      if (legacyId === assessment.id) continue
+      db.prepare('UPDATE assessment_submissions SET assessment_id = ? WHERE assessment_id = ?').run(assessment.id, legacyId)
+      db.prepare('DELETE FROM assessments WHERE id = ?').run(legacyId)
+    }
+
+    const storedQuestions = db.prepare('SELECT prompt, options_json, correct_option, is_required, order_index FROM assessment_questions WHERE assessment_id = ? ORDER BY order_index, id').all(assessment.id)
+    const matchesSeed = storedQuestions.length === assessment.questions.length && assessment.questions.every((question, index) => {
+      const stored = storedQuestions[index]
+      return stored.prompt === question.prompt && stored.options_json === JSON.stringify(question.options) &&
+        stored.correct_option === question.correctOption && stored.is_required === 1 && stored.order_index === index + 1
+    })
+    if (!matchesSeed) {
+      db.prepare('DELETE FROM assessment_questions WHERE assessment_id = ?').run(assessment.id)
+      assessment.questions.forEach((question, index) => insertSeedQuestion.run(randomUUID(), assessment.id,
+        question.prompt, JSON.stringify(question.options), question.correctOption, index + 1))
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
 const fireTrainingId = 'sample-fire-evacuation-training-v1'
 if (!db.prepare('SELECT id FROM training_materials WHERE id = ?').get(fireTrainingId)) {
   const adminId = db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY created_at LIMIT 1").get()?.id
@@ -436,9 +543,12 @@ if (!db.prepare('SELECT id FROM hiyari_forms WHERE id = ?').get('hiyari-fm-sft-4
   db.prepare(`INSERT INTO hiyari_forms
     (id, public_token, title, description, is_active, created_by, created_at, updated_at)
     VALUES (?, ?, ?, ?, 1, ?, ?, ?)`)
-    .run('hiyari-fm-sft-42', newPublicToken(), 'Hiyari Hat Report · FM-SFT-42 Rev.01',
+    .run('hiyari-fm-sft-42', newPublicToken(), 'Hiyari Hat Report',
       'รายงานสภาพหรือเหตุการณ์ที่อาจก่อให้เกิดอุบัติเหตุ เพื่อปรับปรุงและป้องกันการเกิดซ้ำ', adminId, timestamp, timestamp)
 }
+
+db.prepare(`UPDATE hiyari_forms SET title = ?, updated_at = ?
+  WHERE id = ? AND title = ?`).run('Hiyari Hat Report', nowIso(), 'hiyari-fm-sft-42', 'Hiyari Hat Report · FM-SFT-42 Rev.01')
 
 db.exec(`
   UPDATE responses
@@ -494,7 +604,7 @@ const upload = multer({
 })
 const trainingUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 2 },
 })
 const hiyariUpload = multer({
   storage: multer.memoryStorage(),
@@ -574,6 +684,23 @@ function requireAdmin(req, res, next) {
   })
 }
 
+const publicInspectionSubmissions = new Map()
+function limitPublicInspectionSubmissions(req, res, next) {
+  const now = Date.now()
+  const key = req.ip || req.socket.remoteAddress || 'unknown'
+  const limit = publicInspectionSubmissions.get(key)
+  if (limit && limit.resetAt > now && limit.count >= 30) {
+    res.set('Retry-After', String(Math.ceil((limit.resetAt - now) / 1000)))
+    return res.status(429).json({ error: 'ส่งแบบตรวจหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่' })
+  }
+  if (!limit || limit.resetAt <= now) publicInspectionSubmissions.set(key, { count: 1, resetAt: now + 10 * 60_000 })
+  else limit.count += 1
+  if (publicInspectionSubmissions.size > 1000) {
+    for (const [entryKey, entry] of publicInspectionSubmissions) if (entry.resetAt <= now) publicInspectionSubmissions.delete(entryKey)
+  }
+  next()
+}
+
 function addAudit(userId, action, targetType, targetId, details = {}) {
   db.prepare(`INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?)`)
@@ -609,8 +736,8 @@ function formatBangkokParts(value) {
 
 function styleReportSheet(sheet, columnCount, rowCount) {
   const header = sheet.getRow(1)
-  header.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FFFFFFFF' } }
-  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF11675D' } }
+  header.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FF16433E' } }
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEFEA' } }
   header.alignment = { vertical: 'middle', wrapText: true }
   header.height = 30
   if (rowCount > 0) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columnCount } }
@@ -748,33 +875,70 @@ function hiyariSubmissionDto(row) {
   }
 }
 
-async function persistTrainingFile(file) {
+async function persistTrainingFile(file, { presentationOnly = false } = {}) {
   if (!file) return null
   const originalName = path.basename(String(file.originalname || 'file')).replace(/[\r\n\0]/g, '').slice(0, 180) || 'file'
+  const extensionFromName = path.extname(originalName).toLowerCase()
   let extension
   let mimeType
-  if (file.mimetype === 'application/pdf' && file.buffer.subarray(0, 5).toString() === '%PDF-') {
+  const isPptx = extensionFromName === '.pptx' && file.buffer.subarray(0, 2).toString() === 'PK' && file.buffer.includes(Buffer.from('ppt/presentation.xml'))
+  if (isPptx) {
+    extension = '.pptx'
+    mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  } else if (!presentationOnly && extensionFromName === '.pdf' && file.buffer.subarray(0, 5).toString() === '%PDF-') {
     extension = '.pdf'
     mimeType = 'application/pdf'
-  } else if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+  } else if (!presentationOnly && ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
     const metadata = await sharp(file.buffer, { failOn: 'error' }).metadata()
     const formats = { jpeg: ['.jpg', 'image/jpeg'], png: ['.png', 'image/png'], webp: ['.webp', 'image/webp'] }
     const format = formats[metadata.format]
     if (!format) {
-      const error = new Error('รองรับเฉพาะ PDF, JPG, PNG หรือ WebP')
+      const error = new Error('รองรับเฉพาะ PDF, JPG, PNG, WebP หรือ PowerPoint (.pptx)')
       error.status = 400
       throw error
     }
     extension = format[0]
     mimeType = format[1]
   } else {
-    const error = new Error('รองรับเฉพาะ PDF, JPG, PNG หรือ WebP')
+    const error = new Error(presentationOnly ? 'ไฟล์ PowerPoint ต้องเป็นไฟล์ .pptx ที่ถูกต้อง' : 'รองรับเฉพาะ PDF, JPG, PNG, WebP หรือ PowerPoint (.pptx)')
     error.status = 400
     throw error
   }
   const storedName = `${randomUUID()}${extension}`
   await writeFile(path.join(trainingUploadDir, storedName), file.buffer, { flag: 'wx' })
   return { originalName, storedName, mimeType }
+}
+
+async function convertPowerPointToPdf(presentation) {
+  const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'daily-safety-pptx-'))
+  let storedName = ''
+  try {
+    const sourcePath = path.join(trainingUploadDir, presentation.storedName)
+    const profileUrl = pathToFileURL(path.join(temporaryDirectory, 'profile')).href
+    await execFileAsync('soffice', [
+      '--headless', '--nologo', '--nodefault', '--nolockcheck', '--nofirststartwizard',
+      `-env:UserInstallation=${profileUrl}`, '--convert-to', 'pdf', '--outdir', temporaryDirectory, sourcePath,
+    ], { timeout: 90_000, maxBuffer: 1024 * 1024, windowsHide: true })
+    const pdfBuffer = await readFile(path.join(temporaryDirectory, `${path.parse(presentation.storedName).name}.pdf`))
+    if (pdfBuffer.subarray(0, 5).toString() !== '%PDF-') throw new Error('LibreOffice returned an invalid PDF')
+    storedName = `${randomUUID()}.pdf`
+    await writeFile(path.join(trainingUploadDir, storedName), pdfBuffer, { flag: 'wx' })
+    return {
+      originalName: `${path.parse(presentation.originalName).name}.pdf`,
+      storedName,
+      mimeType: 'application/pdf',
+    }
+  } catch (cause) {
+    if (storedName) await unlink(path.join(trainingUploadDir, storedName)).catch(() => undefined)
+    const error = new Error(cause?.code === 'ENOENT'
+      ? 'ไม่พบ LibreOffice สำหรับแปลง PowerPoint กรุณาใช้ Docker runtime หรือแนบ PDF เป็นไฟล์หลัก'
+      : 'แปลง PowerPoint เป็น PDF สำหรับเปิดดูบนมือถือไม่สำเร็จ กรุณาตรวจสอบไฟล์แล้วลองอีกครั้ง')
+    error.status = 400
+    error.cause = cause
+    throw error
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined)
+  }
 }
 
 async function persistHiyariPhoto(file) {
@@ -986,6 +1150,9 @@ app.post('/api/auth/logout', (req, res) => {
   })
 })
 app.get('/api/checklist', requireAuth, (_req, res) => res.json({ items: activeChecklist() }))
+app.get('/api/public/daily-inspection', (_req, res) => {
+  res.set('Cache-Control', 'no-store').json({ items: activeChecklist() })
+})
 
 app.get('/api/admin/checklist', requireAdmin, (_req, res) => {
   const items = db.prepare('SELECT * FROM checklist_items ORDER BY order_index, title COLLATE NOCASE').all().map(checklistDto)
@@ -1060,6 +1227,20 @@ app.get('/api/suggestions', requireAuth, (req, res) => {
     employeeCodes,
     responsibles: responsibleRows.map((row) => row.value),
   })
+})
+
+app.get('/api/employees/directory', requireAuth, (req, res) => {
+  const language = req.query.lang === 'en' ? 'en' : 'th'
+  const rows = db.prepare(`SELECT employee_code, name_th, name_en, department_th, department_en FROM employee_directory
+    ORDER BY name_${language} COLLATE NOCASE, employee_code COLLATE NOCASE`).all()
+  res.set('Cache-Control', 'no-store').json({ employees: rows.map((row) => ({
+    employeeCode: row.employee_code,
+    nameTh: row.name_th,
+    nameEn: row.name_en,
+    name: language === 'en' ? row.name_en || row.name_th : row.name_th || row.name_en,
+    departmentTh: row.department_th || '',
+    departmentEn: row.department_en || '',
+  })) })
 })
 
 app.get('/api/assignees', requireAuth, (_req, res) => {
@@ -1268,8 +1449,8 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     sheet.columns = columns.map((width) => ({ width }))
     sheet.mergeCells('A1:P1')
     sheet.getCell('A1').value = english ? 'DAILY SAFETY INSPECTION REPORT' : 'รายงานแบบตรวจความปลอดภัยประจำวัน'
-    sheet.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sheetTitle, bold: true, color: { argb: 'FFFFFFFF' } }
-    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14574E' } }
+    sheet.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.sheetTitle, bold: true, color: { argb: 'FF16433E' } }
+    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEFEA' } }
     sheet.getCell('A1').alignment = { vertical: 'middle' }
     sheet.getRow(1).height = 34
     sheet.mergeCells('A2:P2')
@@ -1282,10 +1463,10 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     headerRow.values = headers
     headerRow.height = 30
     headerRow.eachCell((cell) => {
-      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FFFFFFFF' } }
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276D63' } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FF16433E' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEFEA' } }
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
-      cell.border = { bottom: { style: 'medium', color: { argb: 'FF14574E' } } }
+      cell.border = { bottom: { style: 'medium', color: { argb: 'FF8DBDB0' } } }
     })
     sheet.autoFilter = { from: 'A4', to: 'P4' }
 
@@ -1356,16 +1537,16 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
     photoSheet.columns = [8, 14, 24, 28, 20, 32, 30].map((width) => ({ width }))
     photoSheet.mergeCells('A1:G1')
     photoSheet.getCell('A1').value = english ? 'PHOTO EVIDENCE GALLERY' : 'แกลเลอรีหลักฐานรูปภาพ'
-    photoSheet.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.secondarySheetTitle, bold: true, color: { argb: 'FFFFFFFF' } }
-    photoSheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14574E' } }
+    photoSheet.getCell('A1').font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.secondarySheetTitle, bold: true, color: { argb: 'FF16433E' } }
+    photoSheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEFEA' } }
     photoSheet.getRow(1).height = 32
     const photoHeaders = english ? ['No.', 'Date', 'Area', 'Checklist item', 'Photo type', 'File name', 'Preview'] : ['ลำดับ', 'วันที่ตรวจ', 'พื้นที่', 'หัวข้อตรวจ', 'ประเภทภาพ', 'ชื่อไฟล์', 'รูปภาพ']
     const photoHeader = photoSheet.getRow(2)
     photoHeader.values = photoHeaders
     photoHeader.height = 28
     photoHeader.eachCell((cell) => {
-      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FFFFFFFF' } }
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276D63' } }
+      cell.font = { name: EXPORT_FONT_FAMILY, size: EXPORT_FONT_SIZE.body, bold: true, color: { argb: 'FF16433E' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEFEA' } }
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
     })
     photoSheet.autoFilter = { from: 'A2', to: 'G2' }
@@ -1411,7 +1592,8 @@ app.get('/api/inspections', requireAuth, (req, res) => {
   res.json({ inspections: inspectionRows(filters, req.session.user) })
 })
 
-app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req, res) => {
+const createInspectionHandler = (publicMode) => async (req, res) => {
+  const actor = req.session?.user || null
   const checklist = activeChecklist()
   const payload = parseJson(req.body.payload, null)
   if (!payload || !Array.isArray(payload.responses)) return res.status(400).json({ error: 'ข้อมูลแบบตรวจไม่ครบถ้วน' })
@@ -1419,8 +1601,8 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
   const inspectionTime = String(payload.time || '')
   const area = String(payload.area || '').trim()
   const shift = String(payload.shift || '').trim()
-  let inspectorName = String(payload.inspectorName || req.session.user.name).trim()
-  const inputEmployeeCode = String(payload.employeeCode || req.session.user.employeeCode).trim().toUpperCase()
+  let inspectorName = String(payload.inspectorName || actor?.name || '').trim()
+  const inputEmployeeCode = String(payload.employeeCode || actor?.employeeCode || '').trim().toUpperCase()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(inspectionDate) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(inspectionTime) || !area || !shift || !inspectorName) return res.status(400).json({ error: 'กรุณากรอกวันที่ เวลา พื้นที่/แผนก กะ และชื่อผู้ตรวจให้ถูกต้อง' })
   if ([area, shift, inspectorName, inputEmployeeCode].some((value) => value.length > 120)) return res.status(400).json({ error: 'ข้อมูลผู้ตรวจ พื้นที่ หรือกะยาวเกินไป' })
   const directoryEmployee = db.prepare('SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(inputEmployeeCode)
@@ -1429,19 +1611,30 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
     return res.status(400).json({ error: 'ผู้ตรวจและรหัสพนักงานไม่ตรงกับรายชื่อพนักงาน' })
   }
   const employeeCode = directoryEmployee.employee_code
+  const inspectorId = publicMode ? null : actor.id
   const submitted = new Map(payload.responses.map((item) => [item.key, item]))
   if (!checklist.length || submitted.size !== checklist.length || checklist.some((item) => !submitted.has(item.key))) return res.status(400).json({ error: `กรุณาตรวจให้ครบทั้ง ${checklist.length} หัวข้อ` })
   for (const item of checklist) {
     const response = submitted.get(item.key)
     if (!item.choices.includes(response.result)) return res.status(400).json({ error: `หัวข้อ ${item.title} ไม่รองรับคำตอบนี้` })
-    if (response.result === 'NG' && (!String(response.issueDetails || '').trim() || !String(response.responsibleUserId || '').trim())) {
+    const responsibleEmployeeCode = String(response.responsibleEmployeeCode || '').trim().toUpperCase()
+    if (response.result === 'NG' && (!String(response.issueDetails || '').trim() || (publicMode ? !responsibleEmployeeCode : !String(response.responsibleUserId || '').trim()))) {
       return res.status(400).json({ error: `หัวข้อ ${item.title} ที่พบ NG ต้องกรอกรายละเอียดและผู้รับผิดชอบ` })
     }
     if (response.result === 'NG') {
-      const assignee = db.prepare("SELECT id, display_name FROM users WHERE id = ? AND is_active = 1 AND role IN ('leader', 'employee')").get(String(response.responsibleUserId))
-      if (!assignee) return res.status(400).json({ error: 'เลือกบัญชีผู้รับผิดชอบที่เปิดใช้งานจากรายชื่อ' })
-      response.responsibleUserId = assignee.id
-      response.responsible = assignee.display_name
+      if (publicMode) {
+        const directoryAssignee = db.prepare('SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(responsibleEmployeeCode)
+        const matchesName = (name) => String(name || '').normalize('NFC').trim().toLocaleLowerCase() === String(response.responsible || '').normalize('NFC').trim().toLocaleLowerCase()
+        if (!directoryAssignee || ![directoryAssignee.name_th, directoryAssignee.name_en].some(matchesName)) return res.status(400).json({ error: 'กรุณาเลือกผู้รับผิดชอบจากทะเบียนพนักงาน' })
+        const assignee = db.prepare("SELECT id, display_name FROM users WHERE UPPER(TRIM(employee_code)) = ? AND is_active = 1 AND role IN ('leader', 'employee') LIMIT 1").get(responsibleEmployeeCode)
+        response.responsibleUserId = assignee?.id || ''
+        response.responsible = assignee?.display_name || directoryAssignee.name_th || directoryAssignee.name_en
+      } else {
+        const assignee = db.prepare("SELECT id, display_name FROM users WHERE id = ? AND is_active = 1 AND role IN ('leader', 'employee')").get(String(response.responsibleUserId))
+        if (!assignee) return res.status(400).json({ error: 'เลือกบัญชีผู้รับผิดชอบที่เปิดใช้งานจากรายชื่อ' })
+        response.responsibleUserId = assignee.id
+        response.responsible = assignee.display_name
+      }
     }
     if (response.result === 'NG' && response.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(response.dueDate))) return res.status(400).json({ error: `กำหนดเสร็จของหัวข้อ ${item.title} ไม่ถูกต้อง` })
     if (String(response.issueDetails || '').length > 4000 || String(response.responsible || '').length > 120) return res.status(400).json({ error: `รายละเอียดของหัวข้อ ${item.title} ยาวเกินไป` })
@@ -1475,13 +1668,13 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
         inspectionId,
         responseId: responseIds.get(meta.key),
         type: meta.type,
-        userId: req.session.user.id,
+        userId: actor?.id || null,
       }))
     }
     db.exec('BEGIN')
     db.prepare(`INSERT INTO inspections (id, inspection_date, inspection_time, inspector_id, inspector_name, employee_code, department_area, shift, created_at, submitted_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(inspectionId, inspectionDate, inspectionTime, req.session.user.id, inspectorName, employeeCode, area, shift, createdAt, createdAt)
+      .run(inspectionId, inspectionDate, inspectionTime, inspectorId, inspectorName, employeeCode, area, shift, createdAt, createdAt)
     const insertResponse = db.prepare(`INSERT INTO responses
       (id, inspection_id, item_key, item_title, item_description, order_index, result, issue_details, responsible, responsible_user_id, follow_up_status, due_date, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -1499,15 +1692,19 @@ app.post('/api/inspections', requireAuth, upload.array('photos', 50), async (req
       )
     }
     photos.forEach(insertPhoto)
-    addAudit(req.session.user.id, 'สร้างรายการตรวจ', 'inspection', inspectionId, { area, shift })
+    if (actor) addAudit(actor.id, 'สร้างรายการตรวจ', 'inspection', inspectionId, { area, shift })
     db.exec('COMMIT')
   } catch (error) {
     try { db.exec('ROLLBACK') } catch { /* transaction may not have started */ }
     await Promise.allSettled(photos.map((photo) => unlink(path.join(uploadDir, photo.storedName))))
     throw error
   }
-  res.status(201).json({ inspection: getInspection(inspectionId) })
-})
+  if (publicMode) res.status(201).json({ ok: true })
+  else res.status(201).json({ inspection: getInspection(inspectionId) })
+}
+
+app.post('/api/inspections', requireAuth, upload.array('photos', 50), createInspectionHandler(false))
+app.post('/api/public/daily-inspections', limitPublicInspectionSubmissions, upload.array('photos', 50), createInspectionHandler(true))
 
 app.get('/api/inspections/:id', requireAuth, (req, res) => {
   const inspection = getInspection(req.params.id)
@@ -1741,7 +1938,8 @@ app.get('/api/public/training-materials/:token/file', (req, res, next) => {
   const material = db.prepare('SELECT stored_name, original_name, mime_type FROM training_materials WHERE public_token = ? AND is_active = 1').get(req.params.token)
   if (!material) return res.status(404).json({ error: 'ไม่พบเอกสารหรือปิดการเผยแพร่แล้ว' })
   const safeFilename = material.original_name.replace(/["\r\n]/g, '_')
-  res.type(material.mime_type).set('X-Content-Type-Options', 'nosniff').set('Content-Disposition', `inline; filename="${safeFilename}"`)
+  const disposition = req.query.download === '1' ? 'attachment' : 'inline'
+  res.type(material.mime_type).set('X-Content-Type-Options', 'nosniff').set('Content-Disposition', `${disposition}; filename="${safeFilename}"`)
   res.sendFile(path.join(trainingUploadDir, material.stored_name), (error) => error && next(error))
 })
 
@@ -2133,45 +2331,89 @@ app.get('/api/admin/training-materials', requireAdmin, (_req, res) => {
   res.json({ materials: materials.map(trainingMaterialDto) })
 })
 
-app.post('/api/admin/training-materials', requireAdmin, trainingUpload.single('file'), async (req, res) => {
+app.post('/api/admin/training-materials', requireAdmin, trainingUpload.fields([{ name: 'file', maxCount: 1 }, { name: 'presentation', maxCount: 1 }]), async (req, res) => {
   const title = String(req.body?.title || '').trim()
   const description = String(req.body?.description || '').trim()
-  if (!title || title.length > 200 || description.length > 2000 || !req.file) return res.status(400).json({ error: 'กรุณากรอกชื่อเอกสารและแนบไฟล์' })
-  const file = await persistTrainingFile(req.file)
+  const mainUpload = req.files?.file?.[0]
+  const presentationUpload = req.files?.presentation?.[0]
+  if (!title || title.length > 200 || description.length > 2000 || (!mainUpload && !presentationUpload)) return res.status(400).json({ error: 'กรุณากรอกชื่อเอกสารและแนบไฟล์หลัก' })
+  const mainIsPowerPoint = path.extname(mainUpload?.originalname || '').toLowerCase() === '.pptx'
+  if (mainIsPowerPoint && presentationUpload) return res.status(400).json({ error: 'เมื่อแนบ PowerPoint เป็นไฟล์หลักแล้ว ไม่ต้องแนบไฟล์ PowerPoint ซ้ำ' })
+  let file = null
+  let presentation = null
+  try {
+    if (mainIsPowerPoint || (!mainUpload && presentationUpload)) {
+      presentation = await persistTrainingFile(mainUpload || presentationUpload, { presentationOnly: true })
+      file = await convertPowerPointToPdf(presentation)
+    } else {
+      file = await persistTrainingFile(mainUpload)
+      presentation = await persistTrainingFile(presentationUpload, { presentationOnly: true })
+    }
+  } catch (error) {
+    if (file) await unlink(path.join(trainingUploadDir, file.storedName)).catch(() => undefined)
+    if (presentation) await unlink(path.join(trainingUploadDir, presentation.storedName)).catch(() => undefined)
+    throw error
+  }
   const id = randomUUID()
   const token = newPublicToken()
   const now = nowIso()
   try {
     db.prepare(`INSERT INTO training_materials
-      (id, public_token, title, description, original_name, stored_name, mime_type, is_active, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`)
-      .run(id, token, title, description, file.originalName, file.storedName, file.mimeType, req.session.user.id, now, now)
+      (id, public_token, title, description, original_name, stored_name, mime_type,
+        companion_original_name, companion_stored_name, is_active, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`)
+      .run(id, token, title, description, file.originalName, file.storedName, file.mimeType,
+        presentation?.originalName || '', presentation?.storedName || '', req.session.user.id, now, now)
   } catch (error) {
     await unlink(path.join(trainingUploadDir, file.storedName)).catch(() => undefined)
+    if (presentation) await unlink(path.join(trainingUploadDir, presentation.storedName)).catch(() => undefined)
     throw error
   }
-  addAudit(req.session.user.id, 'เพิ่มสื่ออบรม', 'training_material', id, { title, mimeType: file.mimeType })
+  addAudit(req.session.user.id, 'เพิ่มสื่ออบรม', 'training_material', id, { title, mimeType: file.mimeType, hasPowerPoint: Boolean(presentation) })
   res.status(201).json({ material: trainingMaterialDto(db.prepare('SELECT * FROM training_materials WHERE id = ?').get(id)) })
 })
 
-app.patch('/api/admin/training-materials/:id', requireAdmin, trainingUpload.single('file'), async (req, res) => {
+app.patch('/api/admin/training-materials/:id', requireAdmin, trainingUpload.fields([{ name: 'file', maxCount: 1 }, { name: 'presentation', maxCount: 1 }]), async (req, res) => {
   const existing = db.prepare('SELECT * FROM training_materials WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'ไม่พบสื่ออบรม' })
   const title = String(req.body?.title ?? existing.title).trim()
   const description = String(req.body?.description ?? existing.description).trim()
   const isActive = req.body?.isActive === undefined ? Boolean(existing.is_active) : String(req.body.isActive) === 'true'
   if (!title || title.length > 200 || description.length > 2000) return res.status(400).json({ error: 'กรุณาตรวจสอบชื่อและรายละเอียดเอกสาร' })
-  const file = await persistTrainingFile(req.file)
-  const nextFile = file || { originalName: existing.original_name, storedName: existing.stored_name, mimeType: existing.mime_type }
+  const mainUpload = req.files?.file?.[0]
+  const presentationUpload = req.files?.presentation?.[0]
+  const mainIsPowerPoint = path.extname(mainUpload?.originalname || '').toLowerCase() === '.pptx'
+  if (mainIsPowerPoint && presentationUpload) return res.status(400).json({ error: 'เมื่อแนบ PowerPoint เป็นไฟล์หลักแล้ว ไม่ต้องแนบไฟล์ PowerPoint ซ้ำ' })
+  let file = null
+  let presentation = null
   try {
-    db.prepare(`UPDATE training_materials SET title = ?, description = ?, original_name = ?, stored_name = ?, mime_type = ?, is_active = ?, updated_at = ? WHERE id = ?`)
-      .run(title, description, nextFile.originalName, nextFile.storedName, nextFile.mimeType, isActive ? 1 : 0, nowIso(), existing.id)
+    if (mainIsPowerPoint) {
+      presentation = await persistTrainingFile(mainUpload, { presentationOnly: true })
+      file = await convertPowerPointToPdf(presentation)
+    } else {
+      file = await persistTrainingFile(mainUpload)
+      presentation = await persistTrainingFile(presentationUpload, { presentationOnly: true })
+    }
   } catch (error) {
     if (file) await unlink(path.join(trainingUploadDir, file.storedName)).catch(() => undefined)
+    if (presentation) await unlink(path.join(trainingUploadDir, presentation.storedName)).catch(() => undefined)
+    throw error
+  }
+  const nextFile = file || { originalName: existing.original_name, storedName: existing.stored_name, mimeType: existing.mime_type }
+  const nextPresentation = presentation || { originalName: existing.companion_original_name, storedName: existing.companion_stored_name }
+  try {
+    db.prepare(`UPDATE training_materials SET title = ?, description = ?, original_name = ?, stored_name = ?, mime_type = ?,
+      companion_original_name = ?, companion_stored_name = ?, is_active = ?, updated_at = ? WHERE id = ?`)
+      .run(title, description, nextFile.originalName, nextFile.storedName, nextFile.mimeType,
+        nextPresentation.originalName || '', nextPresentation.storedName || '', isActive ? 1 : 0, nowIso(), existing.id)
+  } catch (error) {
+    if (file) await unlink(path.join(trainingUploadDir, file.storedName)).catch(() => undefined)
+    if (presentation) await unlink(path.join(trainingUploadDir, presentation.storedName)).catch(() => undefined)
     throw error
   }
   if (file) await unlink(path.join(trainingUploadDir, existing.stored_name)).catch(() => undefined)
-  addAudit(req.session.user.id, 'แก้ไขสื่ออบรม', 'training_material', existing.id, { title, isActive, replacedFile: Boolean(file) })
+  if (presentation && existing.companion_stored_name) await unlink(path.join(trainingUploadDir, existing.companion_stored_name)).catch(() => undefined)
+  addAudit(req.session.user.id, 'แก้ไขสื่ออบรม', 'training_material', existing.id, { title, isActive, replacedFile: Boolean(file), replacedPowerPoint: Boolean(presentation) })
   res.json({ material: trainingMaterialDto(db.prepare('SELECT * FROM training_materials WHERE id = ?').get(existing.id)) })
 })
 
@@ -2441,7 +2683,7 @@ app.use((error, req, res, _next) => {
     const isHiyariUpload = req.path.startsWith('/api/public/hiyari/')
     const message = error.code === 'LIMIT_FILE_SIZE'
       ? (isTrainingUpload ? 'ไฟล์สื่ออบรมมีขนาดเกิน 25 MB' : 'รูปภาพมีขนาดเกิน 8 MB ต่อรูป')
-      : (isTrainingUpload ? 'แนบไฟล์สื่ออบรมได้ครั้งละ 1 ไฟล์' : isHiyariUpload ? 'แนบรูปภาพ Hiyari Hat ได้ไม่เกิน 5 รูปต่อรายงาน' : 'แนบรูปภาพได้ไม่เกิน 20 รูปต่อครั้ง')
+      : (isTrainingUpload ? 'แนบสื่ออบรมได้ไม่เกิน 2 ไฟล์ต่อรายการ' : isHiyariUpload ? 'แนบรูปภาพ Hiyari Hat ได้ไม่เกิน 5 รูปต่อรายงาน' : 'แนบรูปภาพได้ไม่เกิน 20 รูปต่อครั้ง')
     return res.status(400).json({ error: message })
   }
   if (error.status === 400) return res.status(400).json({ error: error.message })

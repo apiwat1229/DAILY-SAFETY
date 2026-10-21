@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Download, Eye, FileBarChart2, FileSpreadsheet, LoaderCircle, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, formatDate, formatDateTime, hiyariEmployeeSummaryExportUrl, hiyariSubmissionExportUrl } from '@/lib/api'
-import type { HiyariForm, HiyariLanguage, HiyariSubmission } from '@/lib/types'
-import { Badge } from '@/components/ui/badge'
+import type { HiyariLanguage, HiyariSubmission } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DatePicker } from '@/components/date-picker'
 import { useI18n } from '@/lib/i18n'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -73,7 +71,6 @@ const paperStyles = `
   .hiyari-paper .photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .hiyari-paper .photo{margin:0;padding:7px;border:1px solid #000;break-inside:avoid}
   .hiyari-paper .photo img{display:block;width:100%;height:58mm;object-fit:contain;background:#fff}
-  .hiyari-paper .photo figcaption{padding-top:5px;color:#000;font-size:var(--paper-text-caption);overflow-wrap:anywhere}
   .hiyari-paper .signature{margin-top:28px;break-inside:avoid}
   .hiyari-paper .signature td{height:68px;padding-top:42px;text-align:center;font-size:var(--paper-text-signature);color:#000}
   .hiyari-paper .doc-footer{margin-top:20px;padding-top:8px;border-top:1px solid #000;color:#000;font-size:var(--paper-text-caption);display:flex;justify-content:space-between;gap:12px}
@@ -103,7 +100,8 @@ function escapeHtml(value: string) {
 
 function reportDocumentMarkup(submission: HiyariSubmission) {
   const labels = documentLabels[submission.language]
-  const documentNo = submission.formTitle.match(/\bFM-SFT-\d+\b/i)?.[0] || 'HIYARI-HAT'
+  const standardForm = submission.formId === 'hiyari-fm-sft-42'
+  const documentNo = submission.formTitle.match(/\bFM-SFT-\d+\b/i)?.[0] || (standardForm ? 'FM-SFT-42' : 'HIYARI-HAT')
   const revision = submission.formTitle.match(/\bRev\.?\s*([A-Za-z0-9]+(?:\.[A-Za-z0-9]+)?)/i)?.[1] || '01'
   const dateLocale = submission.language === 'th' ? 'th-TH' : submission.language === 'my' ? 'my-MM-u-ca-gregory' : 'en-GB'
   const reportDate = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(new Date(`${submission.reportDate}T12:00:00+07:00`))
@@ -113,7 +111,7 @@ function reportDocumentMarkup(submission: HiyariSubmission) {
     [labels.when, submission.whenText], [labels.where, submission.whereText], [labels.what, submission.whatHappened],
     [labels.suggestions, submission.suggestions], [labels.note, submission.note],
   ]
-  const photosMarkup = submission.photos?.length ? `<p class="section-title">${escapeHtml(labels.photos)}</p><div class="photos">${submission.photos.map((photo) => `<figure class="photo"><img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.originalName)}"><figcaption>${escapeHtml(photo.originalName)}</figcaption></figure>`).join('')}</div>` : ''
+  const photosMarkup = submission.photos?.length ? `<p class="section-title">${escapeHtml(labels.photos)}</p><div class="photos">${submission.photos.map((photo) => `<figure class="photo"><img src="${escapeHtml(photo.url)}" alt="${escapeHtml(labels.photos)}"></figure>`).join('')}</div>` : ''
   return `<h1>${escapeHtml(submission.formTitle)}</h1>
     <p class="section-title">${escapeHtml(labels.reporterInfo)}</p>
     <table class="meta"><tbody><tr><th>${escapeHtml(labels.sender)}</th><td>${value(submission.employeeName)}</td><th>${escapeHtml(labels.employeeCode)}</th><td>${value(submission.employeeCode)}</td></tr><tr><th>${escapeHtml(labels.department)}</th><td>${value(submission.department)}</td><th>${escapeHtml(labels.reportDate)}</th><td>${escapeHtml(reportDate)}</td></tr><tr><th>${escapeHtml(labels.submittedAt)}</th><td colspan="3">${escapeHtml(submittedDate)}</td></tr></tbody></table>
@@ -137,12 +135,10 @@ function openPdfWindow(submission: HiyariSubmission, t: (key: string) => string)
 
 export function HiyariReportsPage() {
   const { language, t } = useI18n()
-  const [forms, setForms] = useState<HiyariForm[]>([])
   const [submissions, setSubmissions] = useState<HiyariSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
   const [search, setSearch] = useState('')
-  const [formFilter, setFormFilter] = useState('all')
   const [selected, setSelected] = useState<HiyariSubmission | null>(null)
   const [exportFrom, setExportFrom] = useState('')
   const [exportTo, setExportTo] = useState('')
@@ -150,8 +146,7 @@ export function HiyariReportsPage() {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const [formData, reportData] = await Promise.all([api.hiyariForms(), api.hiyariSubmissions()])
-      setForms(formData.forms)
+      const reportData = await api.hiyariSubmissions()
       setSubmissions(reportData.submissions)
     } catch (error) {
       toast.error(t(error instanceof Error ? error.message : 'โหลดรายงาน Hiyari Hat ไม่สำเร็จ'))
@@ -161,11 +156,10 @@ export function HiyariReportsPage() {
   useEffect(() => { void refresh() }, [refresh])
 
   const visibleSubmissions = useMemo(() => submissions.filter((submission) => {
-    const matchesForm = formFilter === 'all' || submission.formId === formFilter
     const query = search.trim().toLocaleLowerCase()
     const matchesSearch = !query || [submission.employeeName, submission.employeeCode, submission.department, submission.formTitle, submission.reportDate].some((value) => value.toLocaleLowerCase().includes(query))
-    return matchesForm && matchesSearch
-  }), [formFilter, search, submissions])
+    return matchesSearch
+  }), [search, submissions])
   const pagination = useDataPagination(visibleSubmissions)
 
   async function downloadExcel(submission: HiyariSubmission) {
@@ -217,21 +211,21 @@ export function HiyariReportsPage() {
   }
 
   return <div className="page-stack">
-    <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-end">
-      <div className="shrink-0"><h2 className="page-heading text-2xl font-semibold tracking-tight">{t('รายงาน Hiyari Hat')}</h2></div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end">
-        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[170px_170px]">
-          <label className="block min-w-0 text-xs text-muted-foreground"><span className="mb-1 block">{t('ตั้งแต่วันที่')}</span><DatePicker value={exportFrom} onChange={setExportFrom} maxDate={exportTo || undefined} placeholder="เลือกวันที่" ariaLabel={t('ตั้งแต่วันที่')} language={language} clearable className="w-full" /></label>
-          <label className="block min-w-0 text-xs text-muted-foreground"><span className="mb-1 block">{t('ถึงวันที่')}</span><DatePicker value={exportTo} onChange={setExportTo} minDate={exportFrom || undefined} placeholder="เลือกวันที่" ariaLabel={t('ถึงวันที่')} language={language} clearable className="w-full" /></label>
-        </div>
-        <Button variant="outline" className="h-10 shrink-0 gap-2 whitespace-nowrap" disabled={busyId === 'employee-summary' || Boolean(exportFrom) !== Boolean(exportTo)} onClick={() => void downloadEmployeeSummary()}>{busyId === 'employee-summary' ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{language === 'en' ? 'Excel by employee' : 'Excel แยกรายคน'}</Button>
-      </div>
-    </div>
+    <div><h2 className="page-heading text-2xl font-semibold tracking-tight">{t('รายงาน Hiyari Hat')}</h2></div>
 
     <Card className="overflow-hidden rounded-2xl border-border">
-      <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>{t('รายงานที่ส่งเข้ามา')}</CardTitle><CardDescription>{t('ค้นหาตามชื่อหรือรหัสพนักงาน แล้วเปิดดูหรือส่งออกรายงาน')}</CardDescription></div><div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[220px_240px]"><Select value={formFilter} onValueChange={setFormFilter}><SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t('ทุกแบบฟอร์ม')}</SelectItem>{forms.map((form) => <SelectItem key={form.id} value={form.id}>{form.title}</SelectItem>)}</SelectContent></Select><div className="relative"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-9" /></div></div></CardHeader>
+      <CardHeader className="border-b border-border-subtle px-5 py-4">
+        <div className="grid w-full gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(300px,340px)_auto_240px] xl:items-end">
+          <div className="grid grid-cols-2 gap-2 sm:col-span-2 xl:col-span-1">
+            <label className="block min-w-0 text-xs text-muted-foreground"><span className="mb-1 block">{t('ตั้งแต่วันที่')}</span><DatePicker value={exportFrom} onChange={setExportFrom} maxDate={exportTo || undefined} placeholder="เลือกวันที่" ariaLabel={t('ตั้งแต่วันที่')} language={language} clearable className="w-full" /></label>
+            <label className="block min-w-0 text-xs text-muted-foreground"><span className="mb-1 block">{t('ถึงวันที่')}</span><DatePicker value={exportTo} onChange={setExportTo} minDate={exportFrom || undefined} placeholder="เลือกวันที่" ariaLabel={t('ถึงวันที่')} language={language} clearable className="w-full" /></label>
+          </div>
+          <Button variant="outline" className="h-10 gap-2 whitespace-nowrap" disabled={busyId === 'employee-summary' || Boolean(exportFrom) !== Boolean(exportTo)} onClick={() => void downloadEmployeeSummary()}>{busyId === 'employee-summary' ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{language === 'en' ? 'Excel by employee' : 'Excel แยกรายคน'}</Button>
+          <div className="relative min-w-0"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-9" /></div>
+        </div>
+      </CardHeader>
       {visibleSubmissions.length ? <>
-        <div className="overflow-x-auto"><Table className="min-w-[840px]"><TableHeader><TableRow className="bg-surface-subtle text-left text-muted-foreground"><TableHead className="px-5 font-medium">{t('วันที่รายงาน')}</TableHead><TableHead className="px-3 font-medium">{t('พนักงาน')}</TableHead><TableHead className="px-3 font-medium">{t('แผนก')}</TableHead><TableHead className="px-3 font-medium">{t('ภาษา')}</TableHead><TableHead className="px-5 text-right font-medium">{t('การทำรายการ')}</TableHead></TableRow></TableHeader><TableBody>{pagination.visibleItems.map((submission) => <TableRow key={submission.id}><TableCell className="px-5"><p>{formatDate(submission.reportDate, language)}</p><p className="text-xs text-muted-foreground">{formatDateTime(submission.submittedAt, language)}</p></TableCell><TableCell className="px-3"><p className="font-medium">{submission.employeeName}</p><p className="text-xs text-muted-foreground">{submission.employeeCode}</p></TableCell><TableCell className="px-3">{submission.department || '—'}</TableCell><TableCell className="px-3"><Badge variant="outline">{submission.language.toUpperCase()}</Badge></TableCell><TableCell className="px-5"><div className="flex justify-end gap-2"><Button variant="outline" className="h-9 gap-1.5" onClick={() => setSelected(submission)}><Eye size={15} />{t('ดูข้อมูล')}</Button><Button variant="outline" className="h-9 gap-1.5" aria-label={`${t('ดาวน์โหลด PDF')} ${submission.employeeName}`} onClick={() => openPdfWindow(submission, t)}><Download size={15} />PDF</Button><Button variant="outline" className="h-9 gap-1.5" disabled={busyId === submission.id} onClick={() => void downloadExcel(submission)}>{busyId === submission.id ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{t('Excel')}</Button></div></TableCell></TableRow>)}</TableBody></Table></div>
+        <div className="overflow-x-auto"><Table className="min-w-[720px]"><TableHeader><TableRow className="bg-surface-subtle text-left text-muted-foreground"><TableHead className="px-5 font-medium">{t('วันที่รายงาน')}</TableHead><TableHead className="px-3 font-medium">{t('พนักงาน')}</TableHead><TableHead className="px-3 font-medium">{t('แผนก')}</TableHead><TableHead className="px-5 text-right font-medium">{t('การทำรายการ')}</TableHead></TableRow></TableHeader><TableBody>{pagination.visibleItems.map((submission) => <TableRow key={submission.id}><TableCell className="px-5"><p>{formatDate(submission.reportDate, language)}</p><p className="text-xs text-muted-foreground">{formatDateTime(submission.submittedAt, language, false)}</p></TableCell><TableCell className="px-3"><p className="font-medium">{submission.employeeName}</p><p className="text-xs text-muted-foreground">{submission.employeeCode}</p></TableCell><TableCell className="px-3">{submission.department || '—'}</TableCell><TableCell className="px-5"><div className="flex justify-end gap-2"><Button variant="outline" className="h-9 gap-1.5" onClick={() => setSelected(submission)}><Eye size={15} />{t('ดูข้อมูล')}</Button><Button variant="outline" className="h-9 gap-1.5" aria-label={`${t('ดาวน์โหลด PDF')} ${submission.employeeName}`} onClick={() => openPdfWindow(submission, t)}><Download size={15} />PDF</Button><Button variant="outline" className="h-9 gap-1.5" disabled={busyId === submission.id} onClick={() => void downloadExcel(submission)}>{busyId === submission.id ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{t('Excel')}</Button></div></TableCell></TableRow>)}</TableBody></Table></div>
         <DataTablePagination total={visibleSubmissions.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
       </> : <CardContent className="grid min-h-48 place-items-center p-8 text-center"><div><FileBarChart2 className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-2 font-medium">{loading ? t('กำลังโหลดข้อมูล…') : t('ยังไม่มีรายงาน')}</p><p className="mt-1 text-sm text-muted-foreground">{t('เมื่อพนักงานส่งแบบฟอร์ม รายงานจะแสดงที่นี่')}</p></div></CardContent>}
     </Card>

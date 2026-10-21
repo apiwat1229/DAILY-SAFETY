@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, ClipboardList, FileSpreadsheet, Filter, RotateCw, Search } from 'lucide-react'
+import { AlertTriangle, ArrowRight, ClipboardList, FileSpreadsheet, RotateCw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, exportExcelUrl, formatDate, localDateString } from '@/lib/api'
 import type { Filters, InspectionSummary, MyTask, User } from '@/lib/types'
@@ -73,26 +73,27 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
     <div className="page-stack">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div><p className="text-sm font-medium text-primary">{t('ศูนย์ติดตาม')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('รายการตรวจ')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('ค้นหาผลตรวจและติดตามการแก้ไขพร้อมหลักฐาน')}</p></div>
-        {user.role === 'admin' && <div className="grid w-full gap-2 sm:flex sm:w-auto"><Button asChild variant="outline" className="h-11 w-full gap-2 sm:w-auto"><a href={exportExcelUrl(filters, language)}><FileSpreadsheet size={16} /> {t('ส่งออก Excel พร้อมรูป')}</a></Button></div>}
+        {user.role === 'admin' && <div className="grid w-full gap-2 sm:flex sm:w-auto sm:items-center"><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-9" /></div><Button asChild variant="outline" className="h-10 w-full gap-2 sm:w-auto"><a href={exportExcelUrl(filters, language)}><FileSpreadsheet size={16} /> {t('ส่งออก Excel พร้อมรูป')}</a></Button></div>}
       </div>
 
       {user.role !== 'admin' && <MyTasksCard tasks={myTasks} loading={tasksLoading} language={language} onOpen={(inspectionId) => setSelectedId(inspectionId)} />}
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryTile label={t('รายการตรวจ')} value={totals.count} detail={t('ตามตัวกรองปัจจุบัน')} tone="neutral" language={language} />
-        <SummaryTile label={t('รายการ NG')} value={totals.ng} detail={t('พบจากรายการตรวจ')} tone="red" language={language} />
-        <SummaryTile label={t('รอแก้ไข')} value={totals.open} detail={t('ยังไม่ปิดงาน')} tone="amber" language={language} />
-      </div>
-
-      <Card className="rounded-2xl border-border">
-        <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><div className="grid size-8 place-items-center rounded-lg bg-secondary text-primary"><Filter size={15} /></div><div><CardTitle className="text-sm">{t('ช่วงวันที่')}</CardTitle><CardDescription className="mt-0.5 text-xs">{t('เลือกช่วงวันที่ที่ต้องการดู')}</CardDescription></div></div><div className="grid grid-cols-2 gap-2 sm:w-[340px]"><div className="grid gap-1"><Label htmlFor="filter-from" className="text-xs text-muted-foreground">{t('ตั้งแต่วันที่')}</Label><DatePicker id="filter-from" ariaLabel={t('ตั้งแต่วันที่')} value={filters.from} maxDate={filters.to} onChange={(value) => setDateFilter('from', value)} className="h-9 text-xs" /></div><div className="grid gap-1"><Label htmlFor="filter-to" className="text-xs text-muted-foreground">{t('ถึงวันที่')}</Label><DatePicker id="filter-to" ariaLabel={t('ถึงวันที่')} value={filters.to} minDate={filters.from} maxDate={localDateString()} onChange={(value) => setDateFilter('to', value)} className="h-9 text-xs" /></div></div></CardHeader>
+      <Card className="rounded-2xl border-border py-0">
+        <CardContent className="grid gap-2 p-2 xl:grid-cols-[minmax(0,1fr)_350px] xl:items-center">
+          <div className="grid divide-y divide-border-subtle sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <SummaryTile label={t('รายการตรวจ')} value={totals.count} detail={t('ตามตัวกรองปัจจุบัน')} tone="neutral" language={language} />
+            <SummaryTile label={t('รายการ NG')} value={totals.ng} detail={t('พบจากรายการตรวจ')} tone="red" language={language} />
+            <SummaryTile label={t('รอแก้ไข')} value={totals.open} detail={t('ยังไม่ปิดงาน')} tone="amber" language={language} />
+          </div>
+          <div className="grid min-w-0 grid-cols-2 gap-2 border-t border-border-subtle pt-2 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
+            <div className="grid min-w-0 gap-1"><Label htmlFor="filter-from" className="text-xs text-muted-foreground">{t('ตั้งแต่วันที่')}</Label><DatePicker id="filter-from" ariaLabel={t('ตั้งแต่วันที่')} value={filters.from} maxDate={filters.to} onChange={(value) => setDateFilter('from', value)} className="h-9 text-xs" /></div>
+            <div className="grid min-w-0 gap-1"><Label htmlFor="filter-to" className="text-xs text-muted-foreground">{t('ถึงวันที่')}</Label><DatePicker id="filter-to" ariaLabel={t('ถึงวันที่')} value={filters.to} minDate={filters.from} maxDate={localDateString()} onChange={(value) => setDateFilter('to', value)} className="h-9 text-xs" /></div>
+          </div>
+        </CardContent>
       </Card>
 
       <Card className="overflow-hidden rounded-2xl border-border">
-        <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><CardTitle className="text-sm">{t('ผลการค้นหา')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดง')} {filteredRecords.length} {t('รายการ')}</CardDescription></div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></div>
-        </CardHeader>
+        {user.role !== 'admin' && <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-sm">{t('ผลการค้นหา')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดง')} {filteredRecords.length} {t('รายการ')}</CardDescription></div><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></CardHeader>}
         {filteredRecords.length ? <>
           <div className="hidden overflow-x-auto md:block"><Table>
             <TableHeader><TableRow className="bg-surface-subtle hover:bg-surface-subtle"><TableHead className="pl-5 text-xs">{t('วันที่ / เวลา')}</TableHead><TableHead className="text-xs">{t('พื้นที่ / แผนก')}</TableHead><TableHead className="text-xs">{t('ผู้ตรวจ')}</TableHead><TableHead className="text-xs">{t('กะ')}</TableHead><TableHead className="text-center text-xs">NG</TableHead><TableHead className="text-center text-xs">{t('ค้างงาน')}</TableHead><TableHead className="pr-5 text-right text-xs">{t('รายละเอียด')}</TableHead></TableRow></TableHeader>
@@ -134,7 +135,7 @@ function MyTasksCard({ tasks, loading, language, onOpen }: { tasks: MyTask[]; lo
 }
 
 function SummaryTile({ label, value, detail, tone, language }: { label: string; value: number; detail: string; tone: 'neutral' | 'red' | 'amber'; language: 'th' | 'en' }) {
-  return <Card className="rounded-xl border-border py-0"><CardContent className="px-3 py-2"><p className="text-xs text-muted-foreground">{label}</p><div className="mt-0.5 flex items-end justify-between gap-2"><p className={`text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-destructive' : tone === 'amber' ? 'text-warning' : ''}`}>{value.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</p><span className="text-xs text-muted-foreground">{detail}</span></div></CardContent></Card>
+  return <div className="min-w-0 py-2 sm:px-3 sm:py-1.5"><p className="text-xs text-muted-foreground">{label}</p><div className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2"><p className={`shrink-0 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-destructive' : tone === 'amber' ? 'text-warning' : ''}`}>{value.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</p><span className="truncate text-xs text-muted-foreground">{detail}</span></div></div>
 }
 
 function ChevronRightIcon() {
