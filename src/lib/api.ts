@@ -1,4 +1,4 @@
-import type { Assignee, Assessment, AssessmentQuestion, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
+import type { Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
@@ -69,6 +69,7 @@ export const api = {
   }),
   deleteAssessment: (id: string) => request<{ ok: boolean }>(`/api/admin/assessments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   assessmentSubmissions: (id: string) => request<{ assessment: Pick<Assessment, 'id' | 'title'>; questions: AssessmentQuestion[]; submissions: AssessmentSubmission[] }>(`/api/admin/assessments/${encodeURIComponent(id)}/submissions`),
+  assessmentReportSubmissions: () => request<{ submissions: AssessmentReportSubmission[] }>('/api/admin/assessment-submissions'),
   publicAssessment: (token: string) => request<{ assessment: { title: string; description: string; instructions: string; allowMultipleAttempts: boolean; questions: Omit<AssessmentQuestion, 'correctOption'>[] } }>(`/api/public/assessments/${encodeURIComponent(token)}`),
   submitAssessment: (token: string, input: { employeeCode: string; employeeName: string; answers: Record<string, string> }) => request<{ ok: boolean; score: number; maxScore: number; submittedAt: string }>(`/api/public/assessments/${encodeURIComponent(token)}/submissions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
@@ -84,9 +85,14 @@ export const api = {
   deleteHiyariForm: (id: string) => request<{ ok: boolean }>(`/api/admin/hiyari-forms/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   hiyariSubmissions: (formId?: string) => request<{ submissions: HiyariSubmission[] }>(`/api/admin/hiyari-submissions${formId ? `?${new URLSearchParams({ formId })}` : ''}`),
   publicHiyari: (token: string) => request<{ form: { title: string; description: string } }>(`/api/public/hiyari/${encodeURIComponent(token)}`),
-  submitHiyari: (token: string, input: { employeeCode: string; employeeName: string; language: HiyariLanguage; reportDate: string; whenText: string; whereText: string; whatHappened: string; suggestions: string; note: string }) => request<{ ok: boolean; submittedAt: string }>(`/api/public/hiyari/${encodeURIComponent(token)}/submissions`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-  }),
+  submitHiyari: (token: string, input: { employeeCode: string; employeeName: string; language: HiyariLanguage; reportDate: string; whenText: string; whereText: string; whatHappened: string; suggestions: string; note: string; photos: File[] }) => {
+    const body = new FormData()
+    for (const [key, value] of Object.entries(input)) {
+      if (key === 'photos') for (const photo of value as File[]) body.append('photos', photo)
+      else body.append(key, String(value))
+    }
+    return request<{ ok: boolean; submittedAt: string }>(`/api/public/hiyari/${encodeURIComponent(token)}/submissions`, { method: 'POST', body })
+  },
   trainingMaterials: () => request<{ materials: TrainingMaterial[] }>('/api/admin/training-materials'),
   createTrainingMaterial: (body: FormData) => request<{ material: TrainingMaterial }>('/api/admin/training-materials', { method: 'POST', body }),
   updateTrainingMaterial: (id: string, body: FormData) => request<{ material: TrainingMaterial }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
@@ -101,13 +107,30 @@ export function assessmentExportUrl(id: string) {
   return `/api/admin/assessments/${encodeURIComponent(id)}/export.xlsx`
 }
 
+export function assessmentReportExportUrl() {
+  return '/api/admin/assessment-submissions/export.xlsx'
+}
+
 export function hiyariSubmissionExportUrl(id: string) {
   return `/api/admin/hiyari-submissions/${encodeURIComponent(id)}/export.xlsx`
 }
 
-export function publicLink(type: 'assessment' | 'training' | 'hiyari', token: string) {
+export function hiyariEmployeeSummaryExportUrl(language: 'th' | 'en', from?: string, to?: string) {
+  const query = new URLSearchParams({ lang: language })
+  if (from) query.set('from', from)
+  if (to) query.set('to', to)
+  return `/api/admin/hiyari-submissions/export-by-employee.xlsx?${query}`
+}
+
+export function publicLink(type: 'assessment' | 'training' | 'hiyari' | 'inspection', token = '', title = '') {
+  if (type === 'inspection') return `${window.location.origin}/daily-inspection`
   const route = type === 'assessment' ? 'assessment' : type === 'training' ? 'training' : 'hiyari'
-  return `${window.location.origin}/${route}/${encodeURIComponent(token)}`
+  const fallback = type === 'assessment' ? 'safety-assessment' : type === 'training' ? 'safety-training' : 'hiyari-hat'
+  const slug = title.normalize('NFKC').toLocaleLowerCase().trim()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || fallback
+  return `${window.location.origin}/${route}/${encodeURIComponent(slug)}/${encodeURIComponent(token)}`
 }
 
 export function toQuery(filters?: Partial<Filters>) {
@@ -149,11 +172,11 @@ export function formatDate(date: string, language: 'th' | 'en' = 'th') {
   return new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(new Date(`${date}T12:00:00+07:00`))
 }
 
-export function formatDateTime(date: string, language: 'th' | 'en' = 'th') {
+export function formatDateTime(date: string, language: 'th' | 'en' = 'th', includeTimezone = true) {
   if (!date) return '—'
   const formatted = new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-GB', {
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     hourCycle: 'h23', timeZone: 'Asia/Bangkok',
   }).format(new Date(date))
-  return `${formatted} (Bangkok, UTC+07:00)`
+  return includeTimezone ? `${formatted} (Bangkok, UTC+07:00)` : formatted
 }

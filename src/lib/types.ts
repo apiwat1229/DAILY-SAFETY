@@ -117,6 +117,8 @@ export type AssessmentSubmission = {
   submittedAt: string
 }
 
+export type AssessmentReportSubmission = AssessmentSubmission & { assessmentTitle: string }
+
 export type TrainingMaterial = {
   id: string
   token: string
@@ -158,7 +160,9 @@ export type HiyariSubmission = {
   suggestions: string
   note: string
   submittedAt: string
+  photos: HiyariPhoto[]
 }
+export type HiyariPhoto = { id: string; originalName: string; url: string }
 
 export type MyTask = {
   id: string

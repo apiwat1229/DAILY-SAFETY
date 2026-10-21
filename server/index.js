@@ -11,13 +11,15 @@ import { fileURLToPath } from 'node:url'
 import ExcelJS from 'exceljs'
 import sharp from 'sharp'
 import { CHECKLIST, FOLLOW_UP_STATUSES, RESULTS } from './checklist.js'
+import { createHiyariWorkbook } from './hiyari-export.js'
+import { createHiyariEmployeeSummaryWorkbook } from './hiyari-summary-export.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const appRoot = path.resolve(root, '..')
 const dataDir = path.join(appRoot, 'data')
 const uploadDir = path.join(dataDir, 'uploads')
 const trainingUploadDir = path.join(uploadDir, 'training')
-const hiyariTemplatePath = path.join(root, 'templates', 'hiyari-hat-template.xlsx')
+const hiyariUploadDir = path.join(uploadDir, 'hiyari')
 const dbPath = path.join(dataDir, 'daily-safety.sqlite')
 const port = Number(process.env.PORT || 4000)
 const host = process.env.HOST || '127.0.0.1'
@@ -27,7 +29,7 @@ if (isProduction && (!process.env.SESSION_SECRET || !process.env.ADMIN_PASSWORD 
   throw new Error('Production requires SESSION_SECRET, ADMIN_PASSWORD, and LEADER_PASSWORD environment variables.')
 }
 
-await mkdir(trainingUploadDir, { recursive: true })
+await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true })])
 
 const db = new DatabaseSync(dbPath)
 db.exec(`
@@ -216,6 +218,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_hiyari_submissions_form ON hiyari_submissions(form_id, submitted_at DESC);
   CREATE INDEX IF NOT EXISTS idx_hiyari_submissions_employee ON hiyari_submissions(employee_code, submitted_at DESC);
 `)
+
+const hiyariSubmissionColumns = db.prepare('PRAGMA table_info(hiyari_submissions)').all()
+if (!hiyariSubmissionColumns.some((column) => column.name === 'photos_json')) {
+  db.exec("ALTER TABLE hiyari_submissions ADD COLUMN photos_json TEXT NOT NULL DEFAULT '[]'")
+}
 
 const trainingMaterialColumns = db.prepare('PRAGMA table_info(training_materials)').all()
 if (!trainingMaterialColumns.some((column) => column.name === 'companion_original_name')) {
@@ -486,6 +493,18 @@ const trainingUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024, files: 1 },
 })
+const hiyariUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, callback) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      const error = new Error('รองรับรูปภาพ JPG, PNG หรือ WebP เท่านั้น')
+      error.status = 400
+      return callback(error)
+    }
+    callback(null, true)
+  },
+})
 
 function safeUser(row) {
   if (!row) return null
@@ -576,13 +595,13 @@ function parseJson(value, fallback) {
   try { return JSON.parse(value) } catch { return fallback }
 }
 
-function formatBangkokTimestamp(value) {
+function formatBangkokParts(value) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(new Date(value))
   const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-  return `Time ${fields.hour}:${fields.minute}, Date ${fields.day}-${fields.month}-${fields.year} Timezone +Bangkok`
+  return { time: `${fields.hour}:${fields.minute}`, date: `${fields.day}-${fields.month}-${fields.year}` }
 }
 
 function styleReportSheet(sheet, columnCount, rowCount) {
@@ -698,6 +717,11 @@ function hiyariFormDto(row) {
 }
 
 function hiyariSubmissionDto(row) {
+  const photos = parseJson(row.photos_json, []).map((photo) => ({
+    id: photo.id,
+    originalName: photo.originalName,
+    url: `/api/admin/hiyari-submissions/${encodeURIComponent(row.id)}/photos/${encodeURIComponent(photo.id)}`,
+  }))
   return {
     id: row.id,
     formId: row.form_id,
@@ -713,6 +737,7 @@ function hiyariSubmissionDto(row) {
     suggestions: row.suggestions,
     note: row.note,
     submittedAt: row.submitted_at,
+    photos,
   }
 }
 
@@ -743,6 +768,21 @@ async function persistTrainingFile(file) {
   const storedName = `${randomUUID()}${extension}`
   await writeFile(path.join(trainingUploadDir, storedName), file.buffer, { flag: 'wx' })
   return { originalName, storedName, mimeType }
+}
+
+async function persistHiyariPhoto(file) {
+  const metadata = await sharp(file.buffer, { failOn: 'error' }).metadata()
+  if (!['jpeg', 'png', 'webp'].includes(metadata.format)) {
+    const error = new Error('ไฟล์รูปภาพไม่ถูกต้อง กรุณาใช้ JPG, PNG หรือ WebP')
+    error.status = 400
+    throw error
+  }
+  const id = randomUUID()
+  const storedName = `${id}.jpg`
+  const originalName = path.basename(String(file.originalname || 'photo')).replace(/[\r\n\0]/g, '').slice(0, 180) || 'photo'
+  const buffer = await sharp(file.buffer, { failOn: 'error' }).rotate().resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 84 }).toBuffer()
+  await writeFile(path.join(hiyariUploadDir, storedName), buffer, { flag: 'wx' })
+  return { id, originalName, storedName, mimeType: 'image/jpeg' }
 }
 
 function fileExtension(mimeType) {
@@ -809,8 +849,10 @@ function buildInspectionWhere(filters, user) {
   return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params }
 }
 
-function inspectionRows(filters, user, limit = 200) {
+function inspectionRows(filters, user, limit = null) {
   const where = buildInspectionWhere(filters, user)
+  const limitSql = Number.isInteger(limit) ? ' LIMIT ?' : ''
+  const params = Number.isInteger(limit) ? [...where.params, limit] : where.params
   return db.prepare(`
     SELECT i.id, i.inspection_date, i.inspection_time, i.inspector_name, i.employee_code, i.department_area, i.shift,
       i.created_at,
@@ -818,8 +860,8 @@ function inspectionRows(filters, user, limit = 200) {
       (SELECT COUNT(*) FROM responses r WHERE r.inspection_id = i.id AND r.result = 'NG' AND r.follow_up_status != 'แก้ไขแล้ว') AS open_count,
       (SELECT COUNT(*) FROM responses r WHERE r.inspection_id = i.id AND r.result = 'NG' AND r.follow_up_status = 'แก้ไขแล้ว') AS resolved_count
     FROM inspections i ${where.sql}
-    ORDER BY i.inspection_date DESC, i.created_at DESC LIMIT ?
-  `).all(...where.params, limit).map((row) => ({
+    ORDER BY i.inspection_date DESC, i.created_at DESC${limitSql}
+  `).all(...params).map((row) => ({
     id: row.id,
     date: row.inspection_date,
     time: row.inspection_time,
@@ -1554,7 +1596,7 @@ app.get('/api/public/hiyari/:token', (req, res) => {
   res.set('Cache-Control', 'no-store').json({ form: { title: form.title, description: form.description } })
 })
 
-app.post('/api/public/hiyari/:token/submissions', (req, res) => {
+app.post('/api/public/hiyari/:token/submissions', hiyariUpload.array('photos', 5), async (req, res, next) => {
   const form = db.prepare('SELECT id FROM hiyari_forms WHERE public_token = ? AND is_active = 1').get(req.params.token)
   if (!form) return res.status(404).json({ error: 'ไม่พบแบบฟอร์มหรือปิดรับรายงานแล้ว' })
   const employeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
@@ -1585,13 +1627,20 @@ app.post('/api/public/hiyari/:token/submissions', (req, res) => {
     : employee.department_th || employee.department_en || ''
   const id = randomUUID()
   const submittedAt = nowIso()
-  db.prepare(`INSERT INTO hiyari_submissions
-    (id, form_id, employee_code, employee_name, department, language, report_date,
-      when_text, where_text, what_happened, suggestions, note, submitted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, form.id, employee.employee_code, employeeName, department, language, reportDate,
-      whenText, whereText, whatHappened, suggestions, note, submittedAt)
-  res.status(201).json({ ok: true, submittedAt })
+  const storedPhotos = []
+  try {
+    for (const file of req.files || []) storedPhotos.push(await persistHiyariPhoto(file))
+    db.prepare(`INSERT INTO hiyari_submissions
+      (id, form_id, employee_code, employee_name, department, language, report_date,
+        when_text, where_text, what_happened, suggestions, note, submitted_at, photos_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, form.id, employee.employee_code, employeeName, department, language, reportDate,
+        whenText, whereText, whatHappened, suggestions, note, submittedAt, JSON.stringify(storedPhotos))
+    res.status(201).json({ ok: true, submittedAt })
+  } catch (error) {
+    await Promise.allSettled(storedPhotos.map((photo) => unlink(path.join(hiyariUploadDir, photo.storedName))))
+    next(error)
+  }
 })
 
 app.get('/api/public/assessments/:token', (req, res) => {
@@ -1756,98 +1805,48 @@ app.get('/api/admin/hiyari-submissions', requireAdmin, (req, res) => {
   res.json({ submissions: rows.map(hiyariSubmissionDto) })
 })
 
+app.get('/api/admin/hiyari-submissions/export-by-employee.xlsx', requireAdmin, async (req, res, next) => {
+  try {
+    const from = String(req.query.from || '').trim()
+    const to = String(req.query.to || '').trim()
+    const validDate = (value) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+      const date = new Date(`${value}T00:00:00.000Z`)
+      return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
+    }
+    if (Boolean(from) !== Boolean(to)) return res.status(400).json({ error: 'กรุณาระบุวันที่เริ่มต้นและสิ้นสุดให้ครบ หรือเว้นว่างทั้งสองช่อง' })
+    if (from && (!validDate(from) || !validDate(to))) return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง' })
+    if (from && from > to) return res.status(400).json({ error: 'วันที่เริ่มต้นต้องไม่อยู่หลังวันที่สิ้นสุด' })
+    const rows = from
+      ? db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s
+          JOIN hiyari_forms f ON f.id = s.form_id
+          WHERE s.report_date >= ? AND s.report_date <= ?
+          ORDER BY s.employee_code COLLATE NOCASE, s.employee_name COLLATE NOCASE, s.report_date DESC, s.submitted_at DESC`).all(from, to)
+      : db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s
+          JOIN hiyari_forms f ON f.id = s.form_id
+          ORDER BY s.employee_code COLLATE NOCASE, s.employee_name COLLATE NOCASE, s.report_date DESC, s.submitted_at DESC`).all()
+    const language = ['th', 'en', 'my'].includes(String(req.query.lang || '')) ? String(req.query.lang) : 'th'
+    const buffer = await createHiyariEmployeeSummaryWorkbook(rows, hiyariUploadDir, language, { from, to })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="hiyari-reports-by-employee-${from || 'all'}${to ? `-to-${to}` : ''}.xlsx"`)
+    res.send(Buffer.from(buffer))
+  } catch (error) { next(error) }
+})
+
+app.get('/api/admin/hiyari-submissions/:id/photos/:photoId', requireAdmin, (req, res, next) => {
+  const row = db.prepare('SELECT photos_json FROM hiyari_submissions WHERE id = ?').get(req.params.id)
+  const photo = row && parseJson(row.photos_json, []).find((item) => item.id === req.params.photoId)
+  if (!photo) return res.status(404).json({ error: 'ไม่พบรูปภาพในรายงานนี้' })
+  res.type('image/jpeg').set('X-Content-Type-Options', 'nosniff')
+    .sendFile(path.join(hiyariUploadDir, path.basename(photo.storedName)), (error) => error && next(error))
+})
+
 app.get('/api/admin/hiyari-submissions/:id/export.xlsx', requireAdmin, async (req, res, next) => {
   try {
     const row = db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s
       JOIN hiyari_forms f ON f.id = s.form_id WHERE s.id = ?`).get(req.params.id)
     if (!row) return res.status(404).json({ error: 'ไม่พบรายงาน Hiyari Hat' })
-
-    const labels = {
-      th: {
-        title: 'รายงาน Hiyari Hat', sender: 'ชื่อผู้ส่ง', code: 'รหัสพนักงาน', department: 'แผนก', date: 'วันที่',
-        when: 'เมื่อไหร่', where: 'ที่ไหน', what: 'เกิดอะไรขึ้น', suggestions: 'ข้อเสนอแนะเพื่อปรับปรุง', note: 'หมายเหตุ',
-        senderSign: 'ลงชื่อ ผู้รายงาน', safetySign: 'ลงชื่อ หัวหน้าความปลอดภัย', headSign: 'ลงชื่อ หัวหน้าแผนก',
-      },
-      en: {
-        title: 'Hiyari Hat Report', sender: 'Sender name', code: 'Employee ID', department: 'Department', date: 'Date',
-        when: 'When', where: 'Where', what: 'What happened', suggestions: 'Suggestions for improvement', note: 'Note',
-        senderSign: 'Signature / Sender', safetySign: 'Signature / Safety leader', headSign: 'Signature / Department head',
-      },
-      my: {
-        title: 'ဟိယာရီ ဟတ် အစီရင်ခံစာ', sender: 'တင်ပြသူအမည်', code: 'ဝန်ထမ်းအမှတ်', department: 'ဌာန', date: 'ရက်စွဲ',
-        when: 'ဘယ်အချိန်', where: 'ဘယ်နေရာ', what: 'ဘာဖြစ်ခဲ့သလဲ', suggestions: 'တိုးတက်ကောင်းမွန်ရေး အကြံပြုချက်', note: 'မှတ်ချက်',
-        senderSign: 'လက်မှတ် / တင်ပြသူ', safetySign: 'လက်မှတ် / ဘေးကင်းရေးခေါင်းဆောင်', headSign: 'လက်မှတ် / ဌာနမှူး',
-      },
-    }[row.language]
-    const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.readFile(hiyariTemplatePath)
-    const sheet = workbook.worksheets[0]
-    const fontName = row.language === 'my' ? 'Myanmar Text' : 'Tahoma'
-    const normalFont = { name: fontName, size: 11, color: { argb: 'FF1F2937' } }
-    const dateLocale = row.language === 'th' ? 'th-TH' : row.language === 'my' ? 'my-MM-u-ca-gregory' : 'en-GB'
-    const dateText = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(new Date(`${row.report_date}T12:00:00+07:00`))
-
-    sheet.getCell('A1').value = labels.title
-    sheet.getCell('A2').value = labels.sender
-    sheet.getCell('B2').value = row.employee_name
-    sheet.getCell('A3').value = labels.code
-    sheet.getCell('B3').value = row.employee_code
-    sheet.getCell('A4').value = labels.department
-    sheet.getCell('B4').value = row.department
-    sheet.getCell('A5').value = labels.date
-    sheet.getCell('B5').value = dateText
-
-    const border = { style: 'thin', color: { argb: 'FF9CA3AF' } }
-    const sections = [
-      { label: labels.when, text: row.when_text, from: 7, to: 9 },
-      { label: labels.where, text: row.where_text, from: 10, to: 13 },
-      { label: labels.what, text: row.what_happened, from: 14, to: 18 },
-      { label: labels.suggestions, text: row.suggestions, from: 19, to: 24 },
-      { label: labels.note, text: row.note, from: 25, to: 29 },
-    ]
-    for (const section of sections) {
-      for (let rowIndex = section.from; rowIndex <= section.to; rowIndex++) sheet.getCell(rowIndex, 1).value = ''
-      sheet.getCell(section.from, 1).value = section.label
-      const range = `B${section.from}:E${section.to}`
-      sheet.mergeCells(range)
-      const cell = sheet.getCell(`B${section.from}`)
-      cell.value = section.text
-      cell.font = normalFont
-      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
-      const lineCount = section.text ? section.text.split(/\r?\n/).reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 72)), 0) : 1
-      const totalHeight = Math.max((section.to - section.from + 1) * 20.25, lineCount * 14 + 12)
-      const perRow = totalHeight / (section.to - section.from + 1)
-      for (let rowIndex = section.from; rowIndex <= section.to; rowIndex++) sheet.getRow(rowIndex).height = perRow
-      for (let rowIndex = section.from; rowIndex <= section.to; rowIndex++) {
-        for (let columnIndex = 2; columnIndex <= 5; columnIndex++) {
-          const current = sheet.getCell(rowIndex, columnIndex)
-          current.border = {
-            ...(rowIndex === section.from ? { top: border } : {}),
-            ...(rowIndex === section.to ? { bottom: border } : {}),
-            ...(columnIndex === 2 ? { left: border } : {}),
-            ...(columnIndex === 5 ? { right: border } : {}),
-          }
-        }
-      }
-      sheet.getCell(section.from, 1).alignment = { vertical: 'top', wrapText: true }
-    }
-    sheet.getCell('A31').value = labels.senderSign
-    sheet.getCell('A32').value = labels.safetySign
-    sheet.getCell('A33').value = labels.headSign
-    for (let rowIndex = 1; rowIndex <= 33; rowIndex++) {
-      for (let columnIndex = 1; columnIndex <= 5; columnIndex++) {
-        const cell = sheet.getCell(rowIndex, columnIndex)
-        if (cell.value !== null && cell.value !== undefined && cell.value !== '') cell.font = { ...cell.font, name: fontName }
-      }
-    }
-    sheet.pageSetup.fitToWidth = 1
-    sheet.pageSetup.fitToHeight = 0
-    sheet.pageSetup.fitToPage = true
-    sheet.pageSetup.printArea = 'A1:E33'
-    workbook.creator = 'Daily Safety | Y.T. Rubber'
-    workbook.title = labels.title
-    workbook.subject = `FM-SFT-42 Rev.01 · ${labels.title}`
-    const buffer = await workbook.xlsx.writeBuffer()
+    const buffer = await createHiyariWorkbook(row, hiyariUploadDir)
     const safeCode = row.employee_code.replace(/[^A-Za-z0-9_-]/g, '_')
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename="hiyari-${row.language}-${safeCode}-${row.report_date}.xlsx"`)
@@ -1925,6 +1924,81 @@ app.get('/api/admin/assessments/:id/submissions', requireAdmin, (req, res) => {
   res.json({ assessment, questions, submissions })
 })
 
+app.get('/api/admin/assessment-submissions', requireAdmin, (_req, res) => {
+  const submissions = db.prepare(`SELECT s.id, a.title AS assessment_title, s.employee_code,
+      s.employee_name, s.answers_json, s.score, s.max_score, s.submitted_at
+    FROM assessment_submissions s JOIN assessments a ON a.id = s.assessment_id
+    ORDER BY s.submitted_at DESC, a.title COLLATE NOCASE`).all().map((row) => ({
+      id: row.id, assessmentTitle: row.assessment_title,
+      employeeCode: row.employee_code, employeeName: row.employee_name,
+      answers: parseJson(row.answers_json, []), score: row.score, maxScore: row.max_score,
+      submittedAt: row.submitted_at,
+    }))
+  res.set('Cache-Control', 'no-store').json({ submissions })
+})
+
+app.get('/api/admin/assessment-submissions/export.xlsx', requireAdmin, async (_req, res, next) => {
+  try {
+    const rows = db.prepare(`SELECT s.id, a.title AS assessment_title, s.employee_code, s.employee_name,
+        s.answers_json, s.score, s.max_score, s.submitted_at
+      FROM assessment_submissions s JOIN assessments a ON a.id = s.assessment_id
+      ORDER BY s.submitted_at DESC, a.title COLLATE NOCASE LIMIT 20001`).all()
+    if (rows.length > 20000) return res.status(413).json({ error: 'รายงานมีมากกว่า 20,000 รายการ กรุณาส่งออกข้อมูลเป็นช่วง' })
+
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = 'Daily Safety | Y.T. Rubber'
+    workbook.created = new Date()
+    workbook.subject = 'Assessment submissions'
+    workbook.title = 'Assessment submissions'
+
+    const submissions = workbook.addWorksheet('Submissions', { views: [{ showGridLines: false }] })
+    submissions.columns = [
+      { header: 'Assessment', key: 'assessment', width: 38 },
+      { header: 'Submitted at', key: 'submittedAt', width: 24 },
+      { header: 'Employee name', key: 'employeeName', width: 28 },
+      { header: 'Employee code', key: 'employeeCode', width: 18 },
+      { header: 'Score', key: 'score', width: 12 },
+      { header: 'Maximum score', key: 'maxScore', width: 16 },
+    ]
+    submissions.addRows(rows.map((row) => ({
+      assessment: row.assessment_title, submittedAt: row.submitted_at, employeeName: row.employee_name,
+      employeeCode: row.employee_code, score: row.score, maxScore: row.max_score,
+    })))
+
+    const answers = workbook.addWorksheet('Answers', { views: [{ showGridLines: false }] })
+    answers.columns = [
+      { header: 'Assessment', key: 'assessment', width: 38 },
+      { header: 'Submitted at', key: 'submittedAt', width: 24 },
+      { header: 'Employee name', key: 'employeeName', width: 28 },
+      { header: 'Employee code', key: 'employeeCode', width: 18 },
+      { header: 'Question', key: 'question', width: 54 },
+      { header: 'Answer', key: 'answer', width: 42 },
+      { header: 'Scored', key: 'scored', width: 12 },
+      { header: 'Correct', key: 'correct', width: 12 },
+    ]
+    for (const row of rows) {
+      for (const answer of parseJson(row.answers_json, [])) {
+        answers.addRow({
+          assessment: row.assessment_title, submittedAt: row.submitted_at,
+          employeeName: row.employee_name, employeeCode: row.employee_code,
+          question: answer.prompt || '', answer: answer.answer || '',
+          scored: answer.isScored ? 'Yes' : 'No', correct: answer.isScored ? (answer.isCorrect ? 'Yes' : 'No') : '',
+        })
+      }
+    }
+    for (const sheet of [submissions, answers]) {
+      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+      sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF105C54' } }
+      sheet.views = [{ state: 'frozen', ySplit: 1, showGridLines: false }]
+      sheet.autoFilter = { from: 'A1', to: `${sheet.getColumn(sheet.columnCount).letter}${Math.max(sheet.rowCount, 1)}` }
+    }
+    const buffer = await workbook.xlsx.writeBuffer()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="assessment-submissions.xlsx"')
+    res.send(Buffer.from(buffer))
+  } catch (error) { next(error) }
+})
+
 app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res, next) => {
   try {
     const assessment = db.prepare('SELECT id, title FROM assessments WHERE id = ?').get(req.params.id)
@@ -1938,21 +2012,90 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
     workbook.subject = 'Assessment submissions'
     workbook.title = assessment.title
     const summary = workbook.addWorksheet('Summary', { views: [{ showGridLines: false }] })
-    summary.columns = [{ width: 34 }, { width: 24 }]
-    summary.addRow(['Assessment report', assessment.title])
-    summary.addRow(['Total submissions', rows.length])
-    summary.addRow(['Employees', new Set(rows.map((row) => row.employee_code)).size])
-    summary.addRow(['Incorrect answers', rows.reduce((count, row) => count + parseJson(row.answers_json, []).filter((answer) => answer.isScored && !answer.isCorrect).length, 0)])
-    summary.addRow(['Exported at (+Bangkok)', formatBangkokTimestamp(nowIso())])
+    summary.columns = [{ width: 22 }, { width: 22 }, { width: 22 }, { width: 22 }]
+    summary.mergeCells('A1:D1')
+    summary.getCell('A1').value = 'ASSESSMENT SUMMARY'
+    summary.getCell('A1').font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: 'FFFFFFFF' } }
+    summary.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF105C54' } }
+    summary.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+    summary.getRow(1).height = 38
+    summary.mergeCells('A2:D2')
+    summary.getCell('A2').value = assessment.title
+    summary.getCell('A2').font = { name: 'Aptos', size: 12, bold: true, color: { argb: 'FF23423F' } }
+    summary.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF3F1' } }
+    summary.getCell('A2').alignment = { vertical: 'middle', indent: 1, wrapText: true }
+    summary.getRow(2).height = 30
+
+    const incorrectCount = rows.reduce((count, row) => count + parseJson(row.answers_json, []).filter((answer) => answer.isScored && !answer.isCorrect).length, 0)
+    const employeeCount = new Set(rows.map((row) => row.employee_code)).size
+    const exportedAt = formatBangkokParts(nowIso())
+    const border = { style: 'thin', color: { argb: 'FFD5E3E0' } }
+    const card = (labelRange, valueRange, label, value) => {
+      summary.mergeCells(labelRange)
+      summary.mergeCells(valueRange)
+      const labelCell = summary.getCell(labelRange.split(':')[0])
+      const valueCell = summary.getCell(valueRange.split(':')[0])
+      labelCell.value = label
+      labelCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF4E6965' } }
+      labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F6F5' } }
+      labelCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
+      valueCell.value = value
+      valueCell.font = { name: 'Aptos Display', size: 22, bold: true, color: { argb: 'FF105C54' } }
+      valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFCFC' } }
+      valueCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
+      for (const range of [labelRange, valueRange]) {
+        const [from, to] = range.split(':').map((address) => summary.getCell(address).address)
+        const start = summary.getCell(from)
+        const end = summary.getCell(to)
+        for (let rowIndex = start.row; rowIndex <= end.row; rowIndex += 1) {
+          for (let columnIndex = start.col; columnIndex <= end.col; columnIndex += 1) summary.getCell(rowIndex, columnIndex).border = { top: border, bottom: border, left: border, right: border }
+        }
+      }
+    }
+    card('A4:B4', 'A5:B6', 'Total submissions', rows.length)
+    card('C4:D4', 'C5:D6', 'Employees', employeeCount)
+    card('A8:B8', 'A9:B10', 'Incorrect answers', incorrectCount)
+    summary.getCell('C8').value = 'Exported time'
+    summary.getCell('D8').value = 'Exported date'
+    for (const ref of ['C8', 'D8']) {
+      const cell = summary.getCell(ref)
+      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF4E6965' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F6F5' } }
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+      cell.border = { top: border, bottom: border, left: border, right: border }
+    }
+    summary.mergeCells('C9:C10')
+    summary.mergeCells('D9:D10')
+    summary.getCell('C9').value = exportedAt.time
+    summary.getCell('D9').value = exportedAt.date
+    for (const ref of ['C9', 'D9']) {
+      const cell = summary.getCell(ref)
+      cell.font = { name: 'Aptos Display', size: 15, bold: true, color: { argb: 'FF105C54' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFCFC' } }
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+      cell.border = { top: border, bottom: border, left: border, right: border }
+    }
+    summary.getRow(4).height = 25
+    summary.getRow(5).height = 27
+    summary.getRow(6).height = 27
+    summary.getRow(8).height = 28
+    summary.getRow(9).height = 27
+    summary.getRow(10).height = 27
+    summary.mergeCells('A12:D12')
+    summary.getCell('A12').value = 'Y.T. RUBBER  ·  Daily Safety System'
+    summary.getCell('A12').font = { name: 'Aptos', size: 9, color: { argb: 'FF728481' }, italic: true }
+    summary.getCell('A12').alignment = { horizontal: 'right' }
+    summary.getRow(12).height = 22
+    summary.pageSetup = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
     const submissions = workbook.addWorksheet('Submissions', { views: [{ state: 'frozen', ySplit: 1, showGridLines: false }] })
-    const submissionHeaders = ['Submitted at (+Bangkok)', 'Employee ID', 'Employee name', 'Score', 'Max score']
-    submissions.columns = submissionHeaders.map((header, index) => ({ header, key: `col${index}`, width: index === 0 ? 45 : index < 3 ? 24 : 14 }))
-    submissions.addRows(rows.map((row) => [formatBangkokTimestamp(row.submitted_at), row.employee_code, row.employee_name, row.score, row.max_score]))
+    const submissionHeaders = ['Submitted time', 'Submitted date', 'Employee ID', 'Employee name', 'Score', 'Max score']
+    submissions.columns = submissionHeaders.map((header, index) => ({ header, key: `col${index}`, width: [16, 18, 18, 26, 12, 12][index] }))
+    submissions.addRows(rows.map((row) => { const { time, date } = formatBangkokParts(row.submitted_at); return [time, date, row.employee_code, row.employee_name, row.score, row.max_score] }))
     styleReportSheet(submissions, submissionHeaders.length, rows.length)
 
     const wrongAnswers = workbook.addWorksheet('Incorrect answers', { views: [{ state: 'frozen', ySplit: 1, showGridLines: false }] })
-    const wrongHeaders = ['Submitted at (+Bangkok)', 'Employee ID', 'Employee name', 'Score', 'Max score', 'Question', 'Submitted answer', 'Correct answer']
-    wrongAnswers.columns = wrongHeaders.map((header, index) => ({ header, key: `col${index}`, width: [45, 18, 26, 12, 12, 42, 30, 30][index] }))
+    const wrongHeaders = ['Submitted time', 'Submitted date', 'Employee ID', 'Employee name', 'Score', 'Max score', 'Question', 'Submitted answer', 'Correct answer']
+    wrongAnswers.columns = wrongHeaders.map((header, index) => ({ header, key: `col${index}`, width: [16, 18, 18, 26, 12, 12, 42, 30, 30][index] }))
     const questionById = new Map(questions.map((question) => [question.id, question]))
     const incorrectRows = []
     for (const row of rows) {
@@ -1960,14 +2103,15 @@ app.get('/api/admin/assessments/:id/export.xlsx', requireAdmin, async (req, res,
         const question = questionById.get(answer.questionId)
         if (!question || !answer.isScored || answer.isCorrect) continue
         const options = parseJson(question.options_json, [])
+        const { time, date } = formatBangkokParts(row.submitted_at)
         incorrectRows.push([
-          formatBangkokTimestamp(row.submitted_at), row.employee_code, row.employee_name, row.score, row.max_score,
+          time, date, row.employee_code, row.employee_name, row.score, row.max_score,
           question.prompt, answer.answer || '', options[question.correct_option] ?? '',
         ])
       }
     }
     wrongAnswers.addRows(incorrectRows)
-    if (!incorrectRows.length) wrongAnswers.addRow(['No incorrect answers', '', '', '', '', '', '', ''])
+    if (!incorrectRows.length) wrongAnswers.addRow(['No incorrect answers', '', '', '', '', '', '', '', ''])
     styleReportSheet(wrongAnswers, wrongHeaders.length, incorrectRows.length)
     const buffer = await workbook.xlsx.writeBuffer()
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -2234,6 +2378,49 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
 app.use('/api', (_req, res) => res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' }))
 
 const distDir = path.join(appRoot, 'dist')
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
+}
+
+async function sendPageWithMetadata(res, next, { title, description, url }) {
+  try {
+    let html = await readFile(path.join(distDir, 'index.html'), 'utf8')
+    html = html.replace(/<title>[^<]*<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+      .replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i, `<meta name="description" content="${escapeHtml(description)}" />`)
+    const metadata = [
+      ['og:title', title], ['og:description', description], ['og:type', 'website'], ['og:url', url],
+      ['twitter:card', 'summary'], ['twitter:title', title], ['twitter:description', description],
+    ].map(([property, content]) => `<meta property="${property}" content="${escapeHtml(content)}" />`).join('')
+    html = html.replace('</head>', `${metadata}</head>`)
+    res.type('html').send(html)
+  } catch (error) { next(error) }
+}
+
+app.get(/^\/(assessment|training|hiyari)(?:\/.*)?$/, async (req, res, next) => {
+  const route = req.path.split('/').filter(Boolean)
+  const type = route[0]
+  let token = ''
+  try { token = decodeURIComponent(route.at(-1) || '') } catch { return res.status(404).send('Not found') }
+  const lookups = {
+    assessment: { sql: 'SELECT title, description FROM assessments WHERE public_token = ? AND is_published = 1', label: 'แบบประเมินความปลอดภัย' },
+    training: { sql: 'SELECT title, description FROM training_materials WHERE public_token = ? AND is_active = 1', label: 'สื่ออบรมความปลอดภัย' },
+    hiyari: { sql: 'SELECT title, description FROM hiyari_forms WHERE public_token = ? AND is_active = 1', label: 'Hiyari Hat' },
+  }
+  const config = lookups[type]
+  const item = token ? db.prepare(config.sql).get(token) : null
+  const title = item?.title || config.label
+  const description = item?.description || `เปิดแบบฟอร์ม ${title} ในระบบความปลอดภัย Y.T. Rubber`
+  await sendPageWithMetadata(res, next, { title: `${title} | ${config.label} | Y.T. Rubber`, description, url: `${req.protocol}://${req.get('host')}${req.originalUrl}` })
+})
+
+app.get('/daily-inspection', async (req, res, next) => {
+  await sendPageWithMetadata(res, next, {
+    title: 'แบบตรวจความปลอดภัยประจำวัน | Daily Safety | Y.T. Rubber',
+    description: 'เปิดแบบตรวจความปลอดภัยประจำวัน Y.T. Rubber',
+    url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+  })
+})
+
 app.use(express.static(distDir))
 app.get(/.*/, (req, res, next) => {
   if (req.path.startsWith('/api/')) return next()
@@ -2243,9 +2430,10 @@ app.get(/.*/, (req, res, next) => {
 app.use((error, req, res, _next) => {
   if (error instanceof multer.MulterError) {
     const isTrainingUpload = req.path.startsWith('/api/admin/training-materials')
+    const isHiyariUpload = req.path.startsWith('/api/public/hiyari/')
     const message = error.code === 'LIMIT_FILE_SIZE'
       ? (isTrainingUpload ? 'ไฟล์สื่ออบรมมีขนาดเกิน 25 MB' : 'รูปภาพมีขนาดเกิน 8 MB ต่อรูป')
-      : (isTrainingUpload ? 'แนบไฟล์สื่ออบรมได้ครั้งละ 1 ไฟล์' : 'แนบรูปภาพได้ไม่เกิน 20 รูปต่อครั้ง')
+      : (isTrainingUpload ? 'แนบไฟล์สื่ออบรมได้ครั้งละ 1 ไฟล์' : isHiyariUpload ? 'แนบรูปภาพ Hiyari Hat ได้ไม่เกิน 5 รูปต่อรายงาน' : 'แนบรูปภาพได้ไม่เกิน 20 รูปต่อครั้ง')
     return res.status(400).json({ error: message })
   }
   if (error.status === 400) return res.status(400).json({ error: error.message })

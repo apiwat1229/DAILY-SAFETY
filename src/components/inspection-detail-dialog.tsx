@@ -38,23 +38,23 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated }: Pr
 
   return <Dialog open={Boolean(id)} onOpenChange={onOpenChange}>
     <DialogContent className="grid max-h-[92dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0 sm:max-w-5xl">
-      <DialogHeader className="border-b border-[#edf0f0] px-5 py-5 pr-12 sm:px-7 sm:pr-14">
-        <div className="flex items-center gap-2"><div className="grid size-9 place-items-center rounded-xl bg-[#e9f4f1] text-primary"><Camera size={18} /></div><div><DialogTitle className="text-base">{t('รายละเอียดการตรวจ')}</DialogTitle><DialogDescription className="mt-1 text-xs">{t('ดูผลตรวจ หลักฐาน และความคืบหน้าการแก้ไข')}</DialogDescription></div></div>
+      <DialogHeader className="border-b border-border-subtle px-5 py-5 pr-12 sm:px-7 sm:pr-14">
+        <div className="flex items-center gap-2"><div className="grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Camera size={18} /></div><div><DialogTitle className="text-base">{t('รายละเอียดการตรวจ')}</DialogTitle><DialogDescription className="mt-1 text-xs">{t('ดูผลตรวจ หลักฐาน และความคืบหน้าการแก้ไข')}</DialogDescription></div></div>
       </DialogHeader>
       {loading || !inspection ? <div className="grid min-h-48 place-items-center text-sm text-muted-foreground"><span className="inline-flex items-center gap-2"><LoaderCircle className="animate-spin" size={16} /> {t('กำลังโหลดรายละเอียด…')}</span></div> : <div className="min-h-0 space-y-5 overflow-y-auto px-4 py-5 sm:px-7">
-        <div className="grid gap-3 rounded-xl bg-[#f7f9f9] p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 rounded-xl bg-surface-subtle p-4 sm:grid-cols-2 lg:grid-cols-4">
           <Meta label={t('วันและเวลาตรวจ')} value={`${formatDate(inspection.date, language)} · ${inspection.time || '—'} ${t('น.')}`} />
           <Meta label={t('ผู้ตรวจ')} value={inspection.inspector} />
           <Meta label={t('แผนก / พื้นที่')} value={inspection.area} />
           <Meta label={t('กะ / รหัส')} value={`${inspection.shift} · ${inspection.employeeCode || '—'}`} />
         </div>
-        <div className="flex items-center justify-between"><div><h3 className="text-sm font-semibold">{t('ผลตรวจรายหัวข้อ')}</h3><p className="mt-1 text-xs text-muted-foreground">{t('บันทึกเมื่อ')} {formatDateTime(inspection.createdAt, language)}</p></div><div className="flex gap-2"><Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">NG {inspection.items.filter((item) => item.result === 'NG').length}</Badge><Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">OK {inspection.items.filter((item) => item.result === 'OK').length}</Badge></div></div>
+        <div className="flex items-center justify-between"><div><h3 className="text-sm font-semibold">{t('ผลตรวจรายหัวข้อ')}</h3><p className="mt-1 text-xs text-muted-foreground">{t('บันทึกเมื่อ')} {formatDateTime(inspection.createdAt, language)}</p></div><div className="flex gap-2"><Badge variant="outline" className="border-destructive/25 bg-destructive/10 text-destructive">NG {inspection.items.filter((item) => item.result === 'NG').length}</Badge><Badge variant="outline" className="border-success/25 bg-success/10 text-success">OK {inspection.items.filter((item) => item.result === 'OK').length}</Badge></div></div>
         <div className="space-y-2.5">{inspection.items.map((item) => {
           const isAssignedToUser = item.responsibleUserId === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase())
           const canManage = user.role === 'admin' || (isAssignedToUser && item.followUpStatus !== 'แก้ไขแล้ว')
           return <ResponseCard key={item.id} item={item} canManage={canManage} manageLabel={user.role === 'admin' ? 'จัดการงาน' : 'อัปเดตงานของฉัน'} onManage={() => setSelectedItem(item)} onPhotoClick={setSelectedPhoto} />
         })}</div>
-        <div className="flex justify-end border-t border-[#edf0f0] pt-4"><Button variant="outline" onClick={() => onOpenChange(false)}>{t('ปิด')}</Button></div>
+        <div className="flex justify-end border-t border-border-subtle pt-4"><Button variant="outline" onClick={() => onOpenChange(false)}>{t('ปิด')}</Button></div>
       </div>}
       <IssueUpdateDialog item={selectedItem} user={user} onOpenChange={(open) => { if (!open) setSelectedItem(null) }} onSaved={handleSaved} />
     </DialogContent>
@@ -69,13 +69,13 @@ function Meta({ label, value }: { label: string; value: string }) {
 function ResponseCard({ item, canManage, manageLabel, onManage, onPhotoClick }: { item: InspectionResponse; canManage: boolean; manageLabel: string; onManage: () => void; onPhotoClick: (photo: InspectionResponse['photos'][number]) => void }) {
   const { language, t } = useI18n()
   const isNg = item.result === 'NG'
-  const statusClass = item.followUpStatus === 'แก้ไขแล้ว' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : item.followUpStatus === 'กำลังแก้ไข' ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-amber-200 bg-amber-50 text-amber-700'
-  return <Card className={`rounded-xl p-4 ${isNg ? 'border-[#f1d6d1] bg-[#fffdfc]' : 'border-[#ebefef] bg-white'}`}>
+  const statusClass = item.followUpStatus === 'แก้ไขแล้ว' ? 'border-success/25 bg-success/10 text-success' : item.followUpStatus === 'กำลังแก้ไข' ? 'border-info/20 bg-info/10 text-info' : 'border-warning/25 bg-warning/10 text-warning'
+  return <Card className={`rounded-xl p-4 ${isNg ? 'border-destructive/20 bg-card' : 'border-border bg-white'}`}>
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div className="flex min-w-0 items-start gap-3"><span className={`grid size-7 shrink-0 place-items-center rounded-lg text-xs font-semibold ${isNg ? 'bg-red-50 text-red-700' : 'bg-[#f0f4f3] text-muted-foreground'}`}>{item.order}</span><div className="min-w-0"><p className="text-xs font-semibold">{t(item.title)}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t(item.description)}</p></div></div>
-      <Badge variant="outline" className={isNg ? 'border-red-200 bg-red-50 text-red-700' : item.result === 'OK' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-[#e4e9e8] bg-[#f6f8f8] text-muted-foreground'}>{item.result}</Badge>
+      <div className="flex min-w-0 items-start gap-3"><span className={`grid size-7 shrink-0 place-items-center rounded-lg text-xs font-semibold ${isNg ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'}`}>{item.order}</span><div className="min-w-0"><p className="text-xs font-semibold">{t(item.title)}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t(item.description)}</p></div></div>
+      <Badge variant="outline" className={isNg ? 'border-destructive/25 bg-destructive/10 text-destructive' : item.result === 'OK' ? 'border-success/25 bg-success/10 text-success' : 'border-border bg-surface-subtle text-muted-foreground'}>{item.result}</Badge>
     </div>
-    {isNg && <div className="ml-10 mt-3 space-y-3 border-l-2 border-[#f0d4ce] pl-3">
+    {isNg && <div className="ml-10 mt-3 space-y-3 border-l-2 border-destructive/20 pl-3">
       <p className="text-xs leading-5 text-foreground">{item.issueDetails}</p>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={12} /> {item.responsible}</span>{item.dueDate && <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {t('กำหนด')} {formatDate(item.dueDate, language)}</span>}{item.resolutionNote && <span className="inline-flex items-center gap-1"><Check size={12} /> {item.resolutionNote}</span>}</div>
       <div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="outline" className={statusClass}>{t(item.followUpStatus)}</Badge>{canManage && <Button variant="outline" size="sm" onClick={onManage} className="h-9 gap-1.5 text-xs"><ChevronRight size={15} /> {t(manageLabel)}</Button>}</div>
@@ -166,7 +166,7 @@ function IssueUpdateDialog({ item, user, onOpenChange, onSaved }: { item: Inspec
           <div className="grid gap-2"><Label htmlFor="follow-due">{t('กำหนดเสร็จ')}</Label><DatePicker id="follow-due" ariaLabel={t('กำหนดเสร็จ')} value={dueDate} onChange={setDueDate} clearable placeholder={t('เลือกวัน')} /></div>
         </> : <div className="grid gap-2 sm:grid-cols-2"><div><Label>{t('ผู้รับผิดชอบ')}</Label><p className="mt-2 rounded-md border bg-muted px-3 py-2 text-sm">{item?.responsible}</p></div><div><Label>{t('กำหนดเสร็จ')}</Label><p className="mt-2 rounded-md border bg-muted px-3 py-2 text-sm">{item?.dueDate ? formatDate(item.dueDate, language) : '—'}</p></div></div>}
         <div className="grid gap-2"><Label htmlFor="resolution-note">{t('บันทึกการแก้ไข')}</Label><Textarea id="resolution-note" value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder={t('อธิบายวิธีแก้ไขหรือสิ่งที่ต้องตรวจซ้ำ')} /></div>
-        <div className="grid gap-2"><Label htmlFor="after-photos">{t('รูปหลังแก้ไข')}</Label><label htmlFor="after-photos" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[#cfddda] bg-[#f7faf9] p-3 text-xs text-muted-foreground hover:border-primary/50"><ImagePlus size={18} className="text-primary" /><span>{files.length ? `${t('เลือกแล้ว')} ${files.length} ${t('รูป')}` : t('เพิ่มรูปจากกล้องหรืออุปกรณ์')}</span><input id="after-photos" type="file" accept="image/*" multiple capture="environment" onChange={(event) => setFiles(Array.from(event.target.files || []))} className="sr-only" /></label>{item?.photos.some((photo) => photo.type === 'after') && <p className="text-[10px] text-muted-foreground">{t('มีรูปหลังแก้ไขบันทึกไว้แล้ว')}</p>}</div>
+        <div className="grid gap-2"><Label htmlFor="after-photos">{t('รูปหลังแก้ไข')}</Label><label htmlFor="after-photos" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-surface-subtle p-3 text-xs text-muted-foreground hover:border-primary/50"><ImagePlus size={18} className="text-primary" /><span>{files.length ? `${t('เลือกแล้ว')} ${files.length} ${t('รูป')}` : t('เพิ่มรูปจากกล้องหรืออุปกรณ์')}</span><input id="after-photos" type="file" accept="image/*" multiple capture="environment" onChange={(event) => setFiles(Array.from(event.target.files || []))} className="sr-only" /></label>{item?.photos.some((photo) => photo.type === 'after') && <p className="text-[10px] text-muted-foreground">{t('มีรูปหลังแก้ไขบันทึกไว้แล้ว')}</p>}</div>
         <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy || (user.role === 'admin' && !responsibleUserId)} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึก')}</Button></div>
       </form>
     </DialogContent>

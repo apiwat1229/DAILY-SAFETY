@@ -18,6 +18,9 @@ type Props = {
   maxDate?: string
   placeholder?: string
   ariaLabel?: string
+  language?: 'th' | 'en'
+  translatePlaceholder?: boolean
+  ariaInvalid?: boolean
   className?: string
   disabled?: boolean
   clearable?: boolean
@@ -37,16 +40,21 @@ function formatLocalDate(value?: Date) {
   return `${year}-${month}-${day}`
 }
 
-export function DatePicker({ id, value, onChange, minDate, maxDate, placeholder = 'เลือกวันที่', ariaLabel, className, disabled, clearable = false }: Props) {
+export function DatePicker({ id, value, onChange, minDate, maxDate, placeholder = 'เลือกวันที่', ariaLabel, language: languageOverride, translatePlaceholder = true, ariaInvalid = false, className, disabled, clearable = false }: Props) {
   const [open, setOpen] = useState(false)
-  const { language, t } = useI18n()
+  const { language: appLanguage, t } = useI18n()
+  const language = languageOverride ?? appLanguage
   const selected = parseLocalDate(value)
+  const [calendarMonth, setCalendarMonth] = useState(() => selected || parseLocalDate(maxDate || '') || parseLocalDate(minDate || '') || new Date())
   const bounds: Matcher[] = [
     ...(minDate && parseLocalDate(minDate) ? [{ before: parseLocalDate(minDate)! }] : []),
     ...(maxDate && parseLocalDate(maxDate) ? [{ after: parseLocalDate(maxDate)! }] : []),
   ]
 
-  return <Popover open={open} onOpenChange={setOpen}>
+  return <Popover open={open} onOpenChange={(nextOpen) => {
+    if (nextOpen) setCalendarMonth(selected || parseLocalDate(maxDate || '') || parseLocalDate(minDate || '') || new Date())
+    setOpen(nextOpen)
+  }}>
     <PopoverTrigger asChild>
       <Button
         id={id}
@@ -54,25 +62,34 @@ export function DatePicker({ id, value, onChange, minDate, maxDate, placeholder 
         variant="outline"
         disabled={disabled}
         aria-label={ariaLabel || placeholder}
+        aria-invalid={ariaInvalid || undefined}
         aria-haspopup="dialog"
-        className={cn('h-10 w-full justify-start gap-2 font-normal', !selected && 'text-muted-foreground', className)}
+        aria-expanded={open}
+        className={cn('h-10 w-full justify-start gap-2 font-normal', !selected && 'text-muted-foreground', ariaInvalid && 'border-destructive ring-2 ring-destructive/20', className)}
       >
         <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 truncate text-left">{selected ? formatDate(value, language) : t(placeholder)}</span>
+        <span className="flex-1 truncate text-left">{selected ? formatDate(value, language) : translatePlaceholder ? t(placeholder) : placeholder}</span>
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" className="w-auto p-0">
       <Calendar
         locale={language === 'th' ? th : enUS}
+        formatters={{
+          formatCaption: (month) => new Intl.DateTimeFormat(
+            language === 'th' ? 'th-TH-u-ca-buddhist' : 'en-GB',
+            { month: 'long', year: 'numeric' },
+          ).format(month),
+        }}
         mode="single"
+        month={calendarMonth}
+        onMonthChange={setCalendarMonth}
         selected={selected}
         onSelect={(day) => {
           onChange(formatLocalDate(day))
           if (day) setOpen(false)
         }}
         disabled={bounds}
-        defaultMonth={selected || parseLocalDate(maxDate || '') || new Date()}
       />
       {clearable && value && <div className="flex justify-end border-t border-border p-2">
         <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => { onChange(''); setOpen(false) }}>

@@ -67,10 +67,10 @@ export function DashboardPage({ user, onPage }: Props) {
   ] as const
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div><p className="text-sm font-medium text-primary">{t('รายงานประจำวัน')}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{t('ภาพรวมการตรวจ')}</h1><p className="mt-1 text-sm text-muted-foreground">{t('ดูผลตรวจ รายการ NG และความคืบหน้าการแก้ไข')}</p></div>
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e4eaea] bg-white p-2">
+        <div><p className="text-sm font-medium text-primary">{t('รายงานประจำวัน')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('ภาพรวมการตรวจ')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('ดูผลตรวจ รายการ NG และความคืบหน้าการแก้ไข')}</p></div>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-2">
           <DatePicker ariaLabel={t('เริ่มวันที่')} value={from} maxDate={to} onChange={setFrom} className="h-8 w-[150px] border-0 bg-transparent px-1 text-xs shadow-none" placeholder={t('เริ่มวันที่')} />
           <span className="text-xs text-muted-foreground">{t('ถึง')}</span>
           <DatePicker ariaLabel={t('ถึงวันที่')} value={to} minDate={from} maxDate={today} onChange={setTo} className="h-8 w-[150px] border-0 bg-transparent px-1 text-xs shadow-none" placeholder={t('ถึงวันที่')} />
@@ -78,44 +78,44 @@ export function DashboardPage({ user, onPage }: Props) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(({ title, value, note, icon: Icon, tone }) => <Card key={title} className="metric-card rounded-2xl border-[#e8eeee]">
-          <CardContent className="flex items-start justify-between p-5">
-            <div><p className="text-xs font-medium text-muted-foreground">{title}</p><p className="mt-3 text-3xl font-semibold tracking-tight">{loading ? '—' : value.toLocaleString('th-TH')}</p><p className="mt-2 text-[11px] text-muted-foreground">{note}</p></div>
-            <div className={`grid size-10 place-items-center rounded-xl ${tone === 'red' ? 'bg-red-50 text-red-600' : tone === 'amber' ? 'bg-amber-50 text-amber-700' : tone === 'green' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#eaf4f1] text-primary'}`}><Icon size={18} /></div>
+        {metrics.map(({ title, value, note, icon: Icon, tone }) => <Card key={title} className="metric-card rounded-2xl border-border">
+          <CardContent className="flex items-start justify-between p-4">
+            <div><p className="text-xs font-medium text-muted-foreground">{title}</p><p className="mt-1.5 text-2xl font-semibold tracking-tight">{loading ? '—' : value.toLocaleString('th-TH')}</p><p className="mt-1 text-[11px] text-muted-foreground">{note}</p></div>
+            <div className={`grid size-9 place-items-center rounded-xl ${tone === 'red' ? 'bg-destructive/10 text-destructive' : tone === 'amber' ? 'bg-warning/10 text-warning' : tone === 'green' ? 'bg-success/10 text-success' : 'bg-secondary text-primary'}`}><Icon size={17} /></div>
           </CardContent>
         </Card>)}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_.85fr]">
-        <Card className="rounded-2xl border-[#e8eeee]">
+        <Card className="rounded-2xl border-border">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div><CardTitle className="text-[15px]">{t('ผลตรวจในแต่ละวัน')}</CardTitle><CardDescription className="mt-1 text-xs">{t('จำนวนผลตรวจแยกตามสถานะ · 7 วันล่าสุด')}</CardDescription></div>
-            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 pt-1 text-[10px] text-muted-foreground"><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-emerald-600" /> OK</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-[#e77c68]" /> NG</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-slate-400" /> N/A</span></div>
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 pt-1 text-[10px] text-muted-foreground"><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-success" /> OK</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-destructive" /> NG</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-info" /> N/A</span></div>
           </CardHeader>
           <CardContent className="pt-4">
-            {data?.stats.checked ? <div className="grid h-[202px] grid-cols-7 items-end gap-2 border-b border-[#edf0f0] pb-2 sm:gap-5">
+            {data?.stats.checked ? <div className="grid h-[202px] grid-cols-7 items-end gap-2 border-b border-border-subtle pb-2 sm:gap-5">
               {trend.map((point) => {
                 const total = point.ok + point.ng + point.na
                 const height = total ? Math.max(24, (total / maxBar) * 128) : 4
                 const segments = [
-                  { key: 'ok', count: point.ok, color: 'bg-emerald-600', label: 'OK' },
-                  { key: 'ng', count: point.ng, color: 'bg-[#e77c68]', label: 'NG' },
-                  { key: 'na', count: point.na, color: 'bg-slate-400', label: 'N/A' },
+                  { key: 'ok', count: point.ok, color: 'bg-success', label: 'OK' },
+                  { key: 'ng', count: point.ng, color: 'bg-destructive', label: 'NG' },
+                  { key: 'na', count: point.na, color: 'bg-info', label: 'N/A' },
                 ]
                 return <div key={point.date} className="flex h-full min-w-0 flex-col items-center justify-end gap-1.5" title={`${point.ok} OK · ${point.ng} NG · ${point.na} N/A`}>
                   <span className="h-4 text-[10px] font-semibold tabular-nums text-foreground">{total || ''}</span>
-                  <div className="flex w-full max-w-[36px] flex-col-reverse overflow-hidden rounded-t-md bg-[#f0f3f3]" style={{ height }} aria-label={`${formatDate(point.date, language)}: ${point.ok} OK, ${point.ng} NG, ${point.na} N/A`}>
+                  <div className="flex w-full max-w-[36px] flex-col-reverse overflow-hidden rounded-t-md bg-muted" style={{ height }} aria-label={`${formatDate(point.date, language)}: ${point.ok} OK, ${point.ng} NG, ${point.na} N/A`}>
                     {segments.map((segment) => segment.count > 0 ? <div key={segment.key} className={`flex min-h-0 w-full items-center justify-center overflow-hidden text-[9px] font-semibold leading-none text-white ${segment.color}`} style={{ height: `${(segment.count / total) * 100}%` }}><span>{(segment.count / total) * height >= 17 ? segment.count : null}</span></div> : null)}
                   </div>
                   <span className="text-[10px] text-muted-foreground">{new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', { weekday: 'short', timeZone: 'Asia/Bangkok' }).format(new Date(`${point.date}T12:00:00+07:00`))}</span>
                 </div>
               })}
-            </div> : <div className="grid h-[190px] place-items-center rounded-xl border border-dashed border-[#dfe7e6] bg-[#fafcfc] text-center"><div><div className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-[#edf5f3] text-primary"><Activity size={17} /></div><p className="text-xs font-medium">{t('ยังไม่มีข้อมูลในช่วงวันที่นี้')}</p><p className="mt-1 text-[11px] text-muted-foreground">{t('ข้อมูลจะแสดงหลังมีการส่งแบบตรวจ')}</p></div></div>}
+            </div> : <div className="grid h-[190px] place-items-center rounded-xl border border-dashed border-border bg-surface-subtle text-center"><div><div className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-secondary text-primary"><Activity size={17} /></div><p className="text-xs font-medium">{t('ยังไม่มีข้อมูลในช่วงวันที่นี้')}</p><p className="mt-1 text-[11px] text-muted-foreground">{t('ข้อมูลจะแสดงหลังมีการส่งแบบตรวจ')}</p></div></div>}
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>{formatDate(from, language)} – {formatDate(to, language)}</span><Button variant="link" size="sm" onClick={() => onPage('inspections')} className="h-auto gap-1 p-0 text-xs">{t('ดูรายการตรวจ')} <ArrowRight size={14} /></Button></div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-[#e8eeee]">
+        <Card className="rounded-2xl border-border">
           <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between">
             <div><CardTitle className="text-[15px]">{t('หัวข้อที่พบปัญหาบ่อย')}</CardTitle><CardDescription className="mt-1 text-xs">{t(selectedResult === 'NG' ? 'เรียงตามจำนวนรายการ NG' : 'เรียงตามจำนวนรายการ N/A')}</CardDescription></div>
             <div className="flex w-full items-center gap-2 sm:w-auto"><span className="shrink-0 text-xs text-muted-foreground">{t('แสดงสถานะ')}</span><Select value={selectedResult} onValueChange={(value: 'NG' | 'N/A') => setSelectedResult(value)}><SelectTrigger aria-label={t('แสดงสถานะ')} className="h-10 w-full bg-white sm:w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NG">NG</SelectItem><SelectItem value="N/A">N/A</SelectItem></SelectContent></Select></div>
@@ -123,27 +123,27 @@ export function DashboardPage({ user, onPage }: Props) {
           <CardContent className="pt-3">
             {data?.categories.length ? <div className="space-y-4">{data.categories.map((category, index) => {
               const max = Math.max(...data.categories.map((item) => item.count), 1)
-              return <button key={category.title} type="button" onClick={() => setSelectedCategory(category.title)} aria-label={`${t('ดูรายละเอียด')}: ${t(category.title)}`} className="group w-full rounded-lg px-1 py-1 text-left transition hover:bg-[#f7faf9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-                <div className="mb-1.5 flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><span className="grid size-6 shrink-0 place-items-center rounded-md bg-[#f1f5f4] text-[10px] text-muted-foreground">{index + 1}</span><span className="truncate text-xs font-medium group-hover:text-primary">{t(category.title)}</span></div><span className="flex shrink-0 items-center gap-2 text-xs font-semibold">{category.count}<ArrowRight size={14} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" /></span></div>
-                <div className="ml-8 h-2 overflow-hidden rounded-full bg-[#eef2f1]"><div className={`h-full rounded-full ${selectedResult === 'NG' ? 'bg-[#e79b60]' : 'bg-slate-500'}`} style={{ width: `${(category.count / max) * 100}%` }} /></div>
+              return <button key={category.title} type="button" onClick={() => setSelectedCategory(category.title)} aria-label={`${t('ดูรายละเอียด')}: ${t(category.title)}`} className="group w-full rounded-lg px-1 py-1 text-left transition hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                <div className="mb-1.5 flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted text-[10px] text-muted-foreground">{index + 1}</span><span className="truncate text-xs font-medium group-hover:text-primary">{t(category.title)}</span></div><span className="flex shrink-0 items-center gap-2 text-xs font-semibold">{category.count}<ArrowRight size={14} className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" /></span></div>
+                <div className="ml-8 h-2 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${selectedResult === 'NG' ? 'bg-destructive' : 'bg-info'}`} style={{ width: `${(category.count / max) * 100}%` }} /></div>
               </button>
             })}</div> : <div className="grid h-[168px] place-items-center text-xs text-muted-foreground">{t(selectedResult === 'NG' ? 'ยังไม่มีรายการ NG' : 'ยังไม่มีรายการ N/A')}</div>}
-            <div className="mt-5 flex items-center justify-between border-t border-[#edf0f0] pt-4"><div className="flex items-center gap-2 text-[11px] text-muted-foreground"><ShieldAlert size={14} className="text-amber-600" /> {t('ใช้ข้อมูลตามผลตรวจที่บันทึก')}</div><Button variant="link" size="sm" onClick={() => onPage('inspections')} className="h-auto p-0 text-[11px]">{t('เปิดรายงาน')}</Button></div>
+            <div className="mt-5 flex items-center justify-between border-t border-border-subtle pt-4"><div className="flex items-center gap-2 text-[11px] text-muted-foreground"><ShieldAlert size={14} className="text-warning" /> {t('ใช้ข้อมูลตามผลตรวจที่บันทึก')}</div><Button variant="link" size="sm" onClick={() => onPage('inspections')} className="h-auto p-0 text-[11px]">{t('เปิดรายงาน')}</Button></div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="rounded-2xl border-[#e8eeee]">
+      <Card className="rounded-2xl border-border">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div><CardTitle className="text-[15px]">{t('รายการตรวจล่าสุด')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดงรายการตรวจล่าสุดไม่เกิน 10 รายการในช่วงเวลาที่เลือก')}</CardDescription></div>
           <Button variant="outline" size="sm" onClick={() => onPage('inspections')} className="h-8 gap-1.5 text-xs">{t('ดูทั้งหมด')} <ArrowRight size={14} /></Button>
         </CardHeader>
         <CardContent className="p-0">
-          {data?.recent.length ? <div className="divide-y divide-[#edf0f0]">{data.recent.slice(0, 10).map((record) => <button key={record.id} type="button" onClick={() => onPage('inspections')} className="grid min-h-[76px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition hover:bg-[#fafcfc] sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(100px,.8fr)_auto] sm:gap-4 sm:px-5">
+          {data?.recent.length ? <div className="divide-y divide-border-subtle">{data.recent.slice(0, 10).map((record) => <button key={record.id} type="button" onClick={() => onPage('inspections')} className="grid min-h-[76px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition hover:bg-surface-subtle sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(100px,.8fr)_auto] sm:gap-4 sm:px-5">
             <div className="min-w-0"><p className="truncate text-sm font-medium">{record.area}</p><p className="mt-1 truncate text-xs text-muted-foreground">{record.inspector} · {record.shift}</p><p className="mt-1 truncate text-[11px] text-muted-foreground sm:hidden">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')} · {record.ngCount} {t('รายการ NG')}</p></div>
             <div className="hidden text-sm text-muted-foreground sm:block">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')}</div>
             <div className="hidden text-sm text-muted-foreground sm:block">{record.ngCount} {t('รายการ NG')}</div>
-            <div className="flex items-center justify-end gap-2">{record.openCount > 0 ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs text-amber-700">{t('ค้าง')} {record.openCount}</Badge> : record.ngCount > 0 ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-xs text-emerald-700">{t('ปิดครบ')}</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">{t('ปกติ')}</Badge>}<ArrowRight size={14} className="shrink-0 text-muted-foreground" /></div>
+            <div className="flex items-center justify-end gap-2">{record.openCount > 0 ? <Badge variant="outline" className="border-warning/25 bg-warning/10 text-xs text-warning">{t('ค้าง')} {record.openCount}</Badge> : record.ngCount > 0 ? <Badge variant="outline" className="border-success/25 bg-success/10 text-xs text-success">{t('ปิดครบ')}</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">{t('ปกติ')}</Badge>}<ArrowRight size={14} className="shrink-0 text-muted-foreground" /></div>
           </button>)}</div> : <div className="px-5 py-10 text-center"><p className="text-sm font-medium">{t('ยังไม่มีรายการตรวจ')}</p><p className="mt-1 text-xs text-muted-foreground">{t('เริ่มบันทึกแบบตรวจครั้งแรกได้เลย')}</p><Button className="mt-4 gap-2" size="sm" onClick={() => onPage('new')}><ArrowUpRight size={15} /> {t('บันทึกการตรวจ')}</Button></div>}
         </CardContent>
       </Card>
@@ -151,7 +151,7 @@ export function DashboardPage({ user, onPage }: Props) {
 
       <Dialog open={Boolean(selectedCategory)} onOpenChange={(open) => { if (!open) setSelectedCategory(null) }}>
         <DialogContent className="max-h-[92dvh] overflow-y-auto p-0 sm:max-w-3xl">
-          <DialogHeader className="border-b border-[#edf0f0] px-5 py-5 pr-12 sm:px-7">
+          <DialogHeader className="border-b border-border-subtle px-5 py-5 pr-12 sm:px-7">
             <DialogTitle className="text-lg">{selectedCategory ? t(selectedCategory) : ''}</DialogTitle>
             <DialogDescription>{t('สรุปผลตรวจหัวข้อนี้')} · {formatDate(from, language)} – {formatDate(to, language)}</DialogDescription>
           </DialogHeader>
@@ -162,10 +162,10 @@ export function DashboardPage({ user, onPage }: Props) {
             </div>
             <div>
               <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t('สัดส่วนผลตรวจ NG และ N/A')}</h3><span className="text-xs text-muted-foreground">{t('รวม')} {(categorySummary.counts.ng + categorySummary.counts.na).toLocaleString('th-TH')} {t('ผลตรวจ')}</span></div>
-              <div className="flex h-9 w-full overflow-hidden rounded-lg bg-[#eef2f1]" aria-label={`NG ${categorySummary.counts.ng}, N/A ${categorySummary.counts.na}`}>
+              <div className="flex h-9 w-full overflow-hidden rounded-lg bg-muted" aria-label={`NG ${categorySummary.counts.ng}, N/A ${categorySummary.counts.na}`}>
                 {[
-                  { label: 'NG', count: categorySummary.counts.ng, color: 'bg-[#e77c68]' },
-                  { label: 'N/A', count: categorySummary.counts.na, color: 'bg-slate-500' },
+                  { label: 'NG', count: categorySummary.counts.ng, color: 'bg-destructive' },
+                  { label: 'N/A', count: categorySummary.counts.na, color: 'bg-info' },
                 ].filter((status) => status.count > 0).map((status) => <div key={status.label} className={`flex min-w-0 items-center justify-center gap-1.5 px-2 text-xs font-semibold text-white ${status.color}`} style={{ flex: `${status.count} 1 0%` }}><span>{status.label}</span><span>{status.count}</span></div>)}
               </div>
             </div>
@@ -181,10 +181,10 @@ export function DashboardPage({ user, onPage }: Props) {
                   <span className="text-xs text-muted-foreground">{categorySummary.recordTotal.toLocaleString('th-TH')} {t('รายการ')}</span>
                 </div>
               </div>
-              {categorySummary.records.length ? <div className="space-y-2">{categorySummary.records.map((record) => <div key={record.id} className="flex flex-col gap-3 rounded-xl border border-[#e8eeee] bg-white p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+              {categorySummary.records.length ? <div className="space-y-2">{categorySummary.records.map((record) => <div key={record.id} className="flex flex-col gap-3 rounded-xl border border-border bg-white p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
                 <div className="min-w-0"><p className="truncate text-sm font-medium">{record.area || '—'}</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')} · {record.inspector} · {record.shift}</p>{record.result === 'NG' && <p className="mt-1 text-xs text-muted-foreground">{t(record.followUpStatus)}</p>}</div>
-                <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><Badge variant="outline" className={record.result === 'OK' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : record.result === 'NG' ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-600'}>{record.result}</Badge><Button variant="outline" size="sm" onClick={() => { setSelectedCategory(null); setSelectedInspectionId(record.id) }} className="gap-1.5">{t('ดูรายละเอียด')} <ArrowRight size={14} /></Button></div>
-              </div>)}</div> : <div className="rounded-xl border border-dashed border-[#dfe7e6] px-4 py-8 text-center text-sm text-muted-foreground">{t('ไม่พบข้อมูลในช่วงวันที่เลือก')}</div>}
+                <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><Badge variant="outline" className={record.result === 'OK' ? 'border-success/25 bg-success/10 text-success' : record.result === 'NG' ? 'border-destructive/25 bg-destructive/10 text-destructive' : 'border-info/20 bg-surface-subtle text-info'}>{record.result}</Badge><Button variant="outline" size="sm" onClick={() => { setSelectedCategory(null); setSelectedInspectionId(record.id) }} className="gap-1.5">{t('ดูรายละเอียด')} <ArrowRight size={14} /></Button></div>
+              </div>)}</div> : <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">{t('ไม่พบข้อมูลในช่วงวันที่เลือก')}</div>}
               {categorySummary.recordTotal > categorySummary.records.length && <p className="mt-2 text-xs text-muted-foreground">{t('แสดงข้อมูลล่าสุด')} {categorySummary.records.length} {t('จาก')} {categorySummary.recordTotal}</p>}
             </div>
           </div>}
@@ -196,6 +196,6 @@ export function DashboardPage({ user, onPage }: Props) {
 }
 
 function StatusCount({ label, count, color }: { label: string; count: number; color: 'emerald' | 'red' | 'slate' }) {
-  const tone = color === 'emerald' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : color === 'red' ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-600'
+  const tone = color === 'emerald' ? 'border-success/25 bg-success/10 text-success' : color === 'red' ? 'border-destructive/25 bg-destructive/10 text-destructive' : 'border-info/20 bg-surface-subtle text-info'
   return <div className={`rounded-xl border p-3 text-center sm:p-4 ${tone}`}><p className="text-xs font-medium">{label}</p><p className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">{count.toLocaleString('th-TH')}</p></div>
 }

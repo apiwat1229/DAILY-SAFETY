@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Eye, EyeOff, KeyRound, LoaderCircle, Pencil, ShieldCheck, UserCheck, UserPlus, UserRoundX, UsersRound } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Search, ShieldCheck, UserCheck, UserPlus, UserRoundX, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,10 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useI18n } from '@/lib/i18n'
 import { AutocompleteInput } from '@/components/autocomplete-input'
+import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 
 export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: User; onCurrentUserUpdate: (user: User) => void }) {
   const { t } = useI18n()
   const [users, setUsers] = useState<User[]>([])
+  const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -27,6 +29,13 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
     api.users().then(({ users: result }) => setUsers(result)).catch((error) => toast.error(error.message)).finally(() => setLoading(false))
   }, [])
   useEffect(refresh, [refresh])
+  const filteredUsers = useMemo(() => {
+    const search = query.trim().toLocaleLowerCase()
+    if (!search) return users
+    return users.filter((user) => [user.name, user.username, user.employeeCode, user.role, user.isActive ? 'ใช้งาน' : 'ปิดใช้งานแล้ว']
+      .some((value) => String(value ?? '').toLocaleLowerCase().includes(search)))
+  }, [query, users])
+  const pagination = useDataPagination(filteredUsers)
 
   async function activateUser(user: User) {
     try {
@@ -42,9 +51,9 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
     if (updated.id === currentUser.id) onCurrentUserUpdate(updated)
   }
 
-  return <div className="space-y-5">
+  return <div className="page-stack">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div><p className="text-sm font-medium text-primary">{t('สิทธิ์การใช้งาน')}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{t('ผู้ใช้งาน')}</h1><p className="mt-1 text-sm text-muted-foreground">{t('จัดการบัญชีหัวหน้างานและผู้ดูแลระบบ')}</p></div>
+      <div><p className="text-sm font-medium text-primary">{t('สิทธิ์การใช้งาน')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('ผู้ใช้งาน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('จัดการบัญชีหัวหน้างานและผู้ดูแลระบบ')}</p></div>
       <Button onClick={() => setCreateOpen(true)} className="gap-2 self-start sm:self-auto"><UserPlus size={16} /> {t('เพิ่มผู้ใช้งาน')}</Button>
     </div>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -53,11 +62,11 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
       <UserMetric label={t('พนักงาน')} value={users.filter((user) => user.role === 'employee').length} icon={UsersRound} />
       <UserMetric label={t('ผู้ดูแลระบบ')} value={users.filter((user) => user.role === 'admin').length} icon={ShieldCheck} />
     </div>
-    <Card className="overflow-hidden rounded-2xl border-[#e8eeee]">
-      <CardHeader className="border-b border-[#edf0f0] px-5 py-4"><CardTitle className="text-sm">{t('บัญชีในระบบ')}</CardTitle><CardDescription className="text-[11px]">{t('บัญชีที่ปิดใช้งานจะเข้าสู่ระบบไม่ได้ แต่ประวัติการตรวจยังคงอยู่')}</CardDescription></CardHeader>
-      {users.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-[#fafcfc] hover:bg-[#fafcfc]"><TableHead className="min-w-40 pl-5 text-[10px]">{t('ชื่อผู้ใช้งาน')}</TableHead><TableHead className="min-w-32 text-[10px]">{t('ชื่อบัญชี')}</TableHead><TableHead className="min-w-32 text-[10px]">{t('รหัสพนักงาน')}</TableHead><TableHead className="min-w-24 text-[10px]">{t('สิทธิ์')}</TableHead><TableHead className="min-w-28 text-[10px]">{t('สถานะบัญชี')}</TableHead><TableHead className="min-w-[340px] pr-5 text-right text-[10px]">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-      <TableBody>{users.map((user) => <TableRow key={user.id} data-inactive={!user.isActive || undefined}><TableCell className="pl-5 text-sm font-medium">{user.name}</TableCell><TableCell className="text-sm text-muted-foreground">{user.username}</TableCell><TableCell className="text-sm text-muted-foreground">{user.employeeCode}</TableCell><TableCell><Badge variant="outline" className={user.role === 'admin' ? 'border-[#cce2dc] bg-[#eef7f4] text-xs text-[#176358]' : 'border-[#e4e9e8] bg-[#f7f9f9] text-xs text-muted-foreground'}>{user.role === 'admin' ? 'Admin' : t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')}</Badge></TableCell><TableCell><Badge variant="outline" className={user.isActive ? 'border-emerald-200 bg-emerald-50 text-xs text-emerald-700' : 'border-slate-200 bg-slate-100 text-xs text-slate-600'}>{t(user.isActive ? 'ใช้งาน' : 'ปิดใช้งานแล้ว')}</Badge></TableCell><TableCell className="pr-5"><div className="flex flex-wrap justify-end gap-1.5"><Button variant="outline" size="sm" onClick={() => setEditingUser(user)} className="h-9 gap-1.5 text-xs"><Pencil size={14} /> {t('แก้ไข')}</Button>{user.isActive && <Button variant="outline" size="sm" onClick={() => setResetUser(user)} className="h-9 gap-1.5 text-xs"><KeyRound size={14} /> {t('ตั้งรหัสผ่านใหม่')}</Button>}{user.isActive ? <Button variant="outline" size="sm" onClick={() => setDeactivatingUser(user)} className="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"><UserRoundX size={14} /> {t('ปิดใช้งาน')}</Button> : <Button variant="outline" size="sm" onClick={() => activateUser(user)} className="h-9 gap-1.5 text-xs text-emerald-700 hover:text-emerald-800"><UserCheck size={14} /> {t('เปิดใช้งานบัญชี')}</Button>}</div></TableCell></TableRow>)}</TableBody>
-      </Table></div> : <CardContent className="grid min-h-48 place-items-center text-center"><div><p className="text-sm font-medium">{loading ? t('กำลังโหลดบัญชี…') : t('ไม่พบผู้ใช้งาน')}</p><p className="mt-1 text-xs text-muted-foreground">{t('เพิ่มบัญชีเพื่อเริ่มให้หัวหน้างานใช้งานระบบ')}</p></div></CardContent>}
+    <Card className="overflow-hidden rounded-2xl border-border">
+      <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><CardTitle className="text-sm">{t('บัญชีในระบบ')}</CardTitle><div className="relative w-full sm:max-w-sm"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></CardHeader>
+      {filteredUsers.length ? <><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-surface-subtle hover:bg-surface-subtle"><TableHead className="min-w-40 pl-5 text-[10px]">{t('ชื่อผู้ใช้งาน')}</TableHead><TableHead className="min-w-32 text-[10px]">{t('ชื่อบัญชี')}</TableHead><TableHead className="min-w-32 text-[10px]">{t('รหัสพนักงาน')}</TableHead><TableHead className="min-w-24 text-[10px]">{t('สิทธิ์')}</TableHead><TableHead className="min-w-28 text-[10px]">{t('สถานะบัญชี')}</TableHead><TableHead className="min-w-[340px] pr-5 text-right text-[10px]">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+      <TableBody>{pagination.visibleItems.map((user) => <TableRow key={user.id} data-inactive={!user.isActive || undefined}><TableCell className="pl-5 text-sm font-medium">{user.name}</TableCell><TableCell className="text-sm text-muted-foreground">{user.username}</TableCell><TableCell className="text-sm text-muted-foreground">{user.employeeCode}</TableCell><TableCell><Badge variant="outline" className={user.role === 'admin' ? 'border-primary/20 bg-secondary text-xs text-primary' : 'border-border bg-surface-subtle text-xs text-muted-foreground'}>{user.role === 'admin' ? 'Admin' : t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')}</Badge></TableCell><TableCell><Badge variant="outline" className={user.isActive ? 'border-success/25 bg-success/10 text-xs text-success' : 'border-info/20 bg-info/10 text-xs text-info'}>{t(user.isActive ? 'ใช้งาน' : 'ปิดใช้งานแล้ว')}</Badge></TableCell><TableCell className="pr-5"><div className="flex flex-wrap justify-end gap-1.5"><Button variant="outline" size="sm" onClick={() => setEditingUser(user)} className="h-9 gap-1.5 text-xs"><Pencil size={14} /> {t('แก้ไข')}</Button>{user.isActive && <Button variant="outline" size="sm" onClick={() => setResetUser(user)} className="h-9 gap-1.5 text-xs"><KeyRound size={14} /> {t('ตั้งรหัสผ่านใหม่')}</Button>}{user.isActive ? <Button variant="outline" size="sm" onClick={() => setDeactivatingUser(user)} className="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"><UserRoundX size={14} /> {t('ปิดใช้งาน')}</Button> : <Button variant="outline" size="sm" onClick={() => activateUser(user)} className="h-9 gap-1.5 text-xs text-success hover:text-success"><UserCheck size={14} /> {t('เปิดใช้งานบัญชี')}</Button>}</div></TableCell></TableRow>)}</TableBody>
+      </Table></div><DataTablePagination total={filteredUsers.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} /> </> : <CardContent className="grid min-h-48 place-items-center text-center"><div><p className="text-sm font-medium">{loading ? t('กำลังโหลดบัญชี…') : users.length ? t('ไม่พบผู้ใช้งานที่ตรงกับคำค้น') : t('ไม่พบผู้ใช้งาน')}</p><p className="mt-1 text-xs text-muted-foreground">{users.length ? t('ปรับคำค้นหาแล้วลองอีกครั้ง') : t('เพิ่มบัญชีเพื่อเริ่มให้หัวหน้างานใช้งานระบบ')}</p></div></CardContent>}
     </Card>
     <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={refresh} />
     <EditUserDialog user={editingUser} onOpenChange={(open) => !open && setEditingUser(null)} onUpdated={handleUserUpdated} />
@@ -67,7 +76,7 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
 }
 
 function UserMetric({ label, value, icon: Icon }: { label: string; value: number; icon: typeof UsersRound }) {
-  return <Card className="rounded-xl border-[#e8eeee]"><CardContent className="flex items-center justify-between p-4"><div><p className="text-[11px] text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div><div className="grid size-9 place-items-center rounded-xl bg-[#edf5f3] text-primary"><Icon size={17} /></div></CardContent></Card>
+  return <Card className="rounded-xl border-border py-0"><CardContent className="flex items-center justify-between px-3 py-2"><div><p className="text-[11px] text-muted-foreground">{label}</p><p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p></div><div className="grid size-8 place-items-center rounded-lg bg-secondary text-primary"><Icon size={16} /></div></CardContent></Card>
 }
 
 function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
@@ -116,7 +125,7 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     onOpenChange(false)
   }
   return <Dialog open={open} onOpenChange={(next) => { if (!next) close(); else onOpenChange(true) }}><DialogContent className="max-w-md">
-    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-[#edf5f3] text-primary"><UserPlus size={17} /></div><DialogTitle className="text-base">{t('เพิ่มผู้ใช้งาน')}</DialogTitle><DialogDescription className="text-xs">{t('สร้างบัญชีเพื่อให้หัวหน้างานกรอกแบบตรวจหรือให้ Admin จัดการรายงาน')}</DialogDescription></DialogHeader>
+    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><UserPlus size={17} /></div><DialogTitle className="text-base">{t('เพิ่มผู้ใช้งาน')}</DialogTitle><DialogDescription className="text-xs">{t('สร้างบัญชีเพื่อให้หัวหน้างานกรอกแบบตรวจหรือให้ Admin จัดการรายงาน')}</DialogDescription></DialogHeader>
     <form onSubmit={create} className="space-y-3.5 pt-1">
       <div className="grid gap-1.5"><Label htmlFor="new-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="new-name" name="name" required placeholder={t('ชื่อและนามสกุล')} value={newName} onValueChange={setNewName} suggestions={suggestions.inspectors} /></div>
       <div className="grid gap-1.5"><Label htmlFor="new-code">{t('รหัสพนักงาน')}</Label><AutocompleteInput id="new-code" name="employeeCode" required placeholder={t('เช่น YT-0123')} value={newEmployeeCode} onValueChange={setNewEmployeeCode} suggestions={suggestions.employeeCodes} /></div>
@@ -161,7 +170,7 @@ function EditUserDialog({ user, onOpenChange, onUpdated }: { user: User | null; 
   }
 
   return <Dialog open={Boolean(user)} onOpenChange={onOpenChange}><DialogContent className="max-w-md">
-    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-[#edf5f3] text-primary"><Pencil size={17} /></div><DialogTitle className="text-base">{t('แก้ไขบัญชีผู้ใช้')}</DialogTitle><DialogDescription className="text-xs">{t('แก้ไขชื่อบัญชี ข้อมูลพนักงาน และสิทธิ์การใช้งาน')}</DialogDescription></DialogHeader>
+    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Pencil size={17} /></div><DialogTitle className="text-base">{t('แก้ไขบัญชีผู้ใช้')}</DialogTitle><DialogDescription className="text-xs">{t('แก้ไขชื่อบัญชี ข้อมูลพนักงาน และสิทธิ์การใช้งาน')}</DialogDescription></DialogHeader>
     <form onSubmit={save} className="space-y-3.5 pt-1">
       <div className="grid gap-1.5"><Label htmlFor="edit-username">{t('ชื่อบัญชี')}</Label><Input id="edit-username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={32} autoComplete="off" placeholder={t('a-z, 0-9, จุด หรือขีด')} /></div>
       <div className="grid gap-1.5"><Label htmlFor="edit-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="edit-name" value={name} onValueChange={setName} suggestions={suggestions.inspectors} required placeholder={t('ชื่อและนามสกุล')} /></div>
@@ -189,7 +198,7 @@ function DeactivateUserDialog({ user, onOpenChange, onDeactivated }: { user: Use
   }
 
   return <Dialog open={Boolean(user)} onOpenChange={onOpenChange}><DialogContent className="max-w-sm">
-    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-red-50 text-destructive"><UserRoundX size={17} /></div><DialogTitle className="text-base">{t('ปิดใช้งานบัญชี')}</DialogTitle><DialogDescription className="text-sm">{t('ผู้ใช้นี้จะเข้าสู่ระบบไม่ได้ ประวัติการตรวจยังคงอยู่ และสามารถเปิดใช้งานบัญชีอีกครั้งได้')} {user?.name ? `(${user.name})` : ''}</DialogDescription></DialogHeader>
+    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-destructive/10 text-destructive"><UserRoundX size={17} /></div><DialogTitle className="text-base">{t('ปิดใช้งานบัญชี')}</DialogTitle><DialogDescription className="text-sm">{t('ผู้ใช้นี้จะเข้าสู่ระบบไม่ได้ ประวัติการตรวจยังคงอยู่ และสามารถเปิดใช้งานบัญชีอีกครั้งได้')} {user?.name ? `(${user.name})` : ''}</DialogDescription></DialogHeader>
     <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ยกเลิก')}</Button><Button type="button" variant="destructive" disabled={busy} onClick={deactivate} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('ปิดใช้งาน')}</Button></div>
   </DialogContent></Dialog>
 }
@@ -220,7 +229,7 @@ function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpen
     finally { setBusy(false) }
   }
   return <Dialog open={Boolean(user)} onOpenChange={(open) => { if (!open) close() }}><DialogContent className="max-w-sm">
-    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-[#edf5f3] text-primary"><KeyRound size={17} /></div><DialogTitle className="text-base">{t('ตั้งรหัสผ่านใหม่')}</DialogTitle><DialogDescription className="text-xs">{t('บัญชี')} {user?.username} · {user?.name}</DialogDescription></DialogHeader>
+    <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><KeyRound size={17} /></div><DialogTitle className="text-base">{t('ตั้งรหัสผ่านใหม่')}</DialogTitle><DialogDescription className="text-xs">{t('บัญชี')} {user?.username} · {user?.name}</DialogDescription></DialogHeader>
     <form onSubmit={save} className="space-y-4 pt-1"><div className="grid gap-3"><PasswordInput id="reset-password" label={t('รหัสผ่านใหม่')} value={password} onChange={setPassword} placeholder={t('อย่างน้อย 6 ตัวอักษร')} /><div className="grid gap-1.5"><PasswordInput id="reset-password-confirm" label={t('ยืนยันรหัสผ่าน')} value={confirmPassword} onChange={setConfirmPassword} placeholder={t('กรอกรหัสผ่านอีกครั้ง')} invalid={Boolean(confirmPassword) && password !== confirmPassword} />{Boolean(confirmPassword) && password !== confirmPassword && <p className="text-xs text-destructive" role="alert">{t('รหัสผ่านไม่ตรงกัน')}</p>}</div></div><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึกรหัสผ่าน')}</Button></div></form>
   </DialogContent></Dialog>
 }

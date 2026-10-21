@@ -10,3 +10,4 @@ data
 *.sqlite-wal
 *.log
 daily-safety-deploy.tar.gz
+daily-safety-production.tar

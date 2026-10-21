@@ -33,28 +33,28 @@ export function LoginScreen({ onLogin }: Props) {
   }
 
   return (
-    <main className="min-h-screen bg-[#f1f6f5] lg:grid lg:grid-cols-[1.04fr_.96fr]">
-      <section className="relative hidden overflow-hidden bg-[#123538] p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
+    <main className="min-h-screen bg-background lg:grid lg:grid-cols-[1.04fr_.96fr]">
+      <section className="relative hidden overflow-hidden bg-sidebar p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
         <div className="absolute inset-0 opacity-30 soft-grid" />
         <div className="relative flex items-center gap-3">
-          <div className="grid size-11 place-items-center rounded-2xl bg-[#d1eee6] text-[#14574e]"><ShieldCheck size={23} /></div>
-          <div><p className="text-sm font-semibold tracking-wide">Y.T. RUBBER</p><p className="text-xs text-[#a9c5bf]">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
+          <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23} /></div>
+          <div><p className="text-sm font-semibold tracking-wide">Y.T. RUBBER</p><p className="text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
         </div>
         <div className="relative max-w-xl">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[.07] px-3 py-1.5 text-xs text-[#c5ded8]"><ClipboardCheck size={14} /> Daily safety workspace</div>
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[.07] px-3 py-1.5 text-xs text-sidebar-muted"><ClipboardCheck size={14} /> Daily safety workspace</div>
           <h1 className="mb-5 max-w-lg text-4xl font-semibold leading-[1.2] tracking-tight xl:text-5xl">{t('พื้นที่ทำงานที่ปลอดภัย เริ่มจากการตรวจที่ทำได้ทุกวัน')}</h1>
-          <p className="max-w-md text-base leading-7 text-[#b5cbc7]">{t('บันทึกผลตรวจ แนบหลักฐาน และติดตามการแก้ไขในที่เดียว')}</p>
+          <p className="max-w-md text-base leading-7 text-sidebar-muted">{t('บันทึกผลตรวจ แนบหลักฐาน และติดตามการแก้ไขในที่เดียว')}</p>
           <div className="mt-9 grid max-w-md grid-cols-3 gap-3">
-            {[['13', 'หัวข้อตรวจ'], ['3', 'ผลตรวจ'], ['1', 'พื้นที่ติดตาม']].map(([number, label]) => <div key={label} className="rounded-xl border border-white/10 bg-white/[.06] px-4 py-3"><p className="text-xl font-semibold">{number}</p><p className="mt-1 text-xs text-[#a9c5bf]">{t(label)}</p></div>)}
+            {[['13', 'หัวข้อตรวจ'], ['3', 'ผลตรวจ'], ['1', 'พื้นที่ติดตาม']].map(([number, label]) => <div key={label} className="rounded-xl border border-white/10 bg-white/[.06] px-4 py-3"><p className="text-xl font-semibold">{number}</p><p className="mt-1 text-xs text-sidebar-muted">{t(label)}</p></div>)}
           </div>
         </div>
-        <p className="relative text-xs text-[#8eaaa5]">{t('บันทึกครบ ตรวจสอบย้อนหลังได้')}</p>
+        <p className="relative text-xs text-sidebar-muted">{t('บันทึกครบ ตรวจสอบย้อนหลังได้')}</p>
       </section>
       <section className="relative flex min-h-screen items-center justify-center px-5 py-12 sm:px-8">
         <LanguageSwitch className="absolute right-5 top-5 sm:right-8 sm:top-8" />
         <div className="w-full max-w-[430px]">
           <div className="mb-9 flex items-center gap-3 lg:hidden">
-            <div className="grid size-11 place-items-center rounded-2xl bg-[#d6eee8] text-primary"><ShieldCheck size={23} /></div>
+            <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23} /></div>
             <div><p className="text-sm font-semibold">Y.T. RUBBER</p><p className="text-xs text-muted-foreground">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
           </div>
           <div className="mb-8">
