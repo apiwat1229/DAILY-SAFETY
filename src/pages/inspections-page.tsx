@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, ClipboardList, FileSpreadsheet, RotateCw, Search } from 'lucide-react'
+import { AlertTriangle, ArrowRight, ClipboardList, Eye, FileDown, FileSpreadsheet, Pencil, Printer, RotateCw, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { api, exportExcelUrl, formatDate, localDateString } from '@/lib/api'
+import { api, exportExcelUrl, formatDate, formatDateTime, localDateString } from '@/lib/api'
 import type { Filters, InspectionSummary, MyTask, User } from '@/lib/types'
 import { InspectionDetailDialog } from '@/components/inspection-detail-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DatePicker } from '@/components/date-picker'
 import { useI18n } from '@/lib/i18n'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
+import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
+import { createPrintWindow, inspectionPrintMarkup, renderPrintWindow } from '@/lib/print-documents'
 
 type Props = { user: User; initialFilter: Pick<Filters, 'from' | 'to' | 'category'> | null; onInitialFilterApplied: () => void }
 
@@ -33,6 +35,9 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
   const [loading, setLoading] = useState(true)
   const [tasksLoading, setTasksLoading] = useState(user.role !== 'admin')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [editInspectionId, setEditInspectionId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<InspectionSummary | null>(null)
+  const [deleting, setDeleting] = useState(false)
   useEffect(() => {
     if (!initialFilter) return
     setFilters((current) => ({ ...current, ...initialFilter }))
@@ -68,6 +73,31 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
   const pagination = useDataPagination(filteredRecords)
 
   const setDateFilter = (key: 'from' | 'to', value: string) => setFilters((current) => ({ ...current, [key]: value }))
+  const activeSummary = filters.status === 'open' ? 'open' : filters.result === 'NG' ? 'ng' : 'all'
+  const setSummaryFilter = (scope: 'all' | 'ng' | 'open') => setFilters((current) => ({ ...current, result: scope === 'all' ? '' : 'NG', status: scope === 'open' ? 'open' : '', category: '' }))
+
+  function printInspection(id: string, mode: 'pdf' | 'print') {
+    const popup = createPrintWindow()
+    if (!popup) { toast.error(t('เบราว์เซอร์บล็อกหน้าต่าง PDF โปรดอนุญาตป๊อปอัปแล้วลองอีกครั้ง')); return }
+    popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Loading report…</title></head><body style="font:16px sans-serif;padding:24px">Loading report…</body></html>')
+    api.inspection(id).then(({ inspection }) => {
+      const title = `${mode === 'pdf' ? 'inspection-report' : 'inspection-print'}-${inspection.date}-${inspection.id}`
+      renderPrintWindow(popup, title, inspectionPrintMarkup(inspection, language, formatDate, formatDateTime, t))
+    }).catch((error) => { popup.close(); toast.error(t(error instanceof Error ? error.message : 'เปิดรายงานไม่สำเร็จ')) })
+  }
+
+  async function deleteInspection() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await api.deleteInspection(deleteTarget.id)
+      setDeleteTarget(null)
+      toast.success(t('ลบรายการตรวจแล้ว'))
+      refresh()
+      refreshTasks()
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบรายการไม่สำเร็จ')) }
+    finally { setDeleting(false) }
+  }
 
   return (
     <div className="page-stack">
@@ -81,9 +111,9 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
       <Card className="rounded-2xl border-border py-0">
         <CardContent className="grid gap-2 p-2 xl:grid-cols-[minmax(0,1fr)_350px] xl:items-center">
           <div className="grid divide-y divide-border-subtle sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <SummaryTile label={t('รายการตรวจ')} value={totals.count} detail={t('ตามตัวกรองปัจจุบัน')} tone="neutral" language={language} />
-            <SummaryTile label={t('รายการ NG')} value={totals.ng} detail={t('พบจากรายการตรวจ')} tone="red" language={language} />
-            <SummaryTile label={t('รอแก้ไข')} value={totals.open} detail={t('ยังไม่ปิดงาน')} tone="amber" language={language} />
+            <SummaryTile label={t('รายการตรวจ')} value={totals.count} detail={t('ตามตัวกรองปัจจุบัน')} tone="neutral" language={language} active={activeSummary === 'all'} onClick={() => setSummaryFilter('all')} />
+            <SummaryTile label={t('รายการ NG')} value={totals.ng} detail={t('พบจากรายการตรวจ')} tone="red" language={language} active={activeSummary === 'ng'} onClick={() => setSummaryFilter(activeSummary === 'ng' ? 'all' : 'ng')} />
+            <SummaryTile label={t('รอแก้ไข')} value={totals.open} detail={t('ยังไม่ปิดงาน')} tone="amber" language={language} active={activeSummary === 'open'} onClick={() => setSummaryFilter(activeSummary === 'open' ? 'all' : 'open')} />
           </div>
           <div className="grid min-w-0 grid-cols-2 gap-2 border-t border-border-subtle pt-2 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
             <div className="grid min-w-0 gap-1"><Label htmlFor="filter-from" className="text-xs text-muted-foreground">{t('ตั้งแต่วันที่')}</Label><DatePicker id="filter-from" ariaLabel={t('ตั้งแต่วันที่')} value={filters.from} maxDate={filters.to} onChange={(value) => setDateFilter('from', value)} className="h-9 text-xs" /></div>
@@ -96,21 +126,22 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
         {user.role !== 'admin' && <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-sm">{t('ผลการค้นหา')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดง')} {filteredRecords.length} {t('รายการ')}</CardDescription></div><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></CardHeader>}
         {filteredRecords.length ? <>
           <div className="hidden overflow-x-auto md:block"><Table>
-            <TableHeader><TableRow className="bg-surface-subtle hover:bg-surface-subtle"><TableHead className="pl-5 text-xs">{t('วันที่ / เวลา')}</TableHead><TableHead className="text-xs">{t('พื้นที่ / แผนก')}</TableHead><TableHead className="text-xs">{t('ผู้ตรวจ')}</TableHead><TableHead className="text-xs">{t('กะ')}</TableHead><TableHead className="text-center text-xs">NG</TableHead><TableHead className="text-center text-xs">{t('ค้างงาน')}</TableHead><TableHead className="pr-5 text-right text-xs">{t('รายละเอียด')}</TableHead></TableRow></TableHeader>
-            <TableBody>{pagination.visibleItems.map((record) => <TableRow key={record.id} className="cursor-pointer" onClick={() => setSelectedId(record.id)}>
+            <TableHeader><TableRow className="bg-surface-subtle hover:bg-surface-subtle"><TableHead className="pl-5 text-xs">{t('วันที่ / เวลา')}</TableHead><TableHead className="text-xs">{t('พื้นที่ / แผนก')}</TableHead><TableHead className="text-xs">{t('ผู้ตรวจ')}</TableHead><TableHead className="text-xs">{t('กะ')}</TableHead><TableHead className="text-center text-xs">NG</TableHead><TableHead className="text-center text-xs">{t('ค้างงาน')}</TableHead><TableHead className="pr-5 text-right text-xs">{t(user.role === 'admin' ? 'การทำรายการ' : 'รายละเอียด')}</TableHead></TableRow></TableHeader>
+            <TableBody>{pagination.visibleItems.map((record) => <TableRow key={record.id} className="cursor-pointer" onClick={() => { setEditInspectionId(null); setSelectedId(record.id) }}>
               <TableCell className="whitespace-nowrap pl-5"><p className="text-xs font-medium">{formatDate(record.date, language)}</p><p className="mt-0.5 text-xs text-muted-foreground">{record.time || '—'} {t('น.')}</p></TableCell><TableCell className="max-w-[220px] truncate text-xs">{record.area}</TableCell><TableCell className="text-xs">{record.inspector}<span className="ml-1 text-xs text-muted-foreground">{record.employeeCode}</span></TableCell><TableCell className="text-xs">{record.shift}</TableCell>
               <TableCell className="text-center">{record.ngCount ? <Badge variant="outline" className="border-destructive/25 bg-destructive/10 text-xs text-destructive">{record.ngCount}</Badge> : <span className="text-xs text-muted-foreground">0</span>}</TableCell>
-              <TableCell className="text-center">{record.openCount ? <Badge variant="outline" className="border-warning/25 bg-warning/10 text-xs text-warning">{record.openCount}</Badge> : <span className="text-xs text-muted-foreground">—</span>}</TableCell><TableCell className="pr-5 text-right text-xs font-medium text-primary">{t('ดูข้อมูล')}</TableCell>
+              <TableCell className="text-center">{record.openCount ? <Badge variant="outline" className="border-warning/25 bg-warning/10 text-xs text-warning">{record.openCount}</Badge> : <span className="text-xs text-muted-foreground">—</span>}</TableCell><TableCell className="pr-5"><div className="flex justify-end gap-0.5"><Button type="button" variant="ghost" size="icon" aria-label={t('ดูข้อมูล')} title={t('ดูข้อมูล')} onClick={(event) => { event.stopPropagation(); setEditInspectionId(null); setSelectedId(record.id) }}><Eye size={15} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t('ดาวน์โหลด PDF')} title={`${t('ดาวน์โหลด PDF')} · ${t('เปิดหน้าพิมพ์ แล้วเลือกบันทึกเป็น PDF')}`} onClick={(event) => { event.stopPropagation(); printInspection(record.id, 'pdf') }}><FileDown size={15} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t('พิมพ์')} title={t('พิมพ์')} onClick={(event) => { event.stopPropagation(); printInspection(record.id, 'print') }}><Printer size={15} /></Button>{user.role === 'admin' && <><Button type="button" variant="ghost" size="icon" aria-label={t('แก้ไข')} title={t('แก้ไข')} onClick={(event) => { event.stopPropagation(); setEditInspectionId(record.id); setSelectedId(record.id) }}><Pencil size={15} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t('ลบ')} title={t('ลบ')} className="text-destructive hover:text-destructive" onClick={(event) => { event.stopPropagation(); setDeleteTarget(record) }}><Trash2 size={15} /></Button></>}</div></TableCell>
             </TableRow>)}</TableBody>
           </Table></div>
-          <div className="divide-y divide-border-subtle md:hidden">{pagination.visibleItems.map((record) => <Button key={record.id} variant="ghost" onClick={() => setSelectedId(record.id)} className="h-auto w-full justify-between gap-3 rounded-none px-4 py-4 text-left whitespace-normal hover:bg-surface-subtle">
+          <div className="divide-y divide-border-subtle md:hidden">{pagination.visibleItems.map((record) => <div key={record.id} className="space-y-2 px-4 py-3"><button type="button" onClick={() => { setEditInspectionId(null); setSelectedId(record.id) }} className="flex w-full items-center justify-between gap-3 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-primary">
             <div className="min-w-0"><p className="truncate text-xs font-semibold">{record.area}</p><p className="mt-1 truncate text-xs text-muted-foreground">{formatDate(record.date, language)} · {record.time || '—'} {t('น.')} · {record.shift} · {record.inspector}</p><div className="mt-2 flex gap-1.5">{record.ngCount ? <Badge variant="outline" className="border-destructive/25 bg-destructive/10 text-xs text-destructive">NG {record.ngCount}</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">{t('ปกติ')}</Badge>}{record.openCount > 0 && <Badge variant="outline" className="border-warning/25 bg-warning/10 text-xs text-warning">{t('ค้าง')} {record.openCount}</Badge>}</div></div>
             <ChevronRightIcon />
-          </Button>)}</div>
+          </button><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('ดาวน์โหลด PDF')} title={t('ดาวน์โหลด PDF')} onClick={() => printInspection(record.id, 'pdf')}><FileDown size={15} /></Button><Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('พิมพ์')} title={t('พิมพ์')} onClick={() => printInspection(record.id, 'print')}><Printer size={15} /></Button>{user.role === 'admin' && <><Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('แก้ไข')} title={t('แก้ไข')} onClick={() => { setEditInspectionId(record.id); setSelectedId(record.id) }}><Pencil size={15} /></Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" aria-label={t('ลบ')} title={t('ลบ')} onClick={() => setDeleteTarget(record)}><Trash2 size={15} /></Button></>}</div></div>)}</div>
           <DataTablePagination total={filteredRecords.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
         </> : <CardContent className="grid min-h-56 place-items-center text-center"><div><div className="mx-auto mb-3 grid size-10 place-items-center rounded-full bg-secondary text-primary"><ClipboardList size={19} /></div><p className="text-sm font-medium">{loading ? t('กำลังค้นหารายการ…') : records.length ? t('ไม่พบรายการตรวจที่ตรงกับคำค้น') : t('ไม่พบรายการตรวจ')}</p><p className="mt-1 text-xs text-muted-foreground">{records.length ? t('ปรับคำค้นหาหรือตัวกรองแล้วลองอีกครั้ง') : t('ปรับตัวกรองหรือเลือกช่วงวันที่อื่น')}</p></div></CardContent>}
       </Card>
-      <InspectionDetailDialog id={selectedId} user={user} onOpenChange={(open) => !open && setSelectedId(null)} onUpdated={() => { refresh(); refreshTasks() }} />
+      <InspectionDetailDialog id={selectedId} user={user} startInEditMode={editInspectionId === selectedId} onOpenChange={(open) => { if (!open) { setSelectedId(null); setEditInspectionId(null) } }} onUpdated={() => { refresh(); refreshTasks() }} />
+      <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }} title={t('ลบรายการตรวจนี้หรือไม่')} description={deleteTarget ? `${formatDate(deleteTarget.date, language)} · ${deleteTarget.area} · ${t('การลบจะนำรายการตรวจและหลักฐานที่แนบออกจากระบบอย่างถาวร')}` : ''} confirmLabel={t('ลบรายการ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={() => void deleteInspection()} />
     </div>
   )
 }
@@ -134,8 +165,8 @@ function MyTasksCard({ tasks, loading, language, onOpen }: { tasks: MyTask[]; lo
   </Card>
 }
 
-function SummaryTile({ label, value, detail, tone, language }: { label: string; value: number; detail: string; tone: 'neutral' | 'red' | 'amber'; language: 'th' | 'en' }) {
-  return <div className="min-w-0 py-2 sm:px-3 sm:py-1.5"><p className="text-xs text-muted-foreground">{label}</p><div className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2"><p className={`shrink-0 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-destructive' : tone === 'amber' ? 'text-warning' : ''}`}>{value.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</p><span className="truncate text-xs text-muted-foreground">{detail}</span></div></div>
+function SummaryTile({ label, value, detail, tone, language, active, onClick }: { label: string; value: number; detail: string; tone: 'neutral' | 'red' | 'amber'; language: 'th' | 'en'; active: boolean; onClick: () => void }) {
+  return <button type="button" aria-pressed={active} title={language === 'th' ? 'กดเพื่อกรองรายการ' : 'Click to filter records'} onClick={onClick} className={`min-w-0 rounded-xl px-2 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary sm:px-3 sm:py-1.5 ${active ? 'bg-primary/5 ring-1 ring-primary/20' : 'hover:bg-surface-subtle'}`}><p className="text-xs text-muted-foreground">{label}</p><div className="mt-0.5 flex min-w-0 items-baseline justify-between gap-2"><p className={`shrink-0 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-destructive' : tone === 'amber' ? 'text-warning' : ''}`}>{value.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</p><span className="truncate text-xs text-muted-foreground">{detail}</span></div></button>
 }
 
 function ChevronRightIcon() {

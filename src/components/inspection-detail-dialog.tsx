@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CalendarClock, Camera, Check, ChevronRight, ImagePlus, LoaderCircle, RotateCcw, UserRound, ZoomIn, ZoomOut } from 'lucide-react'
+import { CalendarClock, Camera, Check, ChevronRight, FileDown, ImagePlus, LoaderCircle, Pencil, Printer, RotateCcw, Trash2, UserRound, ZoomIn, ZoomOut } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, formatDate, formatDateTime } from '@/lib/api'
 import type { Assignee, Inspection, InspectionResponse, User } from '@/lib/types'
@@ -12,23 +12,30 @@ import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/lib/i18n'
+import { Input } from '@/components/ui/input'
+import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
+import { inspectionPrintMarkup, openPrintWindow } from '@/lib/print-documents'
 
-type Props = { id: string | null; user: User; onOpenChange: (open: boolean) => void; onUpdated?: () => void }
+type Props = { id: string | null; user: User; onOpenChange: (open: boolean) => void; onUpdated?: () => void; startInEditMode?: boolean }
 
 const actionStatuses = ['ยังไม่แก้ไข', 'กำลังแก้ไข', 'แก้ไขแล้ว']
 
-export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated }: Props) {
+export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated, startInEditMode = false }: Props) {
   const { language, t } = useI18n()
   const [inspection, setInspection] = useState<Inspection | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedItem, setSelectedItem] = useState<InspectionResponse | null>(null)
   const [selectedPhoto, setSelectedPhoto] = useState<InspectionResponse['photos'][number] | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    if (!id) { setInspection(null); return }
+    if (!id) { setInspection(null); setEditOpen(false); return }
+    setEditOpen(startInEditMode && user.role === 'admin')
     setLoading(true)
     api.inspection(id).then(({ inspection: result }) => setInspection(result)).catch((error) => toast.error(error.message)).finally(() => setLoading(false))
-  }, [id])
+  }, [id, startInEditMode, user.role])
 
   function handleSaved(updated: Inspection) {
     setInspection(updated)
@@ -36,10 +43,30 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated }: Pr
     onUpdated?.()
   }
 
+  function printReport(mode: 'pdf' | 'print') {
+    if (!inspection) return
+    const title = `${mode === 'pdf' ? 'inspection-report' : 'inspection-print'}-${inspection.date}-${inspection.id}`
+    const popup = openPrintWindow(title, inspectionPrintMarkup(inspection, language, formatDate, formatDateTime, t))
+    if (!popup) toast.error(t('เบราว์เซอร์บล็อกหน้าต่าง PDF โปรดอนุญาตป๊อปอัปแล้วลองอีกครั้ง'))
+  }
+
+  async function handleDelete() {
+    if (!id) return
+    setDeleting(true)
+    try {
+      await api.deleteInspection(id)
+      toast.success(t('ลบรายการตรวจแล้ว'))
+      setDeleteOpen(false)
+      onOpenChange(false)
+      onUpdated?.()
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบรายการไม่สำเร็จ')) }
+    finally { setDeleting(false) }
+  }
+
   return <Dialog open={Boolean(id)} onOpenChange={onOpenChange}>
     <DialogContent className="grid max-h-[92dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0 sm:max-w-5xl">
       <DialogHeader className="border-b border-border-subtle px-5 py-5 pr-12 sm:px-7 sm:pr-14">
-        <div className="flex items-center gap-2"><div className="grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Camera size={18} /></div><div><DialogTitle className="text-base">{t('รายละเอียดการตรวจ')}</DialogTitle><DialogDescription className="mt-1 text-xs">{t('ดูผลตรวจ หลักฐาน และความคืบหน้าการแก้ไข')}</DialogDescription></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><div className="grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Camera size={18} /></div><div><DialogTitle className="text-base">{t('รายละเอียดการตรวจ')}</DialogTitle><DialogDescription className="mt-1 text-xs">{t('ดูผลตรวจ หลักฐาน และความคืบหน้าการแก้ไข')}</DialogDescription></div></div>{inspection && <div className="flex flex-wrap justify-end gap-1"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" aria-label={t('ดาวน์โหลด PDF')} onClick={() => printReport('pdf')}><FileDown size={14} />PDF</Button><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" aria-label={t('พิมพ์')} onClick={() => printReport('print')}><Printer size={14} />{t('พิมพ์')}</Button>{user.role === 'admin' && <><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditOpen(true)}><Pencil size={14} />{t('แก้ไข')}</Button><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 size={14} />{t('ลบ')}</Button></>}</div>}</div>
       </DialogHeader>
       {loading || !inspection ? <div className="grid min-h-48 place-items-center text-sm text-muted-foreground"><span className="inline-flex items-center gap-2"><LoaderCircle className="animate-spin" size={16} /> {t('กำลังโหลดรายละเอียด…')}</span></div> : <div className="min-h-0 space-y-5 overflow-y-auto px-4 py-5 sm:px-7">
         <div className="grid gap-3 rounded-xl bg-surface-subtle p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -57,9 +84,50 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated }: Pr
         <div className="flex justify-end border-t border-border-subtle pt-4"><Button variant="outline" onClick={() => onOpenChange(false)}>{t('ปิด')}</Button></div>
       </div>}
       <IssueUpdateDialog item={selectedItem} user={user} onOpenChange={(open) => { if (!open) setSelectedItem(null) }} onSaved={handleSaved} />
+      {inspection && user.role === 'admin' && <EditInspectionDialog inspection={inspection} open={editOpen} onOpenChange={setEditOpen} onSaved={(updated) => { setInspection(updated); setEditOpen(false); onUpdated?.() }} />}
+      <ConfirmActionDialog open={deleteOpen} onOpenChange={setDeleteOpen} title={t('ลบรายการตรวจนี้หรือไม่')} description={t('การลบจะนำรายการตรวจและหลักฐานที่แนบออกจากระบบอย่างถาวร')} confirmLabel={t('ลบรายการ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={() => void handleDelete()} />
     </DialogContent>
     <PhotoPreviewDialog photo={selectedPhoto} onOpenChange={(open) => { if (!open) setSelectedPhoto(null) }} />
   </Dialog>
+}
+
+function EditInspectionDialog({ inspection, open, onOpenChange, onSaved }: { inspection: Inspection; open: boolean; onOpenChange: (open: boolean) => void; onSaved: (inspection: Inspection) => void }) {
+  const { language, t } = useI18n()
+  const [date, setDate] = useState(inspection.date)
+  const [time, setTime] = useState(inspection.time)
+  const [inspector, setInspector] = useState(inspection.inspector)
+  const [employeeCode, setEmployeeCode] = useState(inspection.employeeCode)
+  const [area, setArea] = useState(inspection.area)
+  const [shift, setShift] = useState(inspection.shift)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setDate(inspection.date); setTime(inspection.time); setInspector(inspection.inspector)
+    setEmployeeCode(inspection.employeeCode); setArea(inspection.area); setShift(inspection.shift)
+  }, [inspection, open])
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      const { inspection: updated } = await api.updateInspection(inspection.id, { date, time, inspector: inspector.trim(), employeeCode: employeeCode.trim(), area: area.trim(), shift: shift.trim() })
+      toast.success(t('บันทึกการแก้ไขแล้ว'))
+      onSaved(updated)
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
+    finally { setSaving(false) }
+  }
+
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"><DialogHeader><DialogTitle>{t('แก้ไขข้อมูลรายการตรวจ')}</DialogTitle><DialogDescription>{t('ข้อมูลผลตรวจและหลักฐานจะคงเดิม')}</DialogDescription></DialogHeader>
+    <form onSubmit={(event) => void submit(event)} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3"><label className="space-y-1 text-sm"><span>{t('วันที่ตรวจ')}</span><DatePicker value={date} onChange={setDate} language={language} ariaLabel={t('วันที่ตรวจ')} className="h-9" /></label><label className="space-y-1 text-sm"><span>{t('เวลาตรวจ')}</span><Input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label></div>
+      <label className="block space-y-1 text-sm"><span>{t('ผู้ตรวจ')}</span><Input value={inspector} onChange={(event) => setInspector(event.target.value)} required /></label>
+      <label className="block space-y-1 text-sm"><span>{t('รหัสพนักงาน')}</span><Input value={employeeCode} onChange={(event) => setEmployeeCode(event.target.value)} required /></label>
+      <label className="block space-y-1 text-sm"><span>{t('แผนก / พื้นที่')}</span><Input value={area} onChange={(event) => setArea(event.target.value)} required /></label>
+      <label className="block space-y-1 text-sm"><span>{t('กะ')}</span><Input value={shift} onChange={(event) => setShift(event.target.value)} required /></label>
+      <div className="flex justify-end gap-2 border-t pt-3"><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>{t('ยกเลิก')}</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button></div>
+    </form>
+  </DialogContent></Dialog>
 }
 
 function Meta({ label, value }: { label: string; value: string }) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Eye, FileBarChart2, FileSpreadsheet, LoaderCircle, Search, X } from 'lucide-react'
+import { Download, Eye, FileBarChart2, FileSpreadsheet, LoaderCircle, Pencil, Printer, Search, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, formatDate, formatDateTime, hiyariEmployeeSummaryExportUrl, hiyariSubmissionExportUrl } from '@/lib/api'
 import type { HiyariLanguage, HiyariSubmission } from '@/lib/types'
@@ -11,6 +11,9 @@ import { DatePicker } from '@/components/date-picker'
 import { useI18n } from '@/lib/i18n'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 
 type DocumentLabels = {
   title: string
@@ -140,6 +143,12 @@ export function HiyariReportsPage() {
   const [busyId, setBusyId] = useState('')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<HiyariSubmission | null>(null)
+  const [editing, setEditing] = useState<HiyariSubmission | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<HiyariSubmission | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [editReportDate, setEditReportDate] = useState('')
+  const [editLanguage, setEditLanguage] = useState<HiyariLanguage>('th')
   const [exportFrom, setExportFrom] = useState('')
   const [exportTo, setExportTo] = useState('')
 
@@ -161,6 +170,44 @@ export function HiyariReportsPage() {
     return matchesSearch
   }), [search, submissions])
   const pagination = useDataPagination(visibleSubmissions)
+
+  function beginEdit(submission: HiyariSubmission) {
+    setEditReportDate(submission.reportDate)
+    setEditLanguage(submission.language)
+    setEditing(submission)
+  }
+
+  async function saveSubmission(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editing) return
+    const form = new FormData(event.currentTarget)
+    setSaving(true)
+    try {
+      const input = {
+        employeeCode: String(form.get('employeeCode') || '').trim(), employeeName: String(form.get('employeeName') || '').trim(),
+        language: String(form.get('language') || editing.language) as HiyariLanguage, reportDate: String(form.get('reportDate') || ''),
+        whenText: String(form.get('whenText') || '').trim(), whereText: String(form.get('whereText') || '').trim(),
+        whatHappened: String(form.get('whatHappened') || '').trim(), suggestions: String(form.get('suggestions') || '').trim(), note: String(form.get('note') || '').trim(),
+      }
+      const { submission: updated } = await api.updateHiyariSubmission(editing.id, input)
+      setSubmissions((current) => current.map((row) => row.id === updated.id ? updated : row))
+      setSelected((current) => current?.id === updated.id ? updated : current)
+      setEditing(null); toast.success(t('บันทึกการแก้ไขแล้ว'))
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
+    finally { setSaving(false) }
+  }
+
+  async function deleteSubmission() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await api.deleteHiyariSubmission(deleteTarget.id)
+      setSubmissions((current) => current.filter((row) => row.id !== deleteTarget.id))
+      setSelected((current) => current?.id === deleteTarget.id ? null : current)
+      setDeleteTarget(null); toast.success(t('ลบรายการแล้ว'))
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบรายการไม่สำเร็จ')) }
+    finally { setDeleting(false) }
+  }
 
   async function downloadExcel(submission: HiyariSubmission) {
     setBusyId(submission.id)
@@ -225,13 +272,23 @@ export function HiyariReportsPage() {
         </div>
       </CardHeader>
       {visibleSubmissions.length ? <>
-        <div className="overflow-x-auto"><Table className="min-w-[720px]"><TableHeader><TableRow className="bg-surface-subtle text-left text-muted-foreground"><TableHead className="px-5 font-medium">{t('วันที่รายงาน')}</TableHead><TableHead className="px-3 font-medium">{t('พนักงาน')}</TableHead><TableHead className="px-3 font-medium">{t('แผนก')}</TableHead><TableHead className="px-5 text-right font-medium">{t('การทำรายการ')}</TableHead></TableRow></TableHeader><TableBody>{pagination.visibleItems.map((submission) => <TableRow key={submission.id}><TableCell className="px-5"><p>{formatDate(submission.reportDate, language)}</p><p className="text-xs text-muted-foreground">{formatDateTime(submission.submittedAt, language, false)}</p></TableCell><TableCell className="px-3"><p className="font-medium">{submission.employeeName}</p><p className="text-xs text-muted-foreground">{submission.employeeCode}</p></TableCell><TableCell className="px-3">{submission.department || '—'}</TableCell><TableCell className="px-5"><div className="flex justify-end gap-2"><Button variant="outline" className="h-9 gap-1.5" onClick={() => setSelected(submission)}><Eye size={15} />{t('ดูข้อมูล')}</Button><Button variant="outline" className="h-9 gap-1.5" aria-label={`${t('ดาวน์โหลด PDF')} ${submission.employeeName}`} onClick={() => openPdfWindow(submission, t)}><Download size={15} />PDF</Button><Button variant="outline" className="h-9 gap-1.5" disabled={busyId === submission.id} onClick={() => void downloadExcel(submission)}>{busyId === submission.id ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{t('Excel')}</Button></div></TableCell></TableRow>)}</TableBody></Table></div>
+        <div className="overflow-x-auto"><Table className="min-w-[900px]"><TableHeader><TableRow className="bg-surface-subtle text-left text-muted-foreground"><TableHead className="px-5 font-medium">{t('วันที่รายงาน')}</TableHead><TableHead className="px-3 font-medium">{t('พนักงาน')}</TableHead><TableHead className="px-3 font-medium">{t('แผนก')}</TableHead><TableHead className="px-5 text-right font-medium">{t('การทำรายการ')}</TableHead></TableRow></TableHeader><TableBody>{pagination.visibleItems.map((submission) => <TableRow key={submission.id}><TableCell className="px-5"><p>{formatDate(submission.reportDate, language)}</p><p className="text-xs text-muted-foreground">{formatDateTime(submission.submittedAt, language, false)}</p></TableCell><TableCell className="px-3"><p className="font-medium">{submission.employeeName}</p><p className="text-xs text-muted-foreground">{submission.employeeCode}</p></TableCell><TableCell className="px-3">{submission.department || '—'}</TableCell><TableCell className="px-5"><div className="flex justify-end gap-1"><Button variant="outline" className="h-9 gap-1.5" onClick={() => setSelected(submission)}><Eye size={15} />{t('ดูข้อมูล')}</Button><Button variant="outline" className="h-9 gap-1.5" aria-label={`${t('ดาวน์โหลด PDF')} ${submission.employeeName}`} onClick={() => openPdfWindow(submission, t)}><Download size={15} />PDF</Button><Button variant="ghost" size="icon" aria-label={`${t('พิมพ์')} ${submission.employeeName}`} title={t('พิมพ์')} onClick={() => openPdfWindow(submission, t)}><Printer size={15} /></Button><Button variant="outline" className="h-9 gap-1.5" disabled={busyId === submission.id} onClick={() => void downloadExcel(submission)}>{busyId === submission.id ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{t('Excel')}</Button><Button variant="ghost" size="icon" aria-label={t('แก้ไข')} onClick={() => beginEdit(submission)}><Pencil size={15} /></Button><Button variant="ghost" size="icon" aria-label={t('ลบ')} className="text-destructive" onClick={() => setDeleteTarget(submission)}><Trash2 size={15} /></Button></div></TableCell></TableRow>)}</TableBody></Table></div>
         <DataTablePagination total={visibleSubmissions.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
       </> : <CardContent className="grid min-h-48 place-items-center p-8 text-center"><div><FileBarChart2 className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-2 font-medium">{loading ? t('กำลังโหลดข้อมูล…') : t('ยังไม่มีรายงาน')}</p><p className="mt-1 text-sm text-muted-foreground">{t('เมื่อพนักงานส่งแบบฟอร์ม รายงานจะแสดงที่นี่')}</p></div></CardContent>}
     </Card>
 
-    <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}><DialogContent showCloseButton={false} className="w-[calc(100vw-1rem)] max-h-[96dvh] max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0 sm:max-w-5xl"><DialogHeader className="flex-col items-stretch gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-4"><div className="min-w-0"><DialogTitle>{t('รายละเอียดรายงาน Hiyari Hat')}</DialogTitle><DialogDescription className="mt-1">{selected ? `${selected.employeeName} · ${selected.employeeCode} · ${formatDate(selected.reportDate, language)}` : ''}</DialogDescription></div><div className="flex shrink-0 items-center justify-end gap-2"><Button variant="outline" className="h-10 gap-2 whitespace-nowrap" onClick={() => selected && openPdfWindow(selected, t)}><Download size={15} />{t('ดาวน์โหลด PDF')}</Button><Button variant="ghost" size="icon" aria-label={t('ปิด')} onClick={() => setSelected(null)}><X size={17} /></Button></div></DialogHeader>
+    <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}><DialogContent showCloseButton={false} className="w-[calc(100vw-1rem)] max-h-[96dvh] max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0 sm:max-w-5xl"><DialogHeader className="flex-col items-stretch gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-4"><div className="min-w-0"><DialogTitle>{t('รายละเอียดรายงาน Hiyari Hat')}</DialogTitle><DialogDescription className="mt-1">{selected ? `${selected.employeeName} · ${selected.employeeCode} · ${formatDate(selected.reportDate, language)}` : ''}</DialogDescription></div><div className="flex shrink-0 items-center justify-end gap-2"><Button variant="outline" className="h-10 gap-2 whitespace-nowrap" onClick={() => selected && openPdfWindow(selected, t)}><Download size={15} />{t('ดาวน์โหลด PDF')}</Button><Button variant="outline" className="h-10 gap-2 whitespace-nowrap" onClick={() => selected && openPdfWindow(selected, t)}><Printer size={15} />{t('พิมพ์')}</Button><Button variant="ghost" size="icon" aria-label={t('ปิด')} onClick={() => setSelected(null)}><X size={17} /></Button></div></DialogHeader>
       {selected && <div className="max-h-[calc(96dvh-116px)] overflow-auto bg-muted p-2 sm:max-h-[calc(96dvh-88px)] sm:p-6"><style>{paperStyles}</style><article className="hiyari-paper" dangerouslySetInnerHTML={{ __html: reportDocumentMarkup(selected) }} /></div>}
     </DialogContent></Dialog>
+    <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)}><DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>{t('แก้ไขรายงาน Hiyari Hat')}</DialogTitle><DialogDescription>{t('แก้ไขข้อมูลรายงานได้ รูปภาพประกอบจะคงเดิม')}</DialogDescription></DialogHeader>
+      {editing && <form onSubmit={(event) => void saveSubmission(event)} className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-sm"><span>{t('รหัสพนักงาน')}</span><Input name="employeeCode" defaultValue={editing.employeeCode} required /></label><label className="space-y-1 text-sm"><span>{t('ชื่อพนักงาน')}</span><Input name="employeeName" defaultValue={editing.employeeName} required /></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-sm"><span>{t('วันที่รายงาน')}</span><DatePicker value={editReportDate} onChange={setEditReportDate} language={language} ariaLabel={t('วันที่รายงาน')} /><input type="hidden" name="reportDate" value={editReportDate} readOnly /></label><label className="space-y-1 text-sm"><span>{t('ภาษา')}</span><Select value={editLanguage} onValueChange={(value) => setEditLanguage(value as HiyariLanguage)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="th">ไทย</SelectItem><SelectItem value="en">English</SelectItem><SelectItem value="my">မြန်မာ</SelectItem></SelectContent></Select><input type="hidden" name="language" value={editLanguage} readOnly /></label></div>
+        <label className="block space-y-1 text-sm"><span>{t('เมื่อไหร่')}</span><Input name="whenText" defaultValue={editing.whenText} /></label><label className="block space-y-1 text-sm"><span>{t('ที่ไหน')}</span><Input name="whereText" defaultValue={editing.whereText} /></label>
+        <label className="block space-y-1 text-sm"><span>{t('เกิดอะไรขึ้น')}</span><Textarea name="whatHappened" defaultValue={editing.whatHappened} required /></label><label className="block space-y-1 text-sm"><span>{t('ข้อเสนอแนะเพื่อปรับปรุง')}</span><Textarea name="suggestions" defaultValue={editing.suggestions} /></label><label className="block space-y-1 text-sm"><span>{t('หมายเหตุ')}</span><Textarea name="note" defaultValue={editing.note} /></label>
+        <div className="flex justify-end gap-2 border-t pt-3"><Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={saving}>{t('ยกเลิก')}</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button></div>
+      </form>}
+    </DialogContent></Dialog>
+    <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)} title={t('ลบรายงานนี้หรือไม่')} description={t('การลบจะนำรายงานและรูปภาพประกอบออกจากระบบอย่างถาวร')} confirmLabel={t('ลบรายการ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={() => void deleteSubmission()} />
   </div>
 }

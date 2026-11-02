@@ -12,6 +12,7 @@ type Props = {
   value: string
   employees: PublicEmployeeSuggestion[]
   mode: 'name' | 'code'
+  placeholder?: string
   invalid?: boolean
   onSearch?: (query: string, language: 'th' | 'en') => Promise<PublicEmployeeSuggestion[]>
   onSelect: (employee: PublicEmployeeSuggestion) => void
@@ -21,7 +22,7 @@ function employeeName(employee: PublicEmployeeSuggestion, language: 'th' | 'en')
   return language === 'en' ? employee.nameEn || employee.nameTh : employee.nameTh || employee.nameEn
 }
 
-export function EmployeeCombobox({ id, value, employees, mode, invalid = false, onSearch, onSelect }: Props) {
+export function EmployeeCombobox({ id, value, employees, mode, placeholder, invalid = false, onSearch, onSelect }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [remoteEmployees, setRemoteEmployees] = useState<PublicEmployeeSuggestion[]>([])
@@ -75,8 +76,8 @@ export function EmployeeCombobox({ id, value, employees, mode, invalid = false, 
           onClick={() => changeOpen(!open)}
           className={cn('h-10 w-full justify-between gap-2 bg-white px-3 text-left text-sm font-normal', invalid && 'border-destructive ring-2 ring-destructive/20')}
         >
-          <span className={cn('truncate', !selected && 'invisible')}>
-            {selected ? mode === 'code' ? selected.employeeCode : employeeName(selected, language) : '\u00a0'}
+          <span className={cn('truncate', !selected && 'text-muted-foreground')}>
+            {selected ? mode === 'code' ? selected.employeeCode : employeeName(selected, language) : placeholder || t('เลือกพนักงาน')}
           </span>
           <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
         </Button>

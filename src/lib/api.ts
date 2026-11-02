@@ -37,6 +37,10 @@ export const api = {
   suggestions: (language: 'th' | 'en' = 'th') => request<InspectionSuggestions>(`/api/suggestions?lang=${language}`),
   inspectionEmployees: (language: 'th' | 'en' = 'th') => request<{ employees: PublicEmployeeSuggestion[] }>(`/api/employees/directory?lang=${language}`),
   inspection: (id: string) => request<{ inspection: Inspection }>(`/api/inspections/${id}`),
+  updateInspection: (id: string, input: Pick<Inspection, 'date' | 'time' | 'inspector' | 'employeeCode' | 'area' | 'shift'>) => request<{ inspection: Inspection }>(`/api/admin/inspections/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
+  deleteInspection: (id: string) => request<{ ok: boolean }>(`/api/inspections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   createInspection: (body: FormData) => request<{ inspection: Inspection }>('/api/inspections', { method: 'POST', body }),
   createPublicInspection: (body: FormData) => request<{ ok: boolean }>('/api/public/daily-inspections', { method: 'POST', body }),
   updateResponse: (id: string, body: FormData) => request<{ inspection: Inspection }>(`/api/responses/${id}`, { method: 'PATCH', body }),
@@ -73,6 +77,10 @@ export const api = {
   deleteAssessment: (id: string) => request<{ ok: boolean }>(`/api/admin/assessments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   assessmentSubmissions: (id: string) => request<{ assessment: Pick<Assessment, 'id' | 'title'>; questions: AssessmentQuestion[]; submissions: AssessmentSubmission[] }>(`/api/admin/assessments/${encodeURIComponent(id)}/submissions`),
   assessmentReportSubmissions: () => request<{ submissions: AssessmentReportSubmission[] }>('/api/admin/assessment-submissions'),
+  updateAssessmentSubmissionEmployee: (id: string, input: { employeeCode: string; employeeName: string }) => request<{ ok: boolean; employeeCode: string; employeeName: string }>(`/api/admin/assessment-submissions/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
+  deleteAssessmentSubmission: (id: string) => request<{ ok: boolean }>(`/api/admin/assessment-submissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   publicAssessment: (token: string) => request<{ assessment: { title: string; description: string; instructions: string; allowMultipleAttempts: boolean; questions: Omit<AssessmentQuestion, 'correctOption'>[] } }>(`/api/public/assessments/${encodeURIComponent(token)}`),
   submitAssessment: (token: string, input: { employeeCode: string; employeeName: string; answers: Record<string, string> }) => request<{ ok: boolean; score: number; maxScore: number; submittedAt: string }>(`/api/public/assessments/${encodeURIComponent(token)}/submissions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
@@ -87,6 +95,10 @@ export const api = {
   }),
   deleteHiyariForm: (id: string) => request<{ ok: boolean }>(`/api/admin/hiyari-forms/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   hiyariSubmissions: (formId?: string) => request<{ submissions: HiyariSubmission[] }>(`/api/admin/hiyari-submissions${formId ? `?${new URLSearchParams({ formId })}` : ''}`),
+  updateHiyariSubmission: (id: string, input: Pick<HiyariSubmission, 'employeeCode' | 'employeeName' | 'language' | 'reportDate' | 'whenText' | 'whereText' | 'whatHappened' | 'suggestions' | 'note'>) => request<{ submission: HiyariSubmission }>(`/api/admin/hiyari-submissions/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
+  deleteHiyariSubmission: (id: string) => request<{ ok: boolean }>(`/api/admin/hiyari-submissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   publicHiyari: (token: string) => request<{ form: { title: string; description: string } }>(`/api/public/hiyari/${encodeURIComponent(token)}`),
   submitHiyari: (token: string, input: { employeeCode: string; employeeName: string; language: HiyariLanguage; reportDate: string; whenText: string; whereText: string; whatHappened: string; suggestions: string; note: string; photos: File[] }) => {
     const body = new FormData()

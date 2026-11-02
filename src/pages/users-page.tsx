@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useI18n } from '@/lib/i18n'
 import { AutocompleteInput } from '@/components/autocomplete-input'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
+import type { PublicEmployeeSuggestion } from '@/lib/types'
 
 export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: User; onCurrentUserUpdate: (user: User) => void }) {
   const { t } = useI18n()
@@ -87,13 +88,36 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   const [newEmployeeCode, setNewEmployeeCode] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [suggestions, setSuggestions] = useState({ inspectors: [] as string[], employeeCodes: [] as string[] })
-  useEffect(() => { if (open) api.suggestions(language).then(setSuggestions).catch(() => undefined) }, [open, language])
+  const [employees, setEmployees] = useState<PublicEmployeeSuggestion[]>([])
+  useEffect(() => {
+    if (!open) return
+    api.inspectionEmployees(language).then(({ employees: result }) => setEmployees(result)).catch((error) => toast.error(t(error instanceof Error ? error.message : 'โหลดรายชื่อพนักงานไม่สำเร็จ')))
+  }, [open, language, t])
+  function displayName(employee: PublicEmployeeSuggestion) {
+    return language === 'en' ? employee.nameEn || employee.nameTh : employee.nameTh || employee.nameEn
+  }
+  const nameOptions = employees.map((employee) => `${displayName(employee)} · ${employee.employeeCode}`)
+  function selectEmployee(employee: PublicEmployeeSuggestion) {
+    setNewEmployeeCode(employee.employeeCode)
+    setNewName(displayName(employee))
+  }
+  function changeEmployeeName(value: string) {
+    const selected = employees.find((employee) => nameOptions.includes(value) && `${displayName(employee)} · ${employee.employeeCode}` === value)
+      || employees.find((employee) => displayName(employee).toLocaleLowerCase() === value.trim().toLocaleLowerCase())
+    if (selected) selectEmployee(selected)
+    else { setNewName(value); setNewEmployeeCode('') }
+  }
+  function changeEmployeeCode(value: string) {
+    const selected = employees.find((employee) => employee.employeeCode.toLocaleUpperCase() === value.trim().toLocaleUpperCase())
+    setNewEmployeeCode(selected?.employeeCode || value)
+    setNewName(selected ? displayName(selected) : '')
+  }
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const formElement = event.currentTarget
     const form = new FormData(formElement)
-    if (password.length < 6) return toast.error(t('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'))
+    if (!newName || !newEmployeeCode) return toast.error(t('กรุณาเลือกพนักงานจากทะเบียน'))
+    if (password.length < 6 || password.length > 32) return toast.error(t('รหัสผ่านต้องมี 6–32 ตัวอักษร'))
     if (password !== confirmPassword) return toast.error(t('รหัสผ่านไม่ตรงกัน'))
     setBusy(true)
     try {
@@ -127,10 +151,11 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   return <Dialog open={open} onOpenChange={(next) => { if (!next) close(); else onOpenChange(true) }}><DialogContent className="max-w-md">
     <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><UserPlus size={17} /></div><DialogTitle className="text-base">{t('เพิ่มผู้ใช้งาน')}</DialogTitle><DialogDescription className="text-xs">{t('สร้างบัญชีเพื่อให้หัวหน้างานกรอกแบบตรวจหรือให้ Admin จัดการรายงาน')}</DialogDescription></DialogHeader>
     <form onSubmit={create} className="space-y-3.5 pt-1">
-      <div className="grid gap-1.5"><Label htmlFor="new-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="new-name" name="name" required placeholder={t('ชื่อและนามสกุล')} value={newName} onValueChange={setNewName} suggestions={suggestions.inspectors} /></div>
-      <div className="grid gap-1.5"><Label htmlFor="new-code">{t('รหัสพนักงาน')}</Label><AutocompleteInput id="new-code" name="employeeCode" required placeholder={t('เช่น YT-0123')} value={newEmployeeCode} onValueChange={setNewEmployeeCode} suggestions={suggestions.employeeCodes} /></div>
-      <div className="grid gap-1.5"><Label htmlFor="new-username">{t('ชื่อบัญชี')}</Label><Input id="new-username" name="username" required minLength={3} maxLength={32} autoComplete="off" placeholder={t('a-z, 0-9, จุด หรือขีด')} /></div>
-      <PasswordInput id="new-password" label={t('รหัสผ่านเริ่มต้น')} value={password} onChange={setPassword} placeholder={t('อย่างน้อย 6 ตัวอักษร')} />
+      <div className="grid gap-1.5"><Label htmlFor="new-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="new-name" name="name" required placeholder={t('ชื่อและนามสกุล')} value={newName} onValueChange={changeEmployeeName} suggestions={nameOptions} /></div>
+      <div className="grid gap-1.5"><Label htmlFor="new-code">{t('รหัสพนักงาน')}</Label><AutocompleteInput id="new-code" name="employeeCode" required placeholder={t('เช่น YT-0123')} value={newEmployeeCode} onValueChange={changeEmployeeCode} suggestions={employees.map((employee) => employee.employeeCode)} /></div>
+      <p className="-mt-1 text-xs text-muted-foreground">{t('ค้นหาด้วยชื่อหรือรหัสพนักงาน แล้วเลือกจากรายการเพื่อเติมข้อมูลอีกช่องอัตโนมัติ')}</p>
+      <div className="grid gap-1.5"><Label htmlFor="new-username">{t('ชื่อบัญชี')}</Label><Input id="new-username" name="username" value={newEmployeeCode.toLocaleLowerCase()} readOnly placeholder={t('เลือกรหัสพนักงานก่อน')} /><p className="text-xs text-muted-foreground">{t('ใช้รหัสพนักงานเป็นชื่อบัญชีอัตโนมัติ')}</p></div>
+      <PasswordInput id="new-password" label={t('รหัสผ่านเริ่มต้น')} value={password} onChange={setPassword} placeholder={t('6–32 ตัวอักษร จำง่ายได้')} />
       <div className="grid gap-1.5"><PasswordInput id="new-password-confirm" label={t('ยืนยันรหัสผ่าน')} value={confirmPassword} onChange={setConfirmPassword} placeholder={t('กรอกรหัสผ่านอีกครั้ง')} invalid={Boolean(confirmPassword) && password !== confirmPassword} />{Boolean(confirmPassword) && password !== confirmPassword && <p className="text-xs text-destructive" role="alert">{t('รหัสผ่านไม่ตรงกัน')}</p>}</div>
       <div className="grid gap-1.5"><Label htmlFor="new-role">{t('สิทธิ์การใช้งาน')}</Label><Select value={role} onValueChange={(value) => setRole(value as User['role'])}><SelectTrigger id="new-role" className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="employee">{t('พนักงาน')}</SelectItem><SelectItem value="leader">{t('หัวหน้างาน')}</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
       <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('เพิ่มบัญชี')}</Button></div>
@@ -172,7 +197,7 @@ function EditUserDialog({ user, onOpenChange, onUpdated }: { user: User | null; 
   return <Dialog open={Boolean(user)} onOpenChange={onOpenChange}><DialogContent className="max-w-md">
     <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Pencil size={17} /></div><DialogTitle className="text-base">{t('แก้ไขบัญชีผู้ใช้')}</DialogTitle><DialogDescription className="text-xs">{t('แก้ไขชื่อบัญชี ข้อมูลพนักงาน และสิทธิ์การใช้งาน')}</DialogDescription></DialogHeader>
     <form onSubmit={save} className="space-y-3.5 pt-1">
-      <div className="grid gap-1.5"><Label htmlFor="edit-username">{t('ชื่อบัญชี')}</Label><Input id="edit-username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={32} autoComplete="off" placeholder={t('a-z, 0-9, จุด หรือขีด')} /></div>
+      <div className="grid gap-1.5"><Label htmlFor="edit-username">{t('ชื่อบัญชี')}</Label><Input id="edit-username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={1} maxLength={40} autoComplete="off" placeholder={t('ชื่อบัญชี')} /></div>
       <div className="grid gap-1.5"><Label htmlFor="edit-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="edit-name" value={name} onValueChange={setName} suggestions={suggestions.inspectors} required placeholder={t('ชื่อและนามสกุล')} /></div>
       <div className="grid gap-1.5"><Label htmlFor="edit-code">{t('รหัสพนักงาน')}</Label><AutocompleteInput id="edit-code" value={employeeCode} onValueChange={setEmployeeCode} suggestions={suggestions.employeeCodes} required placeholder={t('เช่น YT-0123')} /></div>
       <div className="grid gap-1.5"><Label htmlFor="edit-role">{t('สิทธิ์การใช้งาน')}</Label><Select value={role} onValueChange={(value) => setRole(value as User['role'])}><SelectTrigger id="edit-role" className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="employee">{t('พนักงาน')}</SelectItem><SelectItem value="leader">{t('หัวหน้างาน')}</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
@@ -216,7 +241,7 @@ function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpen
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!user) return
-    if (password.length < 6) return toast.error(t('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'))
+    if (password.length < 6 || password.length > 32) return toast.error(t('รหัสผ่านต้องมี 6–32 ตัวอักษร'))
     if (password !== confirmPassword) return toast.error(t('รหัสผ่านไม่ตรงกัน'))
     setBusy(true)
     try {
@@ -237,5 +262,5 @@ function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpen
 function PasswordInput({ id, label, value, onChange, placeholder, invalid = false }: { id: string; label: string; value: string; onChange: (value: string) => void; placeholder: string; invalid?: boolean }) {
   const { t } = useI18n()
   const [visible, setVisible] = useState(false)
-  return <div className="grid gap-1.5"><Label htmlFor={id}>{label}</Label><div className="relative"><Input id={id} type={visible ? 'text' : 'password'} minLength={6} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" required placeholder={placeholder} aria-invalid={invalid || undefined} className="pr-11" /><Button type="button" variant="ghost" size="icon" aria-label={t(visible ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')} onClick={() => setVisible((current) => !current)} className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent">{visible ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
+  return <div className="grid gap-1.5"><Label htmlFor={id}>{label}</Label><div className="relative"><Input id={id} type={visible ? 'text' : 'password'} minLength={6} maxLength={32} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" required placeholder={placeholder} aria-invalid={invalid || undefined} className="pr-11" /><Button type="button" variant="ghost" size="icon" aria-label={t(visible ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')} onClick={() => setVisible((current) => !current)} className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent">{visible ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
 }

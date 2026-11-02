@@ -1010,8 +1010,12 @@ function buildInspectionWhere(filters, user) {
     params.push(filters.result)
   }
   if (filters.status) {
-    clauses.push('EXISTS (SELECT 1 FROM responses rf WHERE rf.inspection_id = i.id AND rf.result = \'NG\' AND rf.follow_up_status = ?)')
-    params.push(filters.status)
+    if (filters.status === 'open') {
+      clauses.push("EXISTS (SELECT 1 FROM responses rf WHERE rf.inspection_id = i.id AND rf.result = 'NG' AND COALESCE(rf.follow_up_status, '') != 'แก้ไขแล้ว')")
+    } else {
+      clauses.push('EXISTS (SELECT 1 FROM responses rf WHERE rf.inspection_id = i.id AND rf.result = \'NG\' AND rf.follow_up_status = ?)')
+      params.push(filters.status)
+    }
   }
   if (filters.category) {
     clauses.push('EXISTS (SELECT 1 FROM responses rf WHERE rf.inspection_id = i.id AND rf.item_title = ?)')
@@ -1713,6 +1717,59 @@ app.get('/api/inspections/:id', requireAuth, (req, res) => {
   res.json({ inspection: inspectionForUser(req.session.user, inspection) })
 })
 
+app.delete('/api/inspections/:id', requireAdmin, async (req, res) => {
+  const inspection = db.prepare('SELECT id, inspection_date, inspector_name, employee_code, department_area, shift FROM inspections WHERE id = ?').get(req.params.id)
+  if (!inspection) return res.status(404).json({ error: 'ไม่พบรายการตรวจ' })
+  const photos = db.prepare('SELECT stored_name FROM attachments WHERE inspection_id = ?').all(inspection.id)
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    addAudit(req.session.user.id, 'ลบรายการตรวจ', 'inspection', inspection.id, {
+      date: inspection.inspection_date,
+      inspector: inspection.inspector_name,
+      employeeCode: inspection.employee_code,
+      area: inspection.department_area,
+      shift: inspection.shift,
+      photoCount: photos.length,
+    })
+    db.prepare('DELETE FROM inspections WHERE id = ?').run(inspection.id)
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* transaction may already be closed */ }
+    throw error
+  }
+  await Promise.allSettled(photos.map((photo) => unlink(path.join(uploadDir, path.basename(photo.stored_name)))))
+  res.json({ ok: true })
+})
+
+app.patch('/api/admin/inspections/:id', requireAdmin, (req, res) => {
+  const existing = db.prepare('SELECT * FROM inspections WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบรายการตรวจ' })
+  const inspectionDate = String(req.body?.date ?? existing.inspection_date).trim()
+  const inspectionTime = String(req.body?.time ?? existing.inspection_time).trim()
+  const area = String(req.body?.area ?? existing.department_area).trim()
+  const shift = String(req.body?.shift ?? existing.shift).trim()
+  const employeeCode = String(req.body?.employeeCode ?? existing.employee_code).trim().toUpperCase()
+  const inspectorName = String(req.body?.inspector ?? existing.inspector_name).trim()
+  const dateValue = new Date(`${inspectionDate}T00:00:00Z`)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inspectionDate) || Number.isNaN(dateValue.getTime()) || dateValue.toISOString().slice(0, 10) !== inspectionDate
+    || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(inspectionTime) || !area || !shift || !employeeCode || !inspectorName
+    || [area, shift, inspectorName, employeeCode].some((value) => value.length > 120)) {
+    return res.status(400).json({ error: 'กรุณาตรวจสอบวันที่ เวลา ผู้ตรวจ พื้นที่ และกะ' })
+  }
+  const employee = db.prepare('SELECT employee_code, name_th, name_en FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(employeeCode)
+  const foldName = (value) => String(value || '').normalize('NFC').trim().toLocaleLowerCase()
+  if (!employee || ![employee.name_th, employee.name_en].some((name) => name && foldName(name) === foldName(inspectorName))) {
+    return res.status(400).json({ error: 'ชื่อผู้ตรวจและรหัสพนักงานไม่ตรงกับทะเบียน' })
+  }
+  db.prepare(`UPDATE inspections SET inspection_date = ?, inspection_time = ?, inspector_name = ?, employee_code = ?, department_area = ?, shift = ? WHERE id = ?`)
+    .run(inspectionDate, inspectionTime, inspectorName, employee.employee_code, area, shift, existing.id)
+  addAudit(req.session.user.id, 'แก้ไขข้อมูลรายการตรวจ', 'inspection', existing.id, {
+    before: { date: existing.inspection_date, inspector: existing.inspector_name, employeeCode: existing.employee_code, area: existing.department_area, shift: existing.shift },
+    after: { date: inspectionDate, inspector: inspectorName, employeeCode: employee.employee_code, area, shift },
+  })
+  res.json({ inspection: getInspection(existing.id) })
+})
+
 app.patch('/api/responses/:id', requireAuth, upload.array('photos', 10), async (req, res) => {
   const response = db.prepare(`SELECT r.*, i.id AS parent_id FROM responses r
     JOIN inspections i ON i.id = r.inspection_id WHERE r.id = ?`).get(req.params.id)
@@ -2011,6 +2068,66 @@ app.get('/api/admin/hiyari-submissions', requireAdmin, (req, res) => {
   res.json({ submissions: rows.map(hiyariSubmissionDto) })
 })
 
+app.patch('/api/admin/hiyari-submissions/:id', requireAdmin, (req, res) => {
+  const existing = db.prepare('SELECT * FROM hiyari_submissions WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบรายงาน Hiyari Hat' })
+  const employeeCode = String(req.body?.employeeCode ?? existing.employee_code).trim().toUpperCase()
+  const employeeName = String(req.body?.employeeName ?? existing.employee_name).trim()
+  const language = String(req.body?.language ?? existing.language)
+  const reportDate = String(req.body?.reportDate ?? existing.report_date).trim()
+  const whenText = String(req.body?.whenText ?? existing.when_text).trim()
+  const whereText = String(req.body?.whereText ?? existing.where_text).trim()
+  const whatHappened = String(req.body?.whatHappened ?? existing.what_happened).trim()
+  const suggestions = String(req.body?.suggestions ?? existing.suggestions).trim()
+  const note = String(req.body?.note ?? existing.note).trim()
+  const dateValue = new Date(`${reportDate}T00:00:00Z`)
+  if (!employeeCode || employeeCode.length > 80 || !employeeName || employeeName.length > 160
+    || !['th', 'en', 'my'].includes(language)
+    || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate) || Number.isNaN(dateValue.getTime()) || dateValue.toISOString().slice(0, 10) !== reportDate
+    || !whenText || whenText.length > 2000 || !whereText || whereText.length > 2000 || !whatHappened || whatHappened.length > 5000
+    || suggestions.length > 5000 || note.length > 3000) {
+    return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบและตรวจสอบความยาวข้อความ' })
+  }
+  const employee = db.prepare('SELECT * FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(employeeCode)
+  const foldName = (value) => String(value || '').normalize('NFC').trim().toLocaleLowerCase()
+  if (!employee || ![employee.name_th, employee.name_en].some((name) => name && foldName(name) === foldName(employeeName))) {
+    return res.status(400).json({ error: 'ชื่อและรหัสพนักงานไม่ตรงกับฐานข้อมูล' })
+  }
+  const department = language === 'en' || language === 'my'
+    ? employee.department_en || employee.department_th || ''
+    : employee.department_th || employee.department_en || ''
+  db.prepare(`UPDATE hiyari_submissions SET employee_code = ?, employee_name = ?, department = ?, language = ?, report_date = ?,
+    when_text = ?, where_text = ?, what_happened = ?, suggestions = ?, note = ? WHERE id = ?`)
+    .run(employee.employee_code, employeeName, department, language, reportDate, whenText, whereText, whatHappened, suggestions, note, existing.id)
+  addAudit(req.session.user.id, 'แก้ไขรายงาน Hiyari Hat', 'hiyari_submission', existing.id, {
+    before: { employeeCode: existing.employee_code, reportDate: existing.report_date },
+    after: { employeeCode: employee.employee_code, reportDate },
+  })
+  const row = db.prepare(`SELECT s.*, f.title AS form_title FROM hiyari_submissions s JOIN hiyari_forms f ON f.id = s.form_id WHERE s.id = ?`).get(existing.id)
+  res.json({ submission: hiyariSubmissionDto(row) })
+})
+
+app.delete('/api/admin/hiyari-submissions/:id', requireAdmin, async (req, res) => {
+  const existing = db.prepare('SELECT * FROM hiyari_submissions WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบรายงาน Hiyari Hat' })
+  const photos = parseJson(existing.photos_json, [])
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    addAudit(req.session.user.id, 'ลบรายงาน Hiyari Hat', 'hiyari_submission', existing.id, {
+      employeeCode: existing.employee_code,
+      reportDate: existing.report_date,
+      photoCount: photos.length,
+    })
+    db.prepare('DELETE FROM hiyari_submissions WHERE id = ?').run(existing.id)
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* transaction may already be closed */ }
+    throw error
+  }
+  await Promise.allSettled(photos.map((photo) => unlink(path.join(hiyariUploadDir, path.basename(String(photo.storedName || ''))))))
+  res.json({ ok: true })
+})
+
 app.get('/api/admin/hiyari-submissions/export-by-employee.xlsx', requireAdmin, async (req, res, next) => {
   try {
     const from = String(req.query.from || '').trim()
@@ -2141,6 +2258,52 @@ app.get('/api/admin/assessment-submissions', requireAdmin, (_req, res) => {
       submittedAt: row.submitted_at,
     }))
   res.set('Cache-Control', 'no-store').json({ submissions })
+})
+
+app.patch('/api/admin/assessment-submissions/:id', requireAdmin, (req, res) => {
+  const existing = db.prepare(`SELECT s.*, a.allow_multiple_attempts FROM assessment_submissions s
+    JOIN assessments a ON a.id = s.assessment_id WHERE s.id = ?`).get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบผลการประเมิน' })
+  const employeeCode = String(req.body?.employeeCode ?? existing.employee_code).trim().toUpperCase()
+  const employeeName = String(req.body?.employeeName ?? existing.employee_name).trim()
+  if (!employeeCode || employeeCode.length > 80 || !employeeName || employeeName.length > 160) return res.status(400).json({ error: 'กรุณาตรวจสอบชื่อและรหัสพนักงาน' })
+  const employee = db.prepare('SELECT employee_code, name_th, name_en FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(employeeCode)
+  const foldName = (value) => String(value || '').normalize('NFC').trim().toLocaleLowerCase()
+  if (!employee || ![employee.name_th, employee.name_en].some((name) => name && foldName(name) === foldName(employeeName))) {
+    return res.status(400).json({ error: 'ชื่อและรหัสพนักงานไม่ตรงกับฐานข้อมูล' })
+  }
+  if (!existing.allow_multiple_attempts && employee.employee_code !== existing.employee_code
+    && db.prepare('SELECT id FROM assessment_submissions WHERE assessment_id = ? AND employee_code = ? AND id != ?').get(existing.assessment_id, employee.employee_code, existing.id)) {
+    return res.status(409).json({ error: 'พนักงานนี้มีผลประเมินในชุดนี้แล้ว' })
+  }
+  const canonicalName = employee.name_th || employee.name_en
+  db.prepare('UPDATE assessment_submissions SET employee_code = ?, employee_name = ? WHERE id = ?')
+    .run(employee.employee_code, canonicalName, existing.id)
+  addAudit(req.session.user.id, 'แก้ไขข้อมูลผู้ทำแบบประเมิน', 'assessment_submission', existing.id, {
+    before: { employeeCode: existing.employee_code, employeeName: existing.employee_name },
+    after: { employeeCode: employee.employee_code, employeeName: canonicalName },
+  })
+  res.json({ ok: true, employeeCode: employee.employee_code, employeeName: canonicalName })
+})
+
+app.delete('/api/admin/assessment-submissions/:id', requireAdmin, (req, res) => {
+  const existing = db.prepare(`SELECT s.id, s.assessment_id, s.employee_code, s.employee_name, a.title AS assessment_title
+    FROM assessment_submissions s JOIN assessments a ON a.id = s.assessment_id WHERE s.id = ?`).get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบผลการประเมิน' })
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    addAudit(req.session.user.id, 'ลบผลการประเมิน', 'assessment_submission', existing.id, {
+      assessment: existing.assessment_title,
+      employeeCode: existing.employee_code,
+      employeeName: existing.employee_name,
+    })
+    db.prepare('DELETE FROM assessment_submissions WHERE id = ?').run(existing.id)
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* transaction may already be closed */ }
+    throw error
+  }
+  res.json({ ok: true })
 })
 
 app.get('/api/admin/assessment-submissions/export.xlsx', requireAdmin, async (_req, res, next) => {
@@ -2547,20 +2710,43 @@ app.get('/api/admin/users', requireAdmin, (_req, res) => {
   res.json({ users: users.map(safeUser) })
 })
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
-  const username = String(req.body?.username || '').trim().toLowerCase()
   const displayName = String(req.body?.name || '').trim()
-  const employeeCode = String(req.body?.employeeCode || '').trim()
+  const inputEmployeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
   const password = String(req.body?.password || '')
   const role = String(req.body?.role || 'leader')
-  if (!/^[a-z0-9._-]{3,32}$/.test(username)) return res.status(400).json({ error: 'ชื่อผู้ใช้ต้องมี 3–32 ตัว ใช้ a-z, 0-9, จุด ขีดกลาง หรือขีดล่าง' })
-  if (!displayName || !employeeCode) return res.status(400).json({ error: 'กรุณากรอกชื่อและรหัสพนักงาน' })
-  if (password.length < 6) return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
+  if (!displayName || !inputEmployeeCode) return res.status(400).json({ error: 'กรุณาเลือกชื่อและรหัสพนักงานจากทะเบียน' })
+  if (password.length < 6 || password.length > 32) return res.status(400).json({ error: 'รหัสผ่านต้องมี 6–32 ตัวอักษร' })
   if (!['admin', 'leader', 'employee'].includes(role)) return res.status(400).json({ error: 'ประเภทผู้ใช้ไม่ถูกต้อง' })
-  if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) return res.status(409).json({ error: 'ชื่อผู้ใช้นี้มีในระบบแล้ว' })
+  const employee = db.prepare('SELECT employee_code,name_th,name_en FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(inputEmployeeCode)
+  if (!employee) return res.status(400).json({ error: 'กรุณาเลือกพนักงานจากทะเบียน' })
+  const validNames = [employee.name_th, employee.name_en].filter(Boolean)
+  const matchedName = validNames.find((name) => name.toLocaleLowerCase() === displayName.toLocaleLowerCase())
+  if (!matchedName) return res.status(400).json({ error: 'ชื่อพนักงานไม่ตรงกับรหัสในทะเบียน กรุณาเลือกใหม่' })
+  const employeeCode = employee.employee_code
+  const username = employeeCode.toLocaleLowerCase()
+  if (!/^[a-z0-9._-]{1,40}$/.test(username)) return res.status(400).json({ error: 'รหัสพนักงานนี้ใช้เป็นชื่อบัญชีไม่ได้ กรุณาติดต่อผู้ดูแลระบบ' })
   const id = randomUUID()
-  db.prepare(`INSERT INTO users (id, username, password_hash, display_name, employee_code, role, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, username, await bcrypt.hash(password, 10), displayName, employeeCode, role, nowIso())
+  const passwordHash = await bcrypt.hash(password, 10)
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const employeeAccount = db.prepare('SELECT username,is_active FROM users WHERE UPPER(TRIM(employee_code)) = ?').get(employeeCode.toUpperCase())
+    if (employeeAccount) {
+      db.exec('ROLLBACK')
+      return res.status(409).json({ error: 'พนักงานนี้มีบัญชีแล้ว กรุณาค้นหาหรือเปิดใช้งานบัญชีเดิม' })
+    }
+    if (db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(username)) {
+      db.exec('ROLLBACK')
+      return res.status(409).json({ error: 'ชื่อบัญชีนี้มีอยู่แล้ว กรุณาตรวจสอบบัญชีเดิม' })
+    }
+    db.prepare(`INSERT INTO users (id, username, password_hash, display_name, employee_code, role, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, username, passwordHash, matchedName, employeeCode, role, nowIso())
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    if (String(error).includes('UNIQUE constraint failed: users.username')) return res.status(409).json({ error: 'ชื่อบัญชีนี้มีอยู่แล้ว กรุณาตรวจสอบบัญชีเดิม' })
+    throw error
+  }
   addAudit(req.session.user.id, 'สร้างบัญชีผู้ใช้', 'user', id, { username, role })
   res.status(201).json({ user: safeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)) })
 })
@@ -2571,10 +2757,10 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
   const displayName = String(req.body?.name ?? existing.display_name).trim()
   const employeeCode = String(req.body?.employeeCode ?? existing.employee_code).trim()
   const role = String(req.body?.role ?? existing.role)
-  if (!/^[a-z0-9._-]{3,32}$/.test(username)) return res.status(400).json({ error: 'ชื่อผู้ใช้ต้องมี 3–32 ตัว ใช้ a-z, 0-9, จุด ขีดกลาง หรือขีดล่าง' })
+  if (!/^[a-z0-9._-]{1,40}$/.test(username)) return res.status(400).json({ error: 'ชื่อบัญชีต้องมี 1–40 ตัว ใช้ a-z, 0-9, จุด ขีดกลาง หรือขีดล่าง' })
   if (!displayName || !employeeCode) return res.status(400).json({ error: 'กรุณากรอกชื่อและรหัสพนักงาน' })
   if (!['admin', 'leader', 'employee'].includes(role)) return res.status(400).json({ error: 'ประเภทผู้ใช้ไม่ถูกต้อง' })
-  const duplicate = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username, existing.id)
+  const duplicate = db.prepare('SELECT id FROM users WHERE lower(username) = ? AND id != ?').get(username, existing.id)
   if (duplicate) return res.status(409).json({ error: 'ชื่อผู้ใช้นี้มีในระบบแล้ว' })
   const isDemotingAdmin = existing.role === 'admin' && role !== 'admin'
   if (isDemotingAdmin && db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = 1").get().count <= 1) {
@@ -2619,7 +2805,7 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
   const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.params.id)
   if (!user) return res.status(404).json({ error: 'ไม่พบบัญชีผู้ใช้' })
   const password = String(req.body?.password || '')
-  if (password.length < 6) return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
+  if (password.length < 6 || password.length > 32) return res.status(400).json({ error: 'รหัสผ่านต้องมี 6–32 ตัวอักษร' })
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(password, 10), user.id)
   addAudit(req.session.user.id, 'เปลี่ยนรหัสผ่านผู้ใช้', 'user', user.id, { username: user.username })
   res.json({ ok: true })
