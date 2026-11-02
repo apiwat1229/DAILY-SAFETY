@@ -197,7 +197,7 @@ export type DashboardData = {
     resolutionRate: number
   }
   categories: { title: string; count: number }[]
-  trend: { date: string; ok: number; ng: number; na: number }[]
+  trend: { date: string; reporters: number }[]
   recent: InspectionSummary[]
 }
 

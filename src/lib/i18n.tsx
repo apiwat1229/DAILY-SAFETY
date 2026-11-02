@@ -45,6 +45,12 @@ const english: Record<string, string> = Object.fromEntries([
   ] as [string, string][]),
 ])
 
+Object.assign(english, {
+  'จำนวนผู้รายงานในแต่ละวัน': 'Reporters by day',
+  'จำนวน User ที่ส่งแบบตรวจ · 7 วันล่าสุด': 'Unique users submitting inspections · last 7 days',
+  'ผู้รายงาน': 'Reporters',
+})
+
 type I18nValue = { language: Language; setLanguage: (language: Language) => void; t: (thai: string) => string }
 const I18nContext = createContext<I18nValue | null>(null)
 

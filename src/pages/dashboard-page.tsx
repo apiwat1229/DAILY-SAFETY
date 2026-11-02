@@ -54,10 +54,10 @@ export function DashboardPage({ user, onPage }: Props) {
     const map = new Map((data?.trend || []).map((point) => [point.date, point]))
     return Array.from({ length: 7 }, (_, index) => {
       const date = addDays(to, index - 6)
-      return map.get(date) || { date, ok: 0, ng: 0, na: 0 }
+      return map.get(date) || { date, reporters: 0 }
     })
   }, [data?.trend, to])
-  const maxBar = Math.max(1, ...trend.map((point) => point.ok + point.ng + point.na))
+  const maxBar = Math.max(1, ...trend.map((point) => point.reporters))
 
   const metrics = [
     { title: t('รายการตรวจ'), value: data?.stats.inspections ?? 0, note: t('ครั้งในช่วงเวลาที่เลือก'), icon: FileCheck2, tone: 'mint' },
@@ -89,23 +89,18 @@ export function DashboardPage({ user, onPage }: Props) {
       <div className="grid gap-4 xl:grid-cols-[1.35fr_.85fr]">
         <Card className="rounded-2xl border-border">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <div><CardTitle className="text-sm">{t('ผลตรวจในแต่ละวัน')}</CardTitle><CardDescription className="mt-1 text-xs">{t('จำนวนผลตรวจแยกตามสถานะ · 7 วันล่าสุด')}</CardDescription></div>
-            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 pt-1 text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-success" /> OK</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-destructive" /> NG</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-info" /> N/A</span></div>
+            <div><CardTitle className="text-sm">{t('จำนวนผู้รายงานในแต่ละวัน')}</CardTitle><CardDescription className="mt-1 text-xs">{t('จำนวน User ที่ส่งแบบตรวจ · 7 วันล่าสุด')}</CardDescription></div>
+            <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground"><span className="size-2 rounded-sm bg-primary" />{t('ผู้รายงาน')}</div>
           </CardHeader>
           <CardContent className="pt-4">
             {data?.stats.checked ? <div className="grid h-[202px] grid-cols-7 items-end gap-2 border-b border-border-subtle pb-2 sm:gap-5">
               {trend.map((point) => {
-                const total = point.ok + point.ng + point.na
-                const height = total ? Math.max(24, (total / maxBar) * 128) : 4
-                const segments = [
-                  { key: 'ok', count: point.ok, color: 'bg-success', label: 'OK' },
-                  { key: 'ng', count: point.ng, color: 'bg-destructive', label: 'NG' },
-                  { key: 'na', count: point.na, color: 'bg-info', label: 'N/A' },
-                ]
-                return <div key={point.date} className="flex h-full min-w-0 flex-col items-center justify-end gap-1.5" title={`${point.ok} OK · ${point.ng} NG · ${point.na} N/A`}>
-                  <span className="h-4 text-xs font-semibold tabular-nums text-foreground">{total || ''}</span>
-                  <div className="flex w-full max-w-[36px] flex-col-reverse overflow-hidden rounded-t-md bg-muted" style={{ height }} aria-label={`${formatDate(point.date, language)}: ${point.ok} OK, ${point.ng} NG, ${point.na} N/A`}>
-                    {segments.map((segment) => segment.count > 0 ? <div key={segment.key} className={`flex min-h-0 w-full items-center justify-center overflow-hidden text-xs font-semibold leading-none text-white ${segment.color}`} style={{ height: `${(segment.count / total) * 100}%` }}><span>{(segment.count / total) * height >= 17 ? segment.count : null}</span></div> : null)}
+                const count = point.reporters
+                const height = count ? Math.max(24, (count / maxBar) * 128) : 4
+                return <div key={point.date} className="flex h-full min-w-0 flex-col items-center justify-end gap-1.5" title={`${formatDate(point.date, language)} · ${count} ${t('ผู้รายงาน')}`}>
+                  <span className="h-4 text-xs font-semibold tabular-nums text-foreground">{count || ''}</span>
+                  <div className="flex w-full max-w-[36px] items-end overflow-hidden rounded-t-md bg-muted" style={{ height }} aria-label={`${formatDate(point.date, language)}: ${count} ${t('ผู้รายงาน')}`}>
+                    {count > 0 && <div className="flex w-full items-center justify-center overflow-hidden rounded-t-sm bg-primary text-xs font-semibold leading-none text-primary-foreground" style={{ height: '100%' }} />}
                   </div>
                   <span className="text-xs text-muted-foreground">{new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', { weekday: 'short', timeZone: 'Asia/Bangkok' }).format(new Date(`${point.date}T12:00:00+07:00`))}</span>
                 </div>

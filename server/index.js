@@ -1317,10 +1317,8 @@ app.get('/api/dashboard', requireAdmin, (req, res) => {
   `).all(...categoryWhere.params, categoryResult)
   const trend = db.prepare(`
     SELECT i.inspection_date AS date,
-      SUM(CASE WHEN r.result = 'OK' THEN 1 ELSE 0 END) AS ok,
-      SUM(CASE WHEN r.result = 'NG' THEN 1 ELSE 0 END) AS ng,
-      SUM(CASE WHEN r.result = 'N/A' THEN 1 ELSE 0 END) AS na
-    FROM inspections i LEFT JOIN responses r ON r.inspection_id = i.id
+      COUNT(DISTINCT NULLIF(UPPER(TRIM(i.employee_code)), '')) AS reporters
+    FROM inspections i
     WHERE i.inspection_date >= ? AND i.inspection_date <= ?
     GROUP BY i.inspection_date ORDER BY i.inspection_date
   `).all(from, to)
