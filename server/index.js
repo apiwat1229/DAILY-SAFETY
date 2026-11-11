@@ -24,6 +24,7 @@ import { createBackup } from './backup.js'
 import { migrateInventory } from './inventory/schema.js'
 import { migrateRequisitions } from './requisitions/schema.js'
 import { registerInventoryRoutes } from './inventory/routes.js'
+import { registerRequisitionRoutes } from './requisitions/routes.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
@@ -3253,7 +3254,12 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
   res.json({ ok: true })
 })
 
-registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir })
+const inventory = registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir })
+const requisitions = registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir, stock: inventory.stock })
+// Stale approved requisitions expire and overdue approval steps escalate; checked hourly.
+setInterval(() => {
+  try { requisitions.service.expireStale(); requisitions.service.escalateOverdue() } catch (error) { console.error('requisition maintenance failed', error) }
+}, 60 * 60 * 1000).unref()
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' }))
 

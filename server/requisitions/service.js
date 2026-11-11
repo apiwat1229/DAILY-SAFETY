@@ -603,6 +603,6 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
 
   return {
     getCart, setCartLine, clearCart, catalog, checkout, get, approve, reject, requestChanges, cancel, resubmit, issue, closeRemainder, recordReturn, confirmReceipt,
-    reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, listAll, badges, canView,
+    reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, listAll, badges, canView, departmentOf,
   }
 }
