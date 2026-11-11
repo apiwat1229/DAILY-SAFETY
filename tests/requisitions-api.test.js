@@ -2,7 +2,8 @@ import { after, before, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { ADMIN_PASSWORD, Client, employeeBody, loginAs, startServer } from './helpers.js'
+import { readdir } from 'node:fs/promises'
+import { ADMIN_PASSWORD, employeeBody, imageBlob, loginAs, startServer } from './helpers.js'
 
 let server
 let baseUrl
@@ -396,5 +397,97 @@ describe('requisition API', () => {
     assert.equal(queue.lines[0].picks.length, 1)
     assert.match(queue.lines[0].picks[0].lotNo, /^LOT-/)
     assert.equal(queue.lines[0].picks[0].qty, 4)
+  })
+})
+
+describe('requisition photos', () => {
+  const photoDir = () => path.join(server.dataDir, 'uploads', 'requisitions')
+  const fileCount = async () => (await readdir(photoDir()).catch(() => [])).length
+  const form = async (count = 1, blob = null) => {
+    const data = new FormData()
+    for (let i = 0; i < count; i += 1) data.append('photos', blob ?? await imageBlob(), `photo-${i}.png`)
+    return data
+  }
+  const upload = async (client, id, count = 1, blob = null) => client.call('POST', `/api/requisitions/${id}/photos`, await form(count, blob))
+  const rawGet = (client, url) => fetch(`${baseUrl}${url}`, { headers: { Cookie: client.cookie } })
+
+  test('the requester uploads photos and they appear on the detail with urls', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    const result = await upload(s.employee.client, created.id, 2)
+    assert.equal(result.status, 201, JSON.stringify(result.json))
+    const detail = (await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition
+    assert.equal(detail.photos.length, 2)
+    assert.match(detail.photos[0].url, /^\/api\/requisitions\/photos\//)
+    assert.match(detail.photos[0].thumbUrl, /size=thumb$/)
+    const full = await rawGet(s.employee.client, detail.photos[0].url)
+    assert.equal(full.status, 200)
+    assert.equal(full.headers.get('content-type'), 'image/jpeg')
+    assert.equal((await rawGet(s.employee.client, detail.photos[0].thumbUrl)).status, 200)
+    assert.ok(detail.events.some((event) => event.action === 'photo_added'))
+  })
+
+  test('strangers cannot upload or view; approvers and storekeepers of the warehouse can view', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    await upload(s.employee.client, created.id)
+    const photo = (await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition.photos[0]
+    const stranger = await makeUser('employee', 'แผนกอื่น')
+    assert.equal((await upload(stranger.client, created.id)).status, 403)
+    assert.equal((await rawGet(stranger.client, photo.url)).status, 403)
+    assert.equal((await rawGet(s.leaderClient, photo.url)).status, 200)
+    assert.equal((await rawGet(s.keeper.client, photo.url)).status, 200)
+    assert.equal((await rawGet(s.adminClient, photo.thumbUrl)).status, 200)
+    assert.equal((await fetch(`${baseUrl}${photo.url}`)).status, 401)
+    assert.equal((await rawGet(s.adminClient, '/api/requisitions/photos/missing')).status, 404)
+    assert.equal((await upload(s.employee.client, 'missing')).status, 404)
+  })
+
+  test('at most six photos per requisition, and only images are accepted', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    assert.equal((await upload(s.employee.client, created.id, 6)).status, 201)
+    assert.equal((await upload(s.employee.client, created.id, 1)).status, 400)
+    const other = await submit(s, 1)
+    const before = await fileCount()
+    assert.equal((await upload(s.employee.client, other.id, 1, new Blob(['not an image'], { type: 'image/png' }))).status, 400)
+    assert.equal((await upload(s.employee.client, other.id, 1, new Blob([Buffer.from('GIF89a')], { type: 'image/gif' }))).status, 400)
+    assert.equal(await fileCount(), before)
+    assert.equal((await rq(s.employee.client, 'GET', `/${other.id}`)).json.requisition.photos.length, 0)
+  })
+
+  test('uploads and deletes are only possible while the requisition is editable', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    await upload(s.employee.client, created.id)
+    const photo = (await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition.photos[0]
+    await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})
+    assert.equal((await upload(s.employee.client, created.id)).status, 409)
+    assert.equal((await rq(s.employee.client, 'DELETE', `/${created.id}/photos/${photo.id}`)).status, 409)
+    assert.equal((await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition.photos.length, 1)
+  })
+
+  test('the requester can delete their own photo; others cannot; files are removed', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    const start = await fileCount()
+    await upload(s.employee.client, created.id)
+    assert.equal(await fileCount(), start + 2)
+    const photo = (await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition.photos[0]
+    const stranger = await makeUser('employee', 'แผนกอื่น')
+    assert.equal((await rq(stranger.client, 'DELETE', `/${created.id}/photos/${photo.id}`)).status, 403)
+    assert.equal((await rq(s.leaderClient, 'DELETE', `/${created.id}/photos/${photo.id}`)).status, 403)
+    assert.equal((await rq(s.employee.client, 'DELETE', `/${created.id}/photos/missing`)).status, 404)
+    assert.equal((await rq(s.employee.client, 'DELETE', `/${created.id}/photos/${photo.id}`)).status, 200)
+    assert.equal(await fileCount(), start)
+    assert.equal((await rawGet(s.employee.client, photo.url)).status, 404)
+  })
+
+  test('returned-for-edit requisitions accept new photos before resubmitting', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    await rq(s.leaderClient, 'POST', `/${created.id}/request-changes`, { reason: 'แนบรูปของที่ชำรุด' })
+    assert.equal((await upload(s.employee.client, created.id)).status, 201)
+    assert.equal((await rq(s.employee.client, 'POST', `/${created.id}/resubmit`, { lines: [] })).json.requisition.photos.length, 1)
   })
 })

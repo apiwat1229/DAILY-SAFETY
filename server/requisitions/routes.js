@@ -1,4 +1,7 @@
 import express from 'express'
+import multer from 'multer'
+import path from 'node:path'
+import { ImageError, removeImage, saveImage } from '../inventory/images.js'
 import { WorkflowError, createWorkflowService } from './workflow.js'
 import { RequisitionError, createRequisitionService } from './service.js'
 
@@ -6,7 +9,8 @@ const FORBIDDEN = 'ไม่มีสิทธิ์เข้าถึงข้�
 const STATUS = { INVALID: 400, NOT_FOUND: 404, FORBIDDEN: 403, BAD_STATE: 409, IN_USE: 409, SHORTAGE: 409 }
 
 /** Workflow settings (/api/workflow) and requisitions (/api/requisitions). */
-export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, stock }) {
+export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, stock, uploadDir }) {
+  const photoDir = path.join(uploadDir, 'requisitions')
   const workflow = createWorkflowService(db)
   const service = createRequisitionService(db, { stock, workflow })
 
@@ -163,6 +167,56 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
       }
     })
     res.json({ results })
+  }))
+
+  /** File name for display only: no path, no control characters, bounded length. */
+  const cleanName = (name) => Array.from(path.basename(String(name || 'photo'))).filter((char) => char.charCodeAt(0) >= 32).join('').slice(0, 180) || 'photo'
+  const photoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024, files: 6 },
+    fileFilter: (_req, file, callback) => {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) return callback(new ImageError('รองรับไฟล์ JPG, PNG หรือ WebP เท่านั้น'))
+      callback(null, true)
+    },
+  })
+  const photoFiles = (req, res, next) => photoUpload.array('photos', 6)(req, res, (error) => {
+    if (!error) return next()
+    const message = error.code === 'LIMIT_FILE_SIZE' ? 'ไฟล์รูปใหญ่เกิน 8 MB' : error.code === 'LIMIT_UNEXPECTED_FILE' ? 'แนบรูปได้ไม่เกิน 6 รูปต่อครั้ง' : error.message || 'อัปโหลดรูปไม่สำเร็จ'
+    res.status(400).json({ error: message })
+  })
+
+  reqRouter.get('/photos/:photoId', handle((req, res, next) => {
+    const photo = service.getPhoto(req.params.photoId)
+    if (!service.canView(actor(req), service.get(photo.requisitionId))) return res.status(403).json({ error: FORBIDDEN })
+    const name = req.query.size === 'thumb' ? photo.thumb : photo.stored
+    res.type('image/jpeg').set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=86400' })
+      .sendFile(path.join(photoDir, path.basename(name)), (error) => error && next(error))
+  }))
+
+  reqRouter.post('/:id/photos', photoFiles, handle(async (req, res) => {
+    const files = req.files ?? []
+    service.prepareUpload({ id: req.params.id, userId: actor(req).id, count: files.length })
+    const saved = []
+    try {
+      for (const file of files) saved.push({ ...(await saveImage(file.buffer, photoDir)), originalName: cleanName(file.originalname) })
+    } catch (error) {
+      await Promise.all(saved.map((photo) => removeImage(photoDir, photo.stored)))
+      if (error instanceof ImageError) return res.status(400).json({ error: error.message })
+      throw error
+    }
+    try { service.addPhotos({ id: req.params.id, userId: actor(req).id, photos: saved }) } catch (error) {
+      await Promise.all(saved.map((photo) => removeImage(photoDir, photo.stored)))
+      throw error
+    }
+    addAudit(actor(req).id, 'แนบรูปในใบเบิก', 'requisition', req.params.id, { count: saved.length })
+    res.status(201).json(detailBody(req.params.id))
+  }))
+
+  reqRouter.delete('/:id/photos/:photoId', handle(async (req, res) => {
+    const removed = service.removePhoto({ id: req.params.id, photoId: req.params.photoId, userId: actor(req).id })
+    await removeImage(photoDir, removed.stored)
+    addAudit(actor(req).id, 'ลบรูปในใบเบิก', 'requisition', req.params.id, {})
+    res.json(detailBody(req.params.id))
   }))
 
   reqRouter.get('/:id', handle((req, res) => {

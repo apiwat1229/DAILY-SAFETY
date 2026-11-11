@@ -592,6 +592,52 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
     return { approvals: inbox(user.id).length, issue: issueQueue(user.id, user.role).length }
   }
 
+  // ---- photos (files are stored by the route; these functions enforce the rules and keep the rows) ----
+  const EDITABLE_PHOTOS = ['in_approval', 'returned_for_edit']
+  const MAX_PHOTOS = 6
+
+  function photoActor(req, userId) {
+    const user = userRow(userId)
+    if (!user || (req.requester_id !== userId && user.role !== 'admin')) throw forbidden('เฉพาะผู้เบิกเท่านั้นที่แนบหรือลบรูปได้')
+    if (!EDITABLE_PHOTOS.includes(req.status)) throw badState('แนบหรือลบรูปได้เฉพาะตอนรออนุมัติหรือถูกส่งกลับให้แก้ไข')
+  }
+
+  function prepareUpload({ id, userId, count }) {
+    const req = load(id)
+    photoActor(req, userId)
+    const existing = db.prepare('SELECT COUNT(*) AS n FROM requisition_photos WHERE requisition_id = ?').get(id).n
+    if (!Number.isInteger(count) || count < 1 || existing + count > MAX_PHOTOS) throw invalid(`แนบรูปได้ไม่เกิน ${MAX_PHOTOS} รูปต่อใบเบิก`)
+  }
+
+  function addPhotos({ id, userId, photos }) {
+    return run(() => {
+      const req = load(id)
+      photoActor(req, userId)
+      for (const photo of photos) db.prepare('INSERT INTO requisition_photos (id, requisition_id, stored_name, thumb_name, original_name, uploaded_by, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(randomUUID(), id, photo.stored, photo.thumb, photo.originalName, userId, now())
+      addEvent(id, 0, userId, 'photo_added', `${photos.length} รูป`)
+      return get(id)
+    })
+  }
+
+  /** Removes the row and returns the stored file names so the caller can delete the files. */
+  function removePhoto({ id, photoId, userId }) {
+    return run(() => {
+      const req = load(id)
+      const photo = db.prepare('SELECT * FROM requisition_photos WHERE id = ? AND requisition_id = ?').get(photoId, id)
+      if (!photo) throw new RequisitionError('NOT_FOUND', 'ไม่พบรูปภาพ')
+      photoActor(req, userId)
+      db.prepare('DELETE FROM requisition_photos WHERE id = ?').run(photoId)
+      addEvent(id, 0, userId, 'photo_removed', photo.original_name)
+      return { stored: photo.stored_name, thumb: photo.thumb_name }
+    })
+  }
+
+  function getPhoto(photoId) {
+    const photo = db.prepare('SELECT * FROM requisition_photos WHERE id = ?').get(photoId)
+    if (!photo) throw new RequisitionError('NOT_FOUND', 'ไม่พบรูปภาพ')
+    return { requisitionId: photo.requisition_id, stored: photo.stored_name, thumb: photo.thumb_name }
+  }
+
   /** Requester, anyone who is or was an approver (or their delegate today), storekeepers of the warehouse and admins. */
   function canView(user, detail) {
     if (user.role === 'admin' || detail.requesterId === user.id) return true
@@ -603,6 +649,6 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
 
   return {
     getCart, setCartLine, clearCart, catalog, checkout, get, approve, reject, requestChanges, cancel, resubmit, issue, closeRemainder, recordReturn, confirmReceipt,
-    reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, listAll, badges, canView, departmentOf,
+    reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, listAll, badges, canView, departmentOf, prepareUpload, addPhotos, removePhoto, getPhoto,
   }
 }
