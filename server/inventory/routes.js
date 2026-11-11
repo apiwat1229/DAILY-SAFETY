@@ -220,7 +220,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
 
   // ---- warehouses ----
   function warehouseDto(row) {
-    const staff = db.prepare(`SELECT s.user_id, u.display_name FROM warehouse_staff s JOIN users u ON u.id = s.user_id WHERE s.warehouse_id = ? ORDER BY u.display_name COLLATE NOCASE`).all(row.id)
+    const staff = db.prepare(`SELECT s.user_id, u.display_name FROM warehouse_staff s JOIN users u ON u.id = s.user_id WHERE s.warehouse_id = ? AND u.is_active = 1 AND u.role IN ('storekeeper', 'admin') ORDER BY u.display_name COLLATE NOCASE`).all(row.id)
     return { id: row.id, code: row.code, name: row.name, isActive: Boolean(row.is_active), staff: staff.map((member) => ({ userId: member.user_id, name: member.display_name })) }
   }
   const loadWarehouse = (id) => db.prepare('SELECT * FROM warehouses WHERE id = ?').get(id)

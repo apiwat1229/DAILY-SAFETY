@@ -128,6 +128,19 @@ describe('catalog and warehouse API', () => {
     assert.equal((await inv(client, 'POST', '/warehouses', { code: 'NOPE', name: 'x' })).status, 403)
   })
 
+  test('warehouse staff list drops users who were demoted or deactivated', async () => {
+    const adminClient = await admin()
+    const demoted = await makeStorekeeper('SK-DEMOTE')
+    const removed = await makeStorekeeper('SK-REMOVED')
+    const kept = await makeStorekeeper('SK-KEPT')
+    const warehouse = (await inv(adminClient, 'POST', '/warehouses', { code: 'WH-STALE', name: 'คลังทดสอบรายชื่อ' })).json.warehouse
+    assert.equal((await inv(adminClient, 'PUT', `/warehouses/${warehouse.id}/staff`, { userIds: [demoted.userId, removed.userId, kept.userId] })).status, 200)
+    assert.equal((await adminClient.call('PATCH', `/api/admin/users/${demoted.userId}`, { role: 'employee' })).status, 200)
+    assert.equal((await adminClient.call('DELETE', `/api/admin/users/${removed.userId}`)).status, 200)
+    const staff = (await inv(adminClient, 'GET', '/warehouses')).json.warehouses.find((row) => row.code === 'WH-STALE').staff
+    assert.deepEqual(staff.map((member) => member.userId), [kept.userId])
+  })
+
   test('storekeeper sees only assigned warehouses; staff must be storekeepers or admins', async () => {
     const adminClient = await admin()
     const { client, userId } = await makeStorekeeper('SK011')
