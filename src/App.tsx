@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Toaster } from 'sonner'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
-import { AppShell, type PageKey } from '@/components/app-shell'
+import { AppShell } from '@/components/app-shell'
+import { pageFromPath, pagePath, resolvePage, type PageKey } from '@/lib/pages'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { LoginScreen } from '@/components/login-screen'
 import { LanguageProvider, useI18n } from '@/lib/i18n'
 import { PublicAssessmentPage } from '@/pages/public-assessment-page'
@@ -28,7 +30,7 @@ function getAppLocation() {
 }
 
 function App() {
-  return <LanguageProvider><ConfirmProvider><AppContent /><PwaStatus /></ConfirmProvider></LanguageProvider>
+  return <ErrorBoundary><LanguageProvider><ConfirmProvider><AppContent /><PwaStatus /></ConfirmProvider></LanguageProvider></ErrorBoundary>
 }
 
 function AppContent() {
@@ -36,11 +38,11 @@ function AppContent() {
   const { publicRoute, dailyInspectionRoute } = appLocation
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(!publicRoute && !dailyInspectionRoute)
-  const [page, setPage] = useState<PageKey>(() => dailyInspectionRoute ? 'new' : 'dashboard')
+  const [requestedPage, setRequestedPage] = useState<PageKey | null>(() => pageFromPath(window.location.pathname))
   const { t } = useI18n()
 
   useEffect(() => {
-    const updateLocation = () => setAppLocation(getAppLocation())
+    const updateLocation = () => { setAppLocation(getAppLocation()); setRequestedPage(pageFromPath(window.location.pathname)) }
     window.addEventListener('popstate', updateLocation)
     return () => window.removeEventListener('popstate', updateLocation)
   }, [])
@@ -49,9 +51,20 @@ function AppContent() {
     if (publicRoute || dailyInspectionRoute) return
     api.me().then(({ user: currentUser }) => {
       setUser(currentUser)
-      if (currentUser && ((currentUser.role === 'employee') || dailyInspectionRoute)) setPage('new')
     }).catch(() => setUser(null)).finally(() => setLoading(false))
   }, [publicRoute, dailyInspectionRoute])
+
+  // The page comes from the URL (/app/<page>); roles that may not open it fall back to their home page.
+  const page = user ? resolvePage(user.role, requestedPage) : null
+  useEffect(() => {
+    if (!page || publicRoute || dailyInspectionRoute) return
+    if (window.location.pathname.replace(/\/+$/, '') !== pagePath(page)) window.history.replaceState(null, '', pagePath(page))
+  }, [page, publicRoute, dailyInspectionRoute])
+  const navigate = useCallback((next: PageKey) => {
+    window.history.pushState(null, '', pagePath(next))
+    setRequestedPage(next)
+    window.scrollTo({ top: 0 })
+  }, [])
 
   if (publicRoute) return <>
     {publicRoute.type === 'assessment' ? <PublicAssessmentPage token={publicRoute.token} /> : publicRoute.type === 'training' ? <PublicTrainingPage token={publicRoute.token} /> : <PublicHiyariPage token={publicRoute.token} />}
@@ -70,10 +83,7 @@ function AppContent() {
 
   return (
     <>
-      {user ? <AppShell user={user} page={page} onPage={setPage} onUserChange={setUser} /> : <LoginScreen onLogin={(currentUser) => {
-        setUser(currentUser)
-        setPage(currentUser.role !== 'employee' && !dailyInspectionRoute ? 'dashboard' : 'new')
-      }} />}
+      {user && page ? <AppShell user={user} page={page} onPage={navigate} onUserChange={setUser} /> : <LoginScreen onLogin={setUser} />}
       <Toaster position="top-right" richColors closeButton />
     </>
   )

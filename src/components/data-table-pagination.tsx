@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { usePersistentState } from '@/lib/persistent-state'
 
 export function useDataPagination<T>(items: T[]) {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSizeState] = useState(10)
+  const [pageSize, setPageSizeState] = usePersistentState('table.pageSize', 10, 'local')
   const previousItems = useRef(items)
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
   const currentPage = Math.min(page, totalPages)

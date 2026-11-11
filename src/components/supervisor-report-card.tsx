@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { usePersistentState } from '@/lib/persistent-state'
+import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 
 type Filter = 'all' | 'not_reported' | 'reported' | 'reported_today' | 'not_reported_today' | 'open_tasks' | 'overdue'
 const tabFilters: Filter[] = ['not_reported', 'reported', 'all']
@@ -30,7 +32,7 @@ export function SupervisorReportCard({ from, to, refreshKey = 0 }: Props) {
   const { language, t } = useI18n()
   const [report, setReport] = useState<SupervisorReport | null>(null)
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('not_reported')
+  const [filter, setFilter] = usePersistentState<Filter>('supervisors.filter', 'not_reported')
 
   useEffect(() => {
     let active = true
@@ -57,6 +59,8 @@ export function SupervisorReportCard({ from, to, refreshKey = 0 }: Props) {
     return list.filter(matches[filter]).sort((a, b) => rank[a.status] - rank[b.status] || a.name.localeCompare(b.name))
   }, [report, filter])
 
+  const pagination = useDataPagination(rows)
+
   /** Clicking the active tile again clears the filter. */
   const toggle = (next: Filter) => setFilter((current) => (current === next ? 'all' : next))
 
@@ -81,8 +85,8 @@ export function SupervisorReportCard({ from, to, refreshKey = 0 }: Props) {
         </div>
         <Tabs value={tabFilters.includes(filter) ? filter : ''} onValueChange={(value) => setFilter(value as Filter)}>
           <TabsList>
-            <TabsTrigger value="not_reported">{t('ยังไม่รายงาน')} ({summary.notReportedPeriod})</TabsTrigger>
-            <TabsTrigger value="reported">{t('รายงานแล้ว')} ({summary.reportedPeriod})</TabsTrigger>
+            <TabsTrigger value="not_reported">{t('ยังไม่รายงานในช่วงนี้')} ({summary.notReportedPeriod})</TabsTrigger>
+            <TabsTrigger value="reported">{t('รายงานแล้วในช่วงนี้')} ({summary.reportedPeriod})</TabsTrigger>
             <TabsTrigger value="all">{t('ทั้งหมด')} ({summary.total})</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -94,7 +98,7 @@ export function SupervisorReportCard({ from, to, refreshKey = 0 }: Props) {
               <TableHead>{t('รายงานล่าสุด')}</TableHead><TableHead>{t('พบ NG')}</TableHead><TableHead>{t('งานค้าง')}</TableHead><TableHead>{t('เกินกำหนด')}</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {rows.map((row) => <TableRow key={row.id}>
+              {pagination.visibleItems.map((row) => <TableRow key={row.id}>
                 <TableCell><p className="font-medium">{row.name}</p><p className="text-xs text-muted-foreground">{row.employeeCode} · {row.role === 'admin' ? 'Admin' : t('หัวหน้างาน')}</p></TableCell>
                 <TableCell><Badge variant="outline" className={`gap-1 ${statusStyle[row.status]}`}>{row.status === 'not_reported' ? <CircleDashed size={12} /> : row.status === 'reported_today' ? <CircleCheck size={12} /> : <CalendarCheck size={12} />}{t(statusLabel[row.status])}</Badge></TableCell>
                 <TableCell className="tabular-nums">{row.inspectionsPeriod}</TableCell>
@@ -106,6 +110,7 @@ export function SupervisorReportCard({ from, to, refreshKey = 0 }: Props) {
               {rows.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">{filter === 'not_reported' || filter === 'not_reported_today' ? t('ทุกคนรายงานแล้ว') : t('ไม่พบข้อมูล')}</TableCell></TableRow>}
             </TableBody>
           </Table>
+          <DataTablePagination total={rows.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
         </div>
       </>}
     </CardContent>

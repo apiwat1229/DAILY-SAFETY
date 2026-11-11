@@ -19,6 +19,8 @@ import { createHiyariEmployeeSummaryWorkbook } from './hiyari-summary-export.js'
 import { EXPORT_FONT_FAMILY, EXPORT_FONT_SIZE } from './export-typography.js'
 import { ADDITIONAL_ASSESSMENTS } from './assessment-seeds.js'
 import { importRosters, readRoster } from './employee-roster.js'
+import compression from 'compression'
+import { createBackup } from './backup.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
@@ -591,6 +593,7 @@ db.exec(`
 
 const app = express()
 app.disable('x-powered-by')
+app.use(compression())
 if (isProduction) app.set('trust proxy', 1)
 app.use((req, res, next) => {
   res.set({
@@ -789,6 +792,33 @@ function rateLimit({ bucket, max, windowMs, message = 'ส่งคำขอบ�
   }
 }
 setInterval(() => db.prepare('DELETE FROM rate_limits WHERE window_start < ?').run(Date.now() - 24 * 60 * 60_000), 60 * 60_000).unref()
+// Expired sessions are otherwise only removed when the same browser comes back.
+setInterval(() => db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now()), 60 * 60_000).unref()
+
+// Nightly backup of the database and uploads into <data>/backups (BACKUP_ENABLED, BACKUP_HOUR in Bangkok time, BACKUP_KEEP).
+function scheduleBackups() {
+  const enabled = (process.env.BACKUP_ENABLED ?? (isProduction ? 'true' : 'false')) === 'true'
+  if (!enabled) return
+  const hour = Math.min(23, Math.max(0, Number.parseInt(process.env.BACKUP_HOUR || '2', 10) || 0))
+  const keep = Math.max(1, Number.parseInt(process.env.BACKUP_KEEP || '7', 10) || 7)
+  const check = async () => {
+    const now = new Date()
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(now)
+    const bangkokHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', hourCycle: 'h23' }).format(now))
+    if (bangkokHour < hour) return
+    const last = db.prepare("SELECT setting_value FROM app_settings WHERE setting_key = 'last_backup_day'").get()?.setting_value
+    if (last === day) return
+    // Mark first so a slow or failing backup is not retried every few minutes.
+    db.prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('last_backup_day', ?) ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value").run(day)
+    try {
+      const result = await createBackup({ dataDir, outDir: path.join(dataDir, 'backups'), keep })
+      console.log(`Backup created: ${result.target}`)
+    } catch (error) { console.error('Scheduled backup failed', error) }
+  }
+  setInterval(check, 10 * 60_000).unref()
+  setTimeout(check, 60_000).unref()
+}
+scheduleBackups()
 
 const limitPublicInspectionSubmissions = rateLimit({ bucket: 'public-inspection', max: 30, windowMs: 10 * 60_000, message: 'ส่งแบบตรวจหลายครั้งเกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' })
 const limitPublicHiyari = rateLimit({ bucket: 'public-hiyari', max: 20, windowMs: 10 * 60_000, message: 'ส่งรายงานหลายครั้งเกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' })
@@ -3292,7 +3322,22 @@ app.use((error, req, res, _next) => {
   res.status(500).json({ error: 'เกิดข้อผิดพลาดในระบบ กรุณาลองอีกครั้ง' })
 })
 
-app.listen(port, host, () => {
+const httpServer = app.listen(port, host, () => {
   console.log(`Daily Safety running at http://localhost:${port}`)
   if (!isProduction) console.log('Demo accounts: admin / Admin@123 and leader / Leader@123')
 })
+
+// Finish in-flight requests and close SQLite cleanly when Docker stops the container.
+let shuttingDown = false
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.log(`${signal} received, shutting down`)
+    httpServer.close(() => {
+      try { db.close() } catch { /* already closed */ }
+      process.exit(0)
+    })
+    setTimeout(() => process.exit(0), 10_000).unref()
+  })
+}

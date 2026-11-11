@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { DataTablePagination } from '@/components/data-table-pagination'
+import { Eye, History, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, formatDateTime } from '@/lib/api'
 import type { AuditEntry } from '@/lib/types'
@@ -13,8 +14,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DatePicker } from '@/components/date-picker'
+import { usePersistentState } from '@/lib/persistent-state'
 
-const PAGE_SIZE = 25
 const ALL = '__all__'
 
 const kindStyle: Record<ActionKind, { className: string; icon: typeof Plus }> = {
@@ -29,21 +30,22 @@ export function AuditLogPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [targetTypes, setTargetTypes] = useState<string[]>([])
-  const [query, setQuery] = useState('')
-  const [targetType, setTargetType] = useState(ALL)
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [query, setQuery] = usePersistentState('audit.query', '')
+  const [targetType, setTargetType] = usePersistentState('audit.type', ALL)
+  const [from, setFrom] = usePersistentState('audit.from', '')
+  const [to, setTo] = usePersistentState('audit.to', '')
+  const [pageSize, setPageSize] = usePersistentState('table.pageSize', 10, 'local')
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<AuditEntry | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
-    api.auditLog({ q: query, targetType: targetType === ALL ? '' : targetType, from, to, limit: PAGE_SIZE, offset })
+    api.auditLog({ q: query, targetType: targetType === ALL ? '' : targetType, from, to, limit: pageSize, offset })
       .then((result) => { setEntries(result.entries); setTotal(result.total); setTargetTypes(result.targetTypes) })
       .catch((error) => toast.error(error.message))
       .finally(() => setLoading(false))
-  }, [query, targetType, from, to, offset])
+  }, [query, targetType, from, to, offset, pageSize])
 
   useEffect(() => {
     const timer = window.setTimeout(load, 250)
@@ -51,8 +53,8 @@ export function AuditLogPage() {
   }, [load])
 
   function withReset<T>(setter: (value: T) => void) { return (value: T) => { setOffset(0); setter(value) } }
-  const page = Math.floor(offset / PAGE_SIZE) + 1
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const page = Math.floor(offset / pageSize) + 1
+  const pages = Math.max(1, Math.ceil(total / pageSize))
 
   return <div className="page-stack">
     <div>
@@ -88,14 +90,7 @@ export function AuditLogPage() {
           {!loading && entries.length === 0 && <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">{t('ไม่พบบันทึกการใช้งาน')}</TableCell></TableRow>}
         </TableBody>
       </Table>
-      <div className="flex items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
-        <span>{t('ทั้งหมด')} {total} {t('รายการ')}</span>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" aria-label={t('ก่อนหน้า')} disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}><ChevronLeft size={16} /></Button>
-          <span>{page} / {pages}</span>
-          <Button variant="outline" size="icon" aria-label={t('ถัดไป')} disabled={page >= pages} onClick={() => setOffset(offset + PAGE_SIZE)}><ChevronRight size={16} /></Button>
-        </div>
-      </div>
+      <DataTablePagination total={total} page={page} pageSize={pageSize} totalPages={pages} onPageChange={(next) => setOffset((next - 1) * pageSize)} onPageSizeChange={(size) => { setPageSize(size); setOffset(0) }} t={t} />
     </CardContent></Card>
 
     <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>

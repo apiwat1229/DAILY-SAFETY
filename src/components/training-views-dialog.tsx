@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 type Props = { materialId: string | null; title: string; onOpenChange: (open: boolean) => void }
@@ -39,6 +40,7 @@ export function TrainingViewsDialog({ materialId, title, onOpenChange }: Props) 
     return list.filter((row) => !query || [row.employeeCode, row.employeeName, row.department].some((value) => value.toLocaleLowerCase().includes(query)))
   }, [report, search, tab])
 
+  const pagination = useDataPagination(rows)
   const viewedCount = report?.viewed.length ?? 0
   const total = viewedCount + (report?.notViewed.length ?? 0)
   const percent = total ? Math.round((viewedCount / total) * 100) : 0
@@ -71,14 +73,15 @@ export function TrainingViewsDialog({ materialId, title, onOpenChange }: Props) 
             <div className="relative sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="pl-9" /></div>
           </div>
         </div>
-        <div className="min-h-0 overflow-auto rounded-lg border">
-          <Table>
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border">
+          <div className="min-h-0 flex-1 overflow-auto"><Table>
             <TableHeader><TableRow><TableHead>{t('รหัสพนักงาน')}</TableHead><TableHead>{t('ชื่อพนักงาน')}</TableHead><TableHead>{t('แผนก')}</TableHead>{tab === 'viewed' && <TableHead>{t('อ่านเมื่อ')}</TableHead>}</TableRow></TableHeader>
             <TableBody>
-              {rows.map((row) => <TableRow key={row.employeeCode}><TableCell>{row.employeeCode}</TableCell><TableCell>{row.employeeName}</TableCell><TableCell>{row.department || '—'}</TableCell>{tab === 'viewed' && <TableCell className="whitespace-nowrap">{formatDateTime((row as { viewedAt?: string }).viewedAt ?? '', language, false)}</TableCell>}</TableRow>)}
+              {pagination.visibleItems.map((row) => <TableRow key={row.employeeCode}><TableCell>{row.employeeCode}</TableCell><TableCell>{row.employeeName}</TableCell><TableCell>{row.department || '—'}</TableCell>{tab === 'viewed' && <TableCell className="whitespace-nowrap">{formatDateTime((row as { viewedAt?: string }).viewedAt ?? '', language, false)}</TableCell>}</TableRow>)}
               {rows.length === 0 && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">{t('ไม่พบข้อมูล')}</TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </Table></div>
+          <DataTablePagination total={rows.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
         </div>
       </>}
     </DialogContent>

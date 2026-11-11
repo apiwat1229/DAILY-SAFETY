@@ -16,6 +16,7 @@ import { useI18n } from '@/lib/i18n'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 import { createPrintWindow, inspectionPrintMarkup, renderPrintWindow } from '@/lib/print-documents'
+import { usePersistentState } from '@/lib/persistent-state'
 
 type Props = { user: User; initialFilter: Pick<Filters, 'from' | 'to' | 'category'> | null; onInitialFilterApplied: () => void }
 
@@ -29,9 +30,9 @@ const emptyFilters: Filters = { from: dateBack(30), to: localDateString(), area:
 
 export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }: Props) {
   const { language, t } = useI18n()
-  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const [filters, setFilters] = usePersistentState<Filters>('inspections.filters', emptyFilters)
   const [records, setRecords] = useState<InspectionSummary[]>([])
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = usePersistentState('inspections.query', '')
   const [myTasks, setMyTasks] = useState<MyTask[]>([])
   const [loading, setLoading] = useState(true)
   const [tasksLoading, setTasksLoading] = useState(user.role !== 'admin')

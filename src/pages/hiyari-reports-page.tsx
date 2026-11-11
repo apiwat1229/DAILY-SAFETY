@@ -17,6 +17,7 @@ import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { useConfirm } from '@/components/confirm-provider'
+import { usePersistentState } from '@/lib/persistent-state'
 
 type DocumentLabels = {
   title: string
@@ -151,7 +152,7 @@ export function HiyariReportsPage() {
   const [submissions, setSubmissions] = useState<HiyariSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = usePersistentState('hiyari.search', '')
   const [selected, setSelected] = useState<HiyariSubmission | null>(null)
   const [editing, setEditing] = useState<HiyariSubmission | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<HiyariSubmission | null>(null)
@@ -161,7 +162,7 @@ export function HiyariReportsPage() {
   const [editLanguage, setEditLanguage] = useState<HiyariLanguage>('th')
   const [exportFrom, setExportFrom] = useState('')
   const [exportTo, setExportTo] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = usePersistentState('hiyari.status', 'all')
   const [statusTarget, setStatusTarget] = useState<HiyariSubmission | null>(null)
   const [statusValue, setStatusValue] = useState<HiyariStatus>('received')
   const [statusResponsible, setStatusResponsible] = useState('')

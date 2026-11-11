@@ -3,7 +3,7 @@ import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, CheckCircle2, Clock
 import { toast } from 'sonner'
 import { api, formatDate, localDateString, formatDateWithTime } from '@/lib/api'
 import type { DashboardCategorySummary, DashboardData, User } from '@/lib/types'
-import type { PageKey } from '@/components/app-shell'
+import type { PageKey } from '@/lib/pages'
 import { SupervisorReportCard } from '@/components/supervisor-report-card'
 import { InspectionDetailDialog } from '@/components/inspection-detail-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ import { DatePicker } from '@/components/date-picker'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/lib/i18n'
+import { usePersistentState } from '@/lib/persistent-state'
 
 type Props = { user: User; onPage: (page: PageKey) => void }
 
@@ -24,13 +25,13 @@ function addDays(date: string, days: number) {
 export function DashboardPage({ user, onPage }: Props) {
   const { language, t } = useI18n()
   const today = localDateString()
-  const [from, setFrom] = useState(() => `${today.slice(0, 7)}-01`)
-  const [to, setTo] = useState(today)
+  const [from, setFrom] = usePersistentState('dashboard.from', `${today.slice(0, 7)}-01`)
+  const [to, setTo] = usePersistentState('dashboard.to', today)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [selectedResult, setSelectedResult] = useState<'NG' | 'N/A'>('NG')
+  const [selectedResult, setSelectedResult] = usePersistentState<'NG' | 'N/A'>('dashboard.result', 'NG')
   const [categorySummary, setCategorySummary] = useState<DashboardCategorySummary | null>(null)
   const [categoryLoading, setCategoryLoading] = useState(false)
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null)

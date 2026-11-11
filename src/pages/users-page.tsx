@@ -17,12 +17,13 @@ import { AutocompleteInput } from '@/components/autocomplete-input'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import type { PublicEmployeeSuggestion } from '@/lib/types'
 import { useConfirm } from '@/components/confirm-provider'
+import { usePersistentState } from '@/lib/persistent-state'
 
 export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: User; onCurrentUserUpdate: (user: User) => void }) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const [users, setUsers] = useState<User[]>([])
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = usePersistentState('users.query', '')
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)

@@ -19,9 +19,11 @@ import { AuditLogPage } from '@/pages/audit-log-page'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { useI18n } from '@/lib/i18n'
 import { isManager } from '@/lib/roles'
+import type { PageKey } from '@/lib/pages'
+import { clearPersistentState } from '@/lib/persistent-state'
 import { LanguageSwitch } from '@/components/language-switch'
 
-export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials' | 'hiyari' | 'hiyari-reports' | 'audit-log'
+export type { PageKey }
 type Props = { user: User; page: PageKey; onPage: (page: PageKey) => void; onUserChange: (user: User | null) => void }
 
 export function AppShell({ user, page, onPage, onUserChange }: Props) {
@@ -56,6 +58,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
   async function handleLogout() {
     try { await api.logout() } catch { /* session may already have expired */ }
     navigator.serviceWorker?.controller?.postMessage('clear-data')
+    clearPersistentState()
     onUserChange(null)
     toast.success(t('ออกจากระบบแล้ว'))
   }

@@ -16,8 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useI18n } from '@/lib/i18n'
 import { useConfirm } from '@/components/confirm-provider'
 import { enqueueInspection, isNetworkError } from '@/lib/offline-queue'
+import { readDraft, removeDraft, writeDraft } from '@/lib/persistent-state'
 
 type Result = ChecklistItem['choices'][number] | ''
+type InspectionDraft = { savedAt: number; date: string; time: string; area: string; shift: string; responses: Record<string, DraftResponse> }
 type DraftResponse = { result: Result; issueDetails: string; responsible: string; responsibleUserId: string; responsibleEmployeeCode: string; beforeFiles: File[] }
 type Props = { user: User | null; publicMode?: boolean; onCreated: () => void }
 
@@ -99,6 +101,10 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
   const [assignees, setAssignees] = useState<Assignee[]>([])
   const [busy, setBusy] = useState(false)
   const [submittedPublicly, setSubmittedPublicly] = useState(false)
+  // The form is long and often filled on a phone with a weak signal, so the answers are kept as a draft (photos excluded).
+  const draftKey = `inspection.draft.${publicMode ? 'public' : user?.id ?? 'anon'}`
+  const draftCleared = useRef(false)
+  const clearDraft = () => { draftCleared.current = true; removeDraft(draftKey) }
   const [invalidTarget, setInvalidTarget] = useState<string | null>(null)
   const { language, t } = useI18n()
   const confirm = useConfirm()
@@ -118,10 +124,33 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
     const loadChecklist = publicMode ? api.publicInspectionChecklist() : api.checklist()
     loadChecklist.then(({ items }) => {
       setChecklist(items)
-      setResponses(Object.fromEntries(items.map((item) => [item.key, blankResponse()])))
+      const blank = Object.fromEntries(items.map((item) => [item.key, blankResponse()]))
+      const draft = readDraft<InspectionDraft>(draftKey)
+      if (draft && Date.now() - draft.savedAt < 24 * 60 * 60_000) {
+        const restored = { ...blank }
+        for (const item of items) if (draft.responses[item.key]) restored[item.key] = { ...blankResponse(), ...draft.responses[item.key], beforeFiles: [] }
+        setResponses(restored)
+        setArea(draft.area || '')
+        setShift(draft.shift || '')
+        if (draft.date === today) { setDate(draft.date); if (draft.time) setTime(draft.time) }
+        toast.info(t('กู้คืนร่างแบบตรวจที่บันทึกอัตโนมัติไว้แล้ว'), { description: t('รูปภาพไม่ถูกบันทึกในร่าง กรุณาแนบรูปของหัวข้อ NG อีกครั้ง') })
+      } else setResponses(blank)
     }).catch((error) => toast.error(error instanceof Error ? error.message : 'โหลดรายการตรวจไม่สำเร็จ'))
       .finally(() => setChecklistLoading(false))
   }, [publicMode])
+  useEffect(() => {
+    if (checklistLoading || !checklist.length || draftCleared.current) return
+    const timer = window.setTimeout(() => {
+      if (draftCleared.current) return
+      const touched = Object.values(responses).some((response) => response.result || response.issueDetails) || area.trim() || shift.trim()
+      if (!touched) { removeDraft(draftKey); return }
+      writeDraft(draftKey, {
+        savedAt: Date.now(), date, time, area, shift,
+        responses: Object.fromEntries(Object.entries(responses).map(([key, response]) => [key, { ...response, beforeFiles: [] }])),
+      } satisfies InspectionDraft)
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [checklistLoading, checklist.length, responses, area, shift, date, time, draftKey])
   useEffect(() => {
     if (publicMode) { setSuggestions({ areas: [], shifts: [], inspectors: [], employeeCodes: [], responsibles: [] }); return }
     api.suggestions(language).then(setSuggestions).catch(() => undefined)
@@ -237,6 +266,7 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
       if (!(await confirm('submit'))) return
       const saveOffline = async () => {
         await enqueueInspection(body, publicMode)
+        clearDraft()
         toast.info(t('บันทึกในเครื่องแล้ว ระบบจะส่งให้อัตโนมัติเมื่อมีสัญญาณ'))
         if (publicMode) setSubmittedPublicly(true)
         onCreated()
@@ -249,6 +279,7 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
         if (isNetworkError(error)) return await saveOffline()
         throw error
       }
+      clearDraft()
       toast.success(t('บันทึกแบบตรวจเรียบร้อยแล้ว'))
       if (publicMode) setSubmittedPublicly(true)
       onCreated()
