@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { useConfirm } from '@/components/confirm-provider'
+import { ItemThumb } from '@/components/item-thumb'
 import { ItemDialog } from '@/components/inventory/item-dialog'
 import { CategoryDialog } from '@/components/inventory/category-dialog'
 
@@ -64,8 +65,9 @@ export function InventoryItemsPage() {
       </CardContent>
       {filtered.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('รหัสสินค้า')}</TableHead><TableHead>{t('ชื่อสินค้า')}</TableHead><TableHead>{t('หมวด')}</TableHead><TableHead>{t('ตัวเลือก')}</TableHead><TableHead>{t('จุดสั่งซื้อซ้ำ')}</TableHead><TableHead>{t('การติดตาม')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead className="w-14"><span className="sr-only">{t('รูปสินค้า')}</span></TableHead><TableHead>{t('รหัสสินค้า')}</TableHead><TableHead>{t('ชื่อสินค้า')}</TableHead><TableHead>{t('หมวด')}</TableHead><TableHead>{t('ตัวเลือก')}</TableHead><TableHead>{t('จุดสั่งซื้อซ้ำ')}</TableHead><TableHead>{t('การติดตาม')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
           <TableBody>{pagination.visibleItems.map((item) => <TableRow key={item.id} data-inactive={!item.isActive || undefined}>
+            <TableCell data-label=""><ItemThumb url={item.imageUrl} name={item.name} size={44} /></TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{item.sku}</Badge></TableCell>
             <TableCell className="font-medium">{item.name}<span className="ml-1 text-xs font-normal text-muted-foreground">({item.unit})</span></TableCell>
             <TableCell>{item.categoryName || '—'}</TableCell>

@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useConfirm } from '@/components/confirm-provider'
+import { ItemImageField } from '@/components/inventory/item-image-field'
 
 const NONE = '__none__'
 const typeLabel: Record<InventoryType, string> = { ppe: 'อุปกรณ์ความปลอดภัย (PPE)', medicine: 'ยารักษาโรค' }
@@ -42,6 +43,8 @@ export function ItemDialog({ open, item, categories, defaultType, onClose, onSav
   const [trackExpiry, setTrackExpiry] = useState(item?.trackExpiry ?? false)
   const [isActive, setIsActive] = useState(item?.isActive ?? true)
   const [variantText, setVariantText] = useState('')
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
   const isMedicine = type === 'medicine'
   const typeCategories = categories.filter((category) => category.type === type)
 
@@ -57,7 +60,10 @@ export function ItemDialog({ open, item, categories, defaultType, onClose, onSav
       if (item) { await inventoryApi.updateItem(item.id, { ...common, isActive }); toast.success(t('แก้ไขสินค้าแล้ว')) }
       else {
         const variants = variantText.split(',').map((label) => label.trim()).filter(Boolean)
-        await inventoryApi.createItem({ ...common, sku: sku.trim(), type, variants })
+        const created = await inventoryApi.createItem({ ...common, sku: sku.trim(), type, variants })
+        if (pendingImage) {
+          try { await inventoryApi.uploadItemImage(created.item.id, pendingImage) } catch (error) { toast.warning(t(error instanceof Error ? error.message : 'เพิ่มสินค้าแล้ว แต่อัปโหลดรูปไม่สำเร็จ')) }
+        }
         toast.success(t('เพิ่มสินค้าแล้ว'))
       }
       onSaved()
@@ -65,11 +71,38 @@ export function ItemDialog({ open, item, categories, defaultType, onClose, onSav
     finally { setBusy(false) }
   }
 
+  async function changeImage(file: File) {
+    if (!item) { setPendingImage(file); return }
+    if (imageBusy) return
+    setImageBusy(true)
+    try {
+      if (!(await confirm('update'))) return
+      await inventoryApi.uploadItemImage(item.id, file)
+      toast.success(t('อัปโหลดรูปแล้ว'))
+      await onVariantsChanged()
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'อัปโหลดรูปไม่สำเร็จ')) }
+    finally { setImageBusy(false) }
+  }
+
+  async function removeImage() {
+    if (!item) { setPendingImage(null); return }
+    if (imageBusy) return
+    setImageBusy(true)
+    try {
+      if (!(await confirm({ kind: 'danger', title: t('ลบรูปสินค้า'), description: item.name, confirmLabel: t('ลบรูป') }))) return
+      await inventoryApi.deleteItemImage(item.id)
+      toast.success(t('ลบรูปแล้ว'))
+      await onVariantsChanged()
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบรูปไม่สำเร็จ')) }
+    finally { setImageBusy(false) }
+  }
+
   return <Dialog open={open} onOpenChange={(next) => { if (!next && !busy) onClose() }}><DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
     <DialogHeader><div className="mb-1 grid size-10 place-items-center rounded-xl bg-secondary text-primary"><Package size={19} /></div>
       <DialogTitle>{t(item ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า')}</DialogTitle>
       <DialogDescription>{t('ยาต้องติดตามเลขล็อตและวันหมดอายุเสมอ ส่วนอุปกรณ์ PPE เลือกเปิดได้')}</DialogDescription></DialogHeader>
     <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+      <ItemImageField url={item?.imageUrl ?? null} name={name} pending={pendingImage} busy={imageBusy || busy} onPick={(file) => void changeImage(file)} onRemove={() => void removeImage()} />
       <div className="grid gap-1.5"><Label>{t('ประเภท')}</Label>
         <Select value={type} onValueChange={(value) => { setType(value as InventoryType); setCategoryId(NONE) }} disabled={Boolean(item)}>
           <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>

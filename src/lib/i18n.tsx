@@ -131,6 +131,8 @@ Object.assign(english, {
   'การตรวจ': 'Inspections', 'การตรวจและอบรม': 'Inspections and training', 'ข้อมูลระบบ': 'System data',
   'เบิกของ': 'Request items', 'ใบเบิกของฉัน': 'My requests', 'ใบเบิก': 'Requests', 'รออนุมัติ': 'To approve', 'จ่ายของ': 'Issue', 'ใบเบิกทั้งหมด': 'All requests',
   'ตั้งค่าขั้นอนุมัติ': 'Approval workflow', 'ขั้นอนุมัติ': 'Workflow', 'การเบิกของ': 'Requisitions',
+  'รูปสินค้า': 'Item photo', 'เปลี่ยนรูป': 'Change photo', 'เพิ่มรูป': 'Add photo', 'ลบรูป': 'Remove photo', 'ลบรูปสินค้า': 'Remove item photo', 'อัปโหลดรูปแล้ว': 'Photo uploaded', 'ลบรูปแล้ว': 'Photo removed',
+  'ใช้แสดงในรายการสินค้า สต็อก และตะกร้าเบิกของ': 'Shown in the item list, stock and the requisition cart',
   'เจ้าหน้าที่คลัง': 'Storekeeper', 'สต็อกคงเหลือ': 'Stock on hand', 'สินค้าและหมวด': 'Items & categories', 'คลังสินค้า': 'Warehouses', 'นับสต็อก': 'Stock count', 'ประวัติสต็อก': 'Stock movements',
   'สินค้า': 'Item', 'หมวดสินค้า': 'Category', 'สต็อกสินค้า': 'Stock', 'ใบนับสต็อก': 'Count sheet', 'ตั้งค่าคลังสินค้า': 'Warehouse settings',
   'กลับเป็นวันนี้': 'Back to today', 'ข้อมูลของวันนี้': 'Data for today', 'ข้อมูลช่วง': 'Data for', 'อัตราการรายงาน': 'Reporting rate', 'จำนวนที่ส่ง': 'Submitted',

@@ -25,6 +25,12 @@ export const inventoryApi = {
   createItem: (input: ItemInput) => request<{ item: Item }>(`${base}/items`, json('POST', input)),
   updateItem: (id: string, input: Partial<Pick<Item, 'name' | 'unit' | 'minStock' | 'categoryId' | 'trackLot' | 'trackExpiry' | 'isActive'>>) => request<{ item: Item }>(`${base}/items/${id}`, json('PATCH', input)),
   deleteItem: (id: string) => request<{ ok: boolean }>(`${base}/items/${id}`, json('DELETE')),
+  uploadItemImage: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('image', file)
+    return request<{ item: Item }>(`${base}/items/${id}/image`, { method: 'POST', body: form })
+  },
+  deleteItemImage: (id: string) => request<{ item: Item }>(`${base}/items/${id}/image`, json('DELETE')),
   addVariant: (itemId: string, label: string) => request<{ variant: Variant }>(`${base}/items/${itemId}/variants`, json('POST', { label })),
   updateVariant: (id: string, input: { label?: string; isActive?: boolean }) => request<{ variant: Variant }>(`${base}/variants/${id}`, json('PATCH', input)),
   deleteVariant: (id: string) => request<{ ok: boolean }>(`${base}/variants/${id}`, json('DELETE')),
