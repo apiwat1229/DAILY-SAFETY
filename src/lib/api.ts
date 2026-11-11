@@ -206,11 +206,24 @@ export function formatDate(date: string, language: 'th' | 'en' = 'th') {
   return new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(new Date(`${date}T12:00:00+07:00`))
 }
 
+/** "16:50" -> "16:50 น." (Thai) or "16:50" (English). */
+export function formatTime(time: string, language: 'th' | 'en' = 'th') {
+  if (!time) return '—'
+  return language === 'th' ? `${time} น.` : time
+}
+
+/** Date + time kept as separate strings (inspection date and time): "10 พ.ย. 2569, 16:50 น.". */
+export function formatDateWithTime(date: string, time: string, language: 'th' | 'en' = 'th') {
+  if (!date) return '—'
+  return time ? `${formatDate(date, language)}, ${formatTime(time, language)}` : formatDate(date, language)
+}
+
+/** ISO timestamp -> "10 พ.ย. 2569, 16:50 น." in Bangkok time. */
 export function formatDateTime(date: string, language: 'th' | 'en' = 'th', includeTimezone = true) {
   if (!date) return '—'
-  const formatted = new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    hourCycle: 'h23', timeZone: 'Asia/Bangkok',
-  }).format(new Date(date))
+  const when = new Date(date)
+  const day = new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(when)
+  const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Bangkok' }).format(when)
+  const formatted = `${day}, ${formatTime(clock, language)}`
   return includeTimezone ? `${formatted} (Bangkok, UTC+07:00)` : formatted
 }

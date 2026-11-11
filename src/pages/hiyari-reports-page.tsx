@@ -117,7 +117,7 @@ function reportDocumentMarkup(submission: HiyariSubmission) {
   const revision = submission.formTitle.match(/\bRev\.?\s*([A-Za-z0-9]+(?:\.[A-Za-z0-9]+)?)/i)?.[1] || '01'
   const dateLocale = submission.language === 'th' ? 'th-TH' : submission.language === 'my' ? 'my-MM-u-ca-gregory' : 'en-GB'
   const reportDate = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' }).format(new Date(`${submission.reportDate}T12:00:00+07:00`))
-  const submittedDate = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(new Date(submission.submittedAt))
+  const submittedDate = submission.language === 'th' ? formatDateTime(submission.submittedAt, 'th', false) : new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(new Date(submission.submittedAt))
   const value = (text: string) => escapeHtml(text.trim() || '—')
   const rows: [string, string][] = [
     [labels.when, submission.whenText], [labels.where, submission.whereText], [labels.what, submission.whatHappened],

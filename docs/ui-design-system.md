@@ -28,7 +28,7 @@ Add new signed-in screens under `src/pages/`, register their page metadata and n
 | Horizontal gutter | 1rem to 2.5rem, responsive |
 | Space between top-level page sections | 1.25rem desktop, 1rem mobile |
 | Standard button and input height | 2.5rem desktop, at least 2.75rem on mobile |
-| Corner radius scale | 4, 6, 8, 10, 12, 16, 20px, and pill |
+| Corner radius scale | 6px for medium and large surfaces (cards, dialogs, inputs, buttons, menus); 4px for small elements (badges, checkboxes, tooltips, menu items, tabs); full circles only for avatars, switches, progress and dots |
 
 Use the `.app-content-frame` and `.app-main-frame` classes to align signed-in page content. Use `.content-narrow` for inspection forms and similarly dense forms. Use `.page-stack` for the vertical rhythm between top-level sections.
 

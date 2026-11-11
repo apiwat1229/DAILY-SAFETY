@@ -43,7 +43,7 @@ export function LoginScreen({ onLogin }: Props) {
           <div><p className="text-sm font-semibold tracking-wide">Y.T. RUBBER</p><p className="text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
         </div>
         <div className="relative max-w-xl">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[.07] px-3 py-1.5 text-xs text-sidebar-muted"><ClipboardCheck size={14} /> Daily safety workspace</div>
+          <div className="mb-5 inline-flex items-center gap-2 rounded-sm border border-white/15 bg-white/[.07] px-3 py-1.5 text-xs text-sidebar-muted"><ClipboardCheck size={14} /> Daily safety workspace</div>
           <h1 className="mb-5 max-w-lg text-4xl font-semibold leading-[1.2] tracking-tight xl:text-5xl">{t('พื้นที่ทำงานที่ปลอดภัย เริ่มจากการตรวจที่ทำได้ทุกวัน')}</h1>
           <p className="max-w-md text-base leading-7 text-sidebar-muted">{t('บันทึกผลตรวจ แนบหลักฐาน และติดตามการแก้ไขในที่เดียว')}</p>
           <div className="mt-9 grid max-w-md grid-cols-3 gap-3">
@@ -53,7 +53,7 @@ export function LoginScreen({ onLogin }: Props) {
         <p className="relative text-xs text-sidebar-muted">{t('บันทึกครบ ตรวจสอบย้อนหลังได้')}</p>
       </section>
       <section className="relative flex min-h-screen items-center justify-center px-5 py-8 sm:px-8">
-        <LanguageSwitch compact className="absolute right-5 top-5 rounded-full bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-primary sm:right-8 sm:top-8" />
+        <LanguageSwitch compact className="absolute right-5 top-5 rounded-sm bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-primary sm:right-8 sm:top-8" />
         <div className="w-full max-w-[430px]">
           <div className="mb-6 flex items-center gap-3 lg:hidden">
             <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23} /></div>

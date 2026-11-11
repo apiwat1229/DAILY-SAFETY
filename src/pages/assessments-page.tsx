@@ -1,32 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ClipboardList, Eye, EyeOff, FileQuestion, LoaderCircle, Pencil, Plus, QrCode, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import type { Assessment, AssessmentQuestion } from '@/lib/types'
+import type { Assessment } from '@/lib/types'
+import { AssessmentEditorDialog } from '@/components/assessment-editor-dialog'
 import { ShareLinkDialog } from '@/components/share-link-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/lib/i18n'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useConfirm } from '@/components/confirm-provider'
-
-type QuestionDraft = { key: string; id?: string; prompt: string; type: 'choice' | 'text'; optionsText: string; correctOption: string; required: boolean }
-type AssessmentDraft = { title: string; description: string; instructions: string; allowMultipleAttempts: boolean; questions: QuestionDraft[] }
-
-function emptyQuestion(): QuestionDraft { return { key: crypto.randomUUID(), prompt: '', type: 'choice', optionsText: '', correctOption: '', required: true } }
-
-function toQuestionDraft(question: AssessmentQuestion): QuestionDraft {
-  return { key: question.id, id: question.id, prompt: question.prompt, type: question.type, optionsText: question.options.join('\n'), correctOption: question.correctOption === null ? '' : String(question.correctOption), required: question.required }
-}
 
 export function AssessmentsPage() {
   const { t } = useI18n()
@@ -94,64 +80,4 @@ export function AssessmentsPage() {
 
 function Metric({ label, count, icon: Icon }: { label: string; count: number; icon: typeof ClipboardList }) {
   return <Card className="py-0"><CardContent className="flex items-center justify-between px-3 py-2"><div><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 text-xl font-semibold tabular-nums">{count.toLocaleString()}</p></div><div className="grid size-8 place-items-center rounded-lg bg-secondary text-primary"><Icon size={16} /></div></CardContent></Card>
-}
-
-function AssessmentEditorDialog({ editor, onClose, onSaved }: { editor: { assessment: Assessment | null } | null; onClose: () => void; onSaved: () => void }) {
-  const { t } = useI18n()
-  const confirm = useConfirm()
-  const assessment = editor?.assessment
-  const [draft, setDraft] = useState<AssessmentDraft>({ title: '', description: '', instructions: '', allowMultipleAttempts: false, questions: [] })
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    if (!editor) return
-    setDraft(assessment ? {
-      title: assessment.title, description: assessment.description, instructions: assessment.instructions,
-      allowMultipleAttempts: assessment.allowMultipleAttempts, questions: assessment.questions.map(toQuestionDraft),
-    } : { title: '', description: '', instructions: '', allowMultipleAttempts: false, questions: [] })
-  }, [editor, assessment])
-
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!draft.title.trim()) return toast.error(t('กรอกชื่อแบบประเมิน'))
-    if (draft.questions.some((question) => !question.prompt.trim())) return toast.error(t('กรอกคำถามให้ครบทุกข้อ'))
-    const questions = draft.questions.map((question) => {
-      const options = question.type === 'choice' ? [...new Set(question.optionsText.split('\n').map((option) => option.trim()).filter(Boolean))] : []
-      return { id: question.id || '', prompt: question.prompt.trim(), type: question.type, options, correctOption: question.type === 'choice' && question.correctOption !== '' ? Number(question.correctOption) : null, required: question.required }
-    })
-    if (questions.some((question) => question.type === 'choice' && question.options.length < 2)) return toast.error(t('คำถามแบบตัวเลือกต้องมีอย่างน้อย 2 ตัวเลือก'))
-    setBusy(true)
-    try {
-      if (!(await confirm('update'))) return
-      if (assessment) {
-        await api.updateAssessment(assessment.id, { ...draft, questions: questions as AssessmentQuestion[], isPublished: assessment.isPublished })
-        toast.success(t('บันทึกแบบประเมินแล้ว'))
-      } else {
-        await api.createAssessment({ ...draft, questions: questions.map(({ id: _id, ...question }) => question) })
-        toast.success(t('สร้างแบบประเมินแล้ว'))
-      }
-      onSaved()
-    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
-    finally { setBusy(false) }
-  }
-
-  function updateQuestion(key: string, changes: Partial<QuestionDraft>) {
-    setDraft((current) => ({ ...current, questions: current.questions.map((question) => question.key === key ? { ...question, ...changes } : question) }))
-  }
-
-  return <Dialog open={Boolean(editor)} onOpenChange={(open) => !open && onClose()}><DialogContent className="max-h-[94dvh] overflow-y-auto sm:max-w-3xl">
-    <DialogHeader><div className="mb-1 grid size-10 place-items-center rounded-xl bg-secondary text-primary"><ClipboardList size={19} /></div><DialogTitle>{t(assessment ? 'แก้ไขแบบประเมิน' : 'สร้างแบบประเมิน')}</DialogTitle><DialogDescription>{t('เพิ่มคำถามแบบตัวเลือกหรือคำตอบสั้น กำหนดเฉลยเพื่อสรุปคะแนนอัตโนมัติ')}</DialogDescription></DialogHeader>
-    <form onSubmit={save} className="space-y-5">
-      <div className="grid gap-4"><div className="grid gap-1.5"><Label htmlFor="assessment-title">{t('ชื่อแบบประเมิน')} *</Label><Input id="assessment-title" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} maxLength={200} required placeholder={t('เช่น แบบประเมินหลังอบรมความปลอดภัย')} /></div><div className="grid gap-1.5"><Label htmlFor="assessment-description">{t('คำอธิบาย')}</Label><Textarea id="assessment-description" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={2} maxLength={2000} /></div><div className="grid gap-1.5"><Label htmlFor="assessment-instructions">{t('คำแนะนำก่อนเริ่มทำ')}</Label><Textarea id="assessment-instructions" value={draft.instructions} onChange={(event) => setDraft((current) => ({ ...current, instructions: event.target.value }))} rows={2} maxLength={4000} /></div><label className="flex items-start gap-3 rounded-xl border p-3"><Checkbox checked={draft.allowMultipleAttempts} onCheckedChange={(checked) => setDraft((current) => ({ ...current, allowMultipleAttempts: checked === true }))} /><span><span className="block font-medium">{t('อนุญาตให้ทำซ้ำ')}</span><span className="mt-0.5 block text-sm text-muted-foreground">{t('หากไม่เลือก พนักงานหนึ่งรหัสจะส่งคำตอบได้ครั้งเดียว')}</span></span></label></div>
-      <div className="space-y-3 border-t pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">{t('ข้อคำถาม')} ({draft.questions.length})</h3><p className="mt-1 text-sm text-muted-foreground">{t('คะแนนคำนวณจากคำถามแบบตัวเลือกที่กำหนดเฉลย')}</p></div><Button iconOnly type="button" variant="outline" onClick={() => setDraft((current) => ({ ...current, questions: [...current.questions, emptyQuestion()] }))} className="gap-1.5"><Plus size={15} /> {t('เพิ่มคำถาม')}</Button></div>
-        {draft.questions.length ? draft.questions.map((question, index) => {
-          const options = question.optionsText.split('\n').map((option) => option.trim()).filter(Boolean)
-          return <section key={question.key} className="space-y-3 rounded-xl border bg-surface-subtle p-4"><div className="flex items-center justify-between gap-2"><Badge variant="outline">{t('ข้อ')} {index + 1}</Badge><Button iconOnly type="button" variant="ghost" size="sm" onClick={() => setDraft((current) => ({ ...current, questions: current.questions.filter((item) => item.key !== question.key) }))} className="text-destructive hover:text-destructive"><Trash2 size={15} /> {t('ลบคำถาม')}</Button></div><div className="grid gap-3 sm:grid-cols-[1fr_190px]"><div className="grid gap-1.5"><Label>{t('คำถาม')} *</Label><Textarea value={question.prompt} onChange={(event) => updateQuestion(question.key, { prompt: event.target.value })} rows={2} maxLength={1000} required /></div><div className="grid gap-1.5"><Label>{t('ประเภทคำถาม')}</Label><Select value={question.type} onValueChange={(value: 'choice' | 'text') => updateQuestion(question.key, { type: value, correctOption: '' })}><SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="choice">{t('ตัวเลือก')}</SelectItem><SelectItem value="text">{t('คำตอบสั้น')}</SelectItem></SelectContent></Select></div></div>
-            {question.type === 'choice' && <div className="grid gap-3 sm:grid-cols-2"><div className="grid gap-1.5"><Label>{t('ตัวเลือก (หนึ่งบรรทัดต่อข้อ)')}</Label><Textarea value={question.optionsText} onChange={(event) => updateQuestion(question.key, { optionsText: event.target.value, correctOption: '' })} rows={4} placeholder={`${t('ตัวเลือก')} 1\n${t('ตัวเลือก')} 2\n${t('ตัวเลือก')} 3`} /></div><div className="grid content-start gap-1.5"><Label>{t('เฉลยสำหรับให้คะแนน')}</Label><Select value={question.correctOption === '' ? 'none' : question.correctOption} onValueChange={(value) => updateQuestion(question.key, { correctOption: value === 'none' ? '' : value })}><SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">{t('ไม่กำหนดเฉลย')}</SelectItem>{options.map((option, optionIndex) => <SelectItem key={`${optionIndex}-${option}`} value={String(optionIndex)}>{option}</SelectItem>)}</SelectContent></Select><p className="text-sm text-muted-foreground">{t('คำถามที่ไม่กำหนดเฉลยจะไม่ถูกนำไปรวมคะแนน')}</p></div></div>}
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={question.required} onCheckedChange={(checked) => updateQuestion(question.key, { required: checked === true })} />{t('ต้องตอบคำถามนี้')}</label>
-          </section>
-        }) : <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">{t('เพิ่มคำถามอย่างน้อย 1 ข้อก่อนเผยแพร่')}</div>}
-      </div>
-      <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={onClose}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึกแบบประเมิน')}</Button></div>
-    </form>
-  </DialogContent></Dialog>
 }

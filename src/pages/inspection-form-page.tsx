@@ -257,7 +257,7 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
     } finally { setBusy(false) }
   }
 
-  if (submittedPublicly) return <Card className="mx-auto grid min-h-64 max-w-xl place-items-center rounded-2xl border-border p-8 text-center"><div><div className="mx-auto grid size-12 place-items-center rounded-full bg-success/10 text-success"><CheckCircle2 size={26} /></div><h2 className="mt-4 text-xl font-semibold">{t('บันทึกแบบตรวจเรียบร้อยแล้ว')}</h2><p className="mt-2 text-sm text-muted-foreground">{t('ขอบคุณที่ร่วมตรวจสอบความปลอดภัย')}</p><Button type="button" onClick={() => window.location.reload()} className="mt-5">{t('กรอกแบบตรวจรายการใหม่')}</Button></div></Card>
+  if (submittedPublicly) return <Card className="mx-auto grid min-h-64 max-w-xl place-items-center rounded-2xl border-border p-8 text-center"><div><div className="mx-auto grid size-12 place-items-center rounded-lg bg-success/10 text-success"><CheckCircle2 size={26} /></div><h2 className="mt-4 text-xl font-semibold">{t('บันทึกแบบตรวจเรียบร้อยแล้ว')}</h2><p className="mt-2 text-sm text-muted-foreground">{t('ขอบคุณที่ร่วมตรวจสอบความปลอดภัย')}</p><Button type="button" onClick={() => window.location.reload()} className="mt-5">{t('กรอกแบบตรวจรายการใหม่')}</Button></div></Card>
 
   if (checklistLoading) return <div className="content-narrow rounded-xl border bg-white p-6 text-base text-muted-foreground">{t('กำลังโหลดรายการตรวจ…')}</div>
 
@@ -363,7 +363,7 @@ function ChecklistCard({ item, response, assignees, publicMode, employees, onSea
           <input ref={galleryInput} type="file" accept="image/*" multiple onChange={chooseFiles} className="sr-only" />
           {compressing && <p className="mt-2 text-center text-xs font-medium text-primary">{t('กำลังบีบอัดรูปภาพ…')}</p>}
         </div>
-        {response.beforeFiles.length > 0 && <div className="flex flex-wrap gap-2">{response.beforeFiles.map((file, index) => <div key={`${file.name}-${index}`} className="relative size-14 overflow-hidden rounded-lg border bg-white"><img src={previews[index]} alt={file.name} className="h-full w-full object-cover" /><Button type="button" variant="ghost" size="icon-xs" onClick={() => removeFile(index)} aria-label={t('นำรูปออก')} className="absolute right-0.5 top-0.5 size-5 rounded-full bg-black/60 p-0 text-white hover:bg-black/80 hover:text-white"><X size={11} /></Button></div>)}</div>}
+        {response.beforeFiles.length > 0 && <div className="flex flex-wrap gap-2">{response.beforeFiles.map((file, index) => <div key={`${file.name}-${index}`} className="relative size-14 overflow-hidden rounded-lg border bg-white"><img src={previews[index]} alt={file.name} className="h-full w-full object-cover" /><Button type="button" variant="ghost" size="icon-xs" onClick={() => removeFile(index)} aria-label={t('นำรูปออก')} className="absolute right-0.5 top-0.5 size-5 rounded-sm bg-black/60 p-0 text-white hover:bg-black/80 hover:text-white"><X size={11} /></Button></div>)}</div>}
       </div>
     </div>}
     {!response.result && <p className="mt-3 flex items-center gap-1.5 text-xs text-warning"><CircleHelp size={12} /> {t('เลือกผลตรวจเพื่อบันทึกหัวข้อนี้')}</p>}

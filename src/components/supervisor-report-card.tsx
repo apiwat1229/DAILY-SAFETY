@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarCheck, CircleCheck, CircleDashed, ListChecks, LoaderCircle, TriangleAlert, UserCheck, UserX, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
-import { api, formatDate } from '@/lib/api'
+import { api, formatDate, formatDateWithTime } from '@/lib/api'
 import type { SupervisorReport } from '@/lib/types'
 import { useI18n } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
@@ -98,7 +98,7 @@ export function SupervisorReportCard({ from, to, refreshKey = 0 }: Props) {
                 <TableCell><p className="font-medium">{row.name}</p><p className="text-xs text-muted-foreground">{row.employeeCode} · {row.role === 'admin' ? 'Admin' : t('หัวหน้างาน')}</p></TableCell>
                 <TableCell><Badge variant="outline" className={`gap-1 ${statusStyle[row.status]}`}>{row.status === 'not_reported' ? <CircleDashed size={12} /> : row.status === 'reported_today' ? <CircleCheck size={12} /> : <CalendarCheck size={12} />}{t(statusLabel[row.status])}</Badge></TableCell>
                 <TableCell className="tabular-nums">{row.inspectionsPeriod}</TableCell>
-                <TableCell>{row.lastReportDate ? `${formatDate(row.lastReportDate, language)} ${row.lastReportTime}` : '—'}</TableCell>
+                <TableCell>{row.lastReportDate ? formatDateWithTime(row.lastReportDate, row.lastReportTime, language) : '—'}</TableCell>
                 <TableCell className="tabular-nums">{row.ngFound}</TableCell>
                 <TableCell className="tabular-nums">{row.openTasks}</TableCell>
                 <TableCell className={`tabular-nums ${row.overdueTasks ? 'font-semibold text-destructive' : ''}`}>{row.overdueTasks}</TableCell>

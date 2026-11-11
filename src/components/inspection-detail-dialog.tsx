@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalendarClock, Camera, Check, ChevronRight, FileDown, ImagePlus, LoaderCircle, Pencil, Printer, RotateCcw, Trash2, UserRound, ZoomIn, ZoomOut } from 'lucide-react'
 import { toast } from 'sonner'
-import { api, formatDate, formatDateTime } from '@/lib/api'
+import { api, formatDate, formatDateTime, formatDateWithTime } from '@/lib/api'
 import type { Assignee, Inspection, InspectionResponse, User } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -100,7 +100,7 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated, star
       </DialogHeader>
       {loading || !inspection ? <div className="grid min-h-48 place-items-center text-sm text-muted-foreground"><span className="inline-flex items-center gap-2"><LoaderCircle className="animate-spin" size={16} /> {t('กำลังโหลดรายละเอียด…')}</span></div> : <div className="min-h-0 space-y-5 overflow-y-auto px-4 py-5 sm:px-7">
         <div className="grid gap-3 rounded-xl bg-surface-subtle p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Meta label={t('วันและเวลาตรวจ')} value={`${formatDate(inspection.date, language)} · ${inspection.time || '—'} ${t('น.')}`} />
+          <Meta label={t('วันและเวลาตรวจ')} value={formatDateWithTime(inspection.date, inspection.time, language)} />
           <Meta label={t('ผู้ตรวจ')} value={inspection.inspector} />
           <Meta label={t('แผนก / พื้นที่')} value={inspection.area} />
           <Meta label={t('กะ / รหัส')} value={`${inspection.shift} · ${inspection.employeeCode || '—'}`} />
