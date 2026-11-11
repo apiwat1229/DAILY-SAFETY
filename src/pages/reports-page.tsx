@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Download, Printer, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDate, formatDateTime } from '@/lib/api'
+import { inventoryApi } from '@/lib/inventory-api'
+import type { StockAlerts } from '@/lib/inventory-types'
 import { reportApi, type ReportFilters } from '@/lib/requisition-api'
 import { usePersistentState } from '@/lib/persistent-state'
 import type { CycleReport, IntegritySummary, ReportGroup, ReportOptions, UsageReport } from '@/lib/requisition-types'
@@ -116,6 +118,7 @@ export function ReportsPage({ user }: { user: User }) {
       </CardContent>
     </Card>
 
+    {(user.role === 'admin' || user.role === 'storekeeper') && <StockAlertsCard warehouseId={warehouseId === ALL ? undefined : warehouseId} />}
     {user.role === 'admin' && <IntegrityCard />}
   </div>
 }
@@ -144,6 +147,29 @@ function IntegrityCard() {
     <CardContent className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm">{last ? <>{last.ok ? t('ตรวจล่าสุด: ไม่พบความผิดปกติ') : `${t('ตรวจล่าสุด: พบรายการไม่ตรงกัน')} ${last.mismatchCount}`} <span className="text-muted-foreground">· {formatDateTime(last.at, language)}</span></> : <span className="text-muted-foreground">{t('ยังไม่เคยตรวจ')}</span>}</p>
       <Button type="button" variant="outline" disabled={busy} onClick={() => void run()}>{t('ตรวจตอนนี้')}</Button>
+    </CardContent>
+  </Card>
+}
+
+/** Low-stock and expiring-lot lists for the warehouses the viewer manages (same data as the stock page alerts). */
+function StockAlertsCard({ warehouseId }: { warehouseId?: string }) {
+  const { t, language } = useI18n()
+  const [alerts, setAlerts] = useState<StockAlerts | null>(null)
+  useEffect(() => { inventoryApi.alerts(warehouseId).then(setAlerts).catch(() => setAlerts(null)) }, [warehouseId])
+  if (!alerts) return null
+  const empty = alerts.lowStock.length === 0 && alerts.expiring.length === 0
+  return <Card className="rounded-2xl border-border">
+    <CardHeader className="px-5 pt-4"><CardTitle className="text-base">{t('สต็อกที่ต้องดูแล')}</CardTitle><CardDescription>{t('ใกล้หมดอายุและต่ำกว่าขั้นต่ำ')}</CardDescription></CardHeader>
+    <CardContent className="grid gap-4 px-5 pb-5 lg:grid-cols-2">
+      {empty && <p className="text-sm text-muted-foreground lg:col-span-2">{t('ไม่มีรายการที่ต้องดูแล')}</p>}
+      {alerts.expiring.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">{t('ใกล้หมดอายุ')}</h3>
+        <ul className="divide-y divide-border-subtle rounded-xl border border-border">{alerts.expiring.slice(0, 20).map((row) => <li key={`${row.variantId}-${row.lotNo}-${row.warehouseId}`} className="flex items-center gap-2 p-3 text-sm">
+          <div className="min-w-0 flex-1"><p className="truncate font-medium">{row.name}{row.variantLabel ? ` · ${row.variantLabel}` : ''}</p><p className="truncate text-xs text-muted-foreground">{row.warehouseName} · {t('ล็อต')} {row.lotNo || '—'} · {formatDate(row.expiryDate, language)}</p></div>
+          <span className={`shrink-0 text-xs font-semibold ${row.daysLeft < 0 ? 'text-destructive' : 'text-warning'}`}>{row.daysLeft < 0 ? t('หมดอายุแล้ว') : `${row.daysLeft} ${t('วัน')}`}</span></li>)}</ul></div>}
+      {alerts.lowStock.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">{t('ต่ำกว่าขั้นต่ำ')}</h3>
+        <ul className="divide-y divide-border-subtle rounded-xl border border-border">{alerts.lowStock.slice(0, 20).map((row) => <li key={`${row.itemId}-${row.warehouseId}`} className="flex items-center gap-2 p-3 text-sm">
+          <div className="min-w-0 flex-1"><p className="truncate font-medium">{row.name}</p><p className="truncate text-xs text-muted-foreground">{row.warehouseName} · {row.sku}</p></div>
+          <span className="shrink-0 text-xs font-semibold text-warning">{row.onHand} / {row.minStock}</span></li>)}</ul></div>}
     </CardContent>
   </Card>
 }
