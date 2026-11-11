@@ -1,5 +1,8 @@
 import express from 'express'
 import { randomUUID } from 'node:crypto'
+import ExcelJS from 'exceljs'
+import { StockError, createStockService } from './stock.js'
+import { createCountService } from './counts.js'
 
 const TYPES = ['ppe', 'medicine']
 const FORBIDDEN = 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้'
@@ -281,6 +284,246 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
   const canUseWarehouse = (user, warehouseId) => user.role === 'admin'
     || Boolean(db.prepare('SELECT 1 FROM warehouse_staff WHERE warehouse_id = ? AND user_id = ?').get(warehouseId, user.id))
 
+  // ---- stock operations ----
+  const stock = createStockService(db)
+  const counts = createCountService(db, stock)
+
+  /** Maps StockError codes to HTTP statuses; anything else is a real bug and is rethrown. */
+  const guarded = (handler) => (req, res) => {
+    try { return handler(req, res) } catch (error) {
+      if (!(error instanceof StockError)) throw error
+      const status = error.code === 'NOT_FOUND' ? 404 : error.code === 'INSUFFICIENT_STOCK' || error.code === 'ALREADY_POSTED' ? 409 : 400
+      return bad(res, error.message, status)
+    }
+  }
+
+  /** Warehouse ids the caller may read: the requested one (403 if not theirs) or every one they can use. */
+  function scopeWarehouses(req, res) {
+    const requested = String(req.query.warehouseId || '')
+    if (requested) {
+      if (!loadWarehouse(requested)) { bad(res, 'ไม่พบคลัง', 404); return null }
+      if (!canUseWarehouse(req.session.user, requested)) { bad(res, FORBIDDEN, 403); return null }
+      return [requested]
+    }
+    const user = req.session.user
+    const rows = user.role === 'admin'
+      ? db.prepare('SELECT id FROM warehouses').all()
+      : db.prepare('SELECT warehouse_id AS id FROM warehouse_staff WHERE user_id = ?').all(user.id)
+    return rows.map((row) => row.id)
+  }
+
+  /** Writes need an existing, active warehouse the caller may use. */
+  function writableWarehouse(req, res, warehouseId) {
+    const warehouse = loadWarehouse(String(warehouseId || ''))
+    if (!warehouse) { bad(res, 'ไม่พบคลัง', 404); return null }
+    if (!canUseWarehouse(req.session.user, warehouse.id)) { bad(res, FORBIDDEN, 403); return null }
+    if (!warehouse.is_active) { bad(res, 'คลังนี้ถูกปิดใช้งาน'); return null }
+    return warehouse
+  }
+
+  const bangkokDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
+  const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+  const SETTING_KEY = 'inventory.expiry_warn_days'
+  function expiryWarnDays() {
+    const raw = db.prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?').get(SETTING_KEY)?.setting_value || '30,60,90'
+    return raw.split(',').map(Number).filter((day) => Number.isInteger(day) && day > 0).sort((a, b) => a - b)
+  }
+
+  router.get('/settings', (_req, res) => res.json({ expiryWarnDays: expiryWarnDays() }))
+  router.put('/settings', requireAdmin, (req, res) => {
+    const days = req.body?.expiryWarnDays
+    if (!Array.isArray(days) || days.length < 1 || days.length > 5 || !days.every((day) => typeof day === 'number' && Number.isInteger(day) && day >= 1 && day <= 365)) {
+      return bad(res, 'จำนวนวันแจ้งเตือนต้องเป็นจำนวนเต็ม 1–365 จำนวน 1–5 ค่า')
+    }
+    const sorted = [...new Set(days)].sort((a, b) => a - b)
+    db.prepare('INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value').run(SETTING_KEY, sorted.join(','))
+    addAudit(req.session.user.id, 'ตั้งค่าแจ้งเตือนยาใกล้หมดอายุ', 'inventory_settings', SETTING_KEY, { days: sorted })
+    res.json({ expiryWarnDays: sorted })
+  })
+
+  router.post('/receipts', guarded((req, res) => {
+    const warehouse = writableWarehouse(req, res, req.body?.warehouseId)
+    if (!warehouse) return
+    const lines = req.body?.lines
+    if (!Array.isArray(lines) || lines.length < 1 || lines.length > 200) return bad(res, 'กรุณาระบุรายการรับเข้า 1–200 รายการ')
+    const receiptId = randomUUID()
+    const note = text(req.body?.note, 200)
+    const movements = stock.transaction(() => lines.map((line) => {
+      const result = stock.receive({ variantId: String(line?.variantId || ''), warehouseId: warehouse.id, qty: line?.qty, lotNo: line?.lotNo, expiryDate: line?.expiryDate, reason: note, userId: req.session.user.id, refType: 'receipt', refId: receiptId })
+      return { variantId: String(line.variantId), lotId: result.lotId, movementId: result.movementId }
+    }))
+    addAudit(req.session.user.id, 'รับสินค้าเข้าคลัง', 'inventory_stock', receiptId, { warehouse: warehouse.code, lines: lines.length })
+    res.status(201).json({ receiptId, movements })
+  }))
+
+  router.post('/adjustments', guarded((req, res) => {
+    const warehouse = writableWarehouse(req, res, req.body?.warehouseId)
+    if (!warehouse) return
+    const { variantId, lotId, delta, reason } = req.body || {}
+    const result = stock.adjust({ variantId: String(variantId || ''), warehouseId: warehouse.id, lotId: String(lotId || ''), delta, reason, userId: req.session.user.id })
+    addAudit(req.session.user.id, 'ปรับยอดสต็อก', 'inventory_stock', result.movementId, { warehouse: warehouse.code, variantId, delta, reason: text(reason, 200) })
+    res.status(201).json(result)
+  }))
+
+  router.post('/write-offs', guarded((req, res) => {
+    const warehouse = writableWarehouse(req, res, req.body?.warehouseId)
+    if (!warehouse) return
+    const { variantId, lotId, qty, reason, note } = req.body || {}
+    const result = stock.writeOff({ variantId: String(variantId || ''), warehouseId: warehouse.id, lotId: String(lotId || ''), qty, reason, note, userId: req.session.user.id })
+    addAudit(req.session.user.id, 'ตัดสินค้าทิ้ง', 'inventory_stock', result.movementId, { warehouse: warehouse.code, variantId, qty, reason })
+    res.status(201).json(result)
+  }))
+
+  router.post('/transfers', guarded((req, res) => {
+    const { fromWarehouseId, toWarehouseId, lines } = req.body || {}
+    if (!Array.isArray(lines) || lines.length < 1 || lines.length > 200) return bad(res, 'กรุณาระบุรายการโอน 1–200 รายการ')
+    if (String(fromWarehouseId) === String(toWarehouseId)) return bad(res, 'คลังต้นทางและปลายทางต้องไม่ใช่คลังเดียวกัน')
+    const from = writableWarehouse(req, res, fromWarehouseId)
+    if (!from) return
+    const to = writableWarehouse(req, res, toWarehouseId)
+    if (!to) return
+    const transferId = randomUUID()
+    const transfers = stock.transaction(() => lines.map((line) => stock.transfer({ variantId: String(line?.variantId || ''), fromWarehouseId: from.id, toWarehouseId: to.id, lotId: String(line?.lotId || ''), qty: line?.qty, userId: req.session.user.id })))
+    addAudit(req.session.user.id, 'โอนสินค้าระหว่างคลัง', 'inventory_stock', transferId, { from: from.code, to: to.code, lines: lines.length })
+    res.status(201).json({ transfers })
+  }))
+
+  router.get('/stock', (req, res) => {
+    const ids = scopeWarehouses(req, res)
+    if (!ids) return
+    const where = []
+    const params = []
+    const type = String(req.query.type || '')
+    if (TYPES.includes(type)) { where.push('i.type = ?'); params.push(type) }
+    const categoryId = String(req.query.categoryId || '')
+    if (categoryId) { where.push('i.category_id = ?'); params.push(categoryId) }
+    const q = text(req.query.q, 60)
+    if (q) { where.push("(i.name LIKE ? ESCAPE '!' OR i.sku LIKE ? ESCAPE '!')"); params.push(`%${escapeLike(q)}%`, `%${escapeLike(q)}%`) }
+    const variants = db.prepare(`SELECT v.id AS variant_id, v.label, i.id AS item_id, i.sku, i.name, i.type, i.unit, i.min_stock
+                                 FROM item_variants v JOIN items i ON i.id = v.item_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+                                 ORDER BY i.name COLLATE NOCASE, v.rowid`).all(...params)
+    const balanceRows = db.prepare(`SELECT b.variant_id, b.warehouse_id, SUM(b.on_hand) AS on_hand, SUM(b.reserved) AS reserved,
+                                           MIN(CASE WHEN b.on_hand > 0 AND l.expiry_date != '' THEN l.expiry_date END) AS nearest
+                                    FROM stock_balances b LEFT JOIN stock_lots l ON l.id = b.lot_id GROUP BY b.variant_id, b.warehouse_id`).all()
+    const balances = new Map(balanceRows.map((row) => [`${row.variant_id}|${row.warehouse_id}`, row]))
+    const itemTotals = new Map()
+    for (const row of db.prepare(`SELECT v.item_id, b.warehouse_id, SUM(b.on_hand) AS on_hand FROM stock_balances b JOIN item_variants v ON v.id = b.variant_id GROUP BY v.item_id, b.warehouse_id`).all()) itemTotals.set(`${row.item_id}|${row.warehouse_id}`, row.on_hand)
+    const warehouses = ids.map(loadWarehouse).filter(Boolean)
+    const today = bangkokDate()
+    const maxDays = Math.max(...expiryWarnDays(), 0)
+    const filter = String(req.query.filter || '')
+    const rows = []
+    for (const variant of variants) {
+      for (const warehouse of warehouses) {
+        const balance = balances.get(`${variant.variant_id}|${warehouse.id}`)
+        if (!balance) continue // only variants that have ever been stocked in this warehouse
+        const isLow = variant.min_stock > 0 && (itemTotals.get(`${variant.item_id}|${warehouse.id}`) ?? 0) < variant.min_stock
+        const nearestExpiry = balance.nearest || ''
+        const isExpiring = Boolean(nearestExpiry) && daysBetween(today, nearestExpiry) <= maxDays
+        if ((filter === 'low' && !isLow) || (filter === 'expiring' && !isExpiring)) continue
+        rows.push({
+          variantId: variant.variant_id, itemId: variant.item_id, sku: variant.sku, name: variant.name, variantLabel: variant.label, type: variant.type, unit: variant.unit,
+          warehouseId: warehouse.id, warehouseName: warehouse.name, onHand: balance.on_hand, reserved: balance.reserved, available: balance.on_hand - balance.reserved,
+          minStock: variant.min_stock, nearestExpiry, isLow, isExpiring,
+        })
+      }
+    }
+    res.json({ rows })
+  })
+
+  router.get('/stock/lots', (req, res) => {
+    const warehouseId = String(req.query.warehouseId || '')
+    const variantId = String(req.query.variantId || '')
+    if (!warehouseId || !variantId) return bad(res, 'กรุณาระบุคลังและสินค้า')
+    const ids = scopeWarehouses(req, res)
+    if (!ids) return
+    const lots = db.prepare(`SELECT l.id, l.lot_no, l.expiry_date, b.on_hand, b.reserved FROM stock_lots l
+                             JOIN stock_balances b ON b.lot_id = l.id AND b.variant_id = l.variant_id AND b.warehouse_id = l.warehouse_id
+                             WHERE l.variant_id = ? AND l.warehouse_id = ? AND b.on_hand > 0
+                             ORDER BY (l.expiry_date = '') ASC, l.expiry_date ASC, l.received_at ASC, l.rowid ASC`).all(variantId, warehouseId)
+    res.json({ lots: lots.map((lot) => ({ lotId: lot.id, lotNo: lot.lot_no, expiryDate: lot.expiry_date, onHand: lot.on_hand, reserved: lot.reserved })) })
+  })
+
+  // ---- movements (the ledger) ----
+  function movementQuery(req, res) {
+    const ids = scopeWarehouses(req, res)
+    if (!ids) return null
+    const where = [`m.warehouse_id IN (${ids.map(() => '?').join(',') || "''"})`]
+    const params = [...ids]
+    const variantId = String(req.query.variantId || '')
+    if (variantId) { where.push('m.variant_id = ?'); params.push(variantId) }
+    const type = String(req.query.type || '')
+    if (type) { where.push('m.type = ?'); params.push(type) }
+    const from = String(req.query.from || '')
+    const to = String(req.query.to || '')
+    if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push('substr(m.created_at, 1, 10) >= ?'); params.push(from) }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(to)) { where.push('substr(m.created_at, 1, 10) <= ?'); params.push(to) }
+    return { whereSql: `WHERE ${where.join(' AND ')}`, params }
+  }
+  const movementSelect = `SELECT m.id, m.type, m.variant_id, m.warehouse_id, m.qty, m.reason, m.ref_type, m.ref_id, m.created_at,
+      i.sku, i.name AS item_name, v.label AS variant_label, w.name AS warehouse_name, COALESCE(l.lot_no, '') AS lot_no, COALESCE(l.expiry_date, '') AS expiry_date,
+      COALESCE(u.display_name, '') AS user_name
+    FROM stock_movements m
+    LEFT JOIN item_variants v ON v.id = m.variant_id LEFT JOIN items i ON i.id = v.item_id
+    LEFT JOIN warehouses w ON w.id = m.warehouse_id LEFT JOIN stock_lots l ON l.id = m.lot_id LEFT JOIN users u ON u.id = m.user_id`
+  const movementDto = (row) => ({
+    id: row.id, type: row.type, variantId: row.variant_id, sku: row.sku || '', itemName: row.item_name || '', variantLabel: row.variant_label || '',
+    warehouseId: row.warehouse_id, warehouseName: row.warehouse_name || '', lotNo: row.lot_no, expiryDate: row.expiry_date, qty: row.qty,
+    reason: row.reason, refType: row.ref_type, refId: row.ref_id, userName: row.user_name, createdAt: row.created_at,
+  })
+
+  router.get('/movements', (req, res) => {
+    const query = movementQuery(req, res)
+    if (!query) return
+    const page = Math.max(Number.parseInt(String(req.query.page || '1'), 10) || 1, 1)
+    const pageSize = Math.min(Math.max(Number.parseInt(String(req.query.pageSize || '25'), 10) || 25, 1), 100)
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM stock_movements m ${query.whereSql}`).get(...query.params).n
+    const rows = db.prepare(`${movementSelect} ${query.whereSql} ORDER BY m.created_at DESC, m.rowid DESC LIMIT ? OFFSET ?`).all(...query.params, pageSize, (page - 1) * pageSize)
+    res.json({ rows: rows.map(movementDto), total, page, pageSize })
+  })
+
+  router.get('/movements/export', async (req, res) => {
+    const query = movementQuery(req, res)
+    if (!query) return
+    const rows = db.prepare(`${movementSelect} ${query.whereSql} ORDER BY m.created_at DESC, m.rowid DESC LIMIT 50000`).all(...query.params).map(movementDto)
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('Stock movements')
+    sheet.columns = [
+      { header: 'วันเวลา', key: 'createdAt', width: 22 }, { header: 'ประเภท', key: 'type', width: 14 }, { header: 'คลัง', key: 'warehouseName', width: 20 },
+      { header: 'รหัสสินค้า', key: 'sku', width: 16 }, { header: 'สินค้า', key: 'itemName', width: 28 }, { header: 'ตัวเลือก', key: 'variantLabel', width: 12 },
+      { header: 'ล็อต', key: 'lotNo', width: 14 }, { header: 'วันหมดอายุ', key: 'expiryDate', width: 14 }, { header: 'จำนวน', key: 'qty', width: 10 },
+      { header: 'เหตุผล', key: 'reason', width: 30 }, { header: 'ผู้ดำเนินการ', key: 'userName', width: 20 },
+    ]
+    sheet.getRow(1).font = { bold: true }
+    for (const row of rows) sheet.addRow(row)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="stock-movements-${bangkokDate()}.xlsx"`)
+    await workbook.xlsx.write(res)
+    res.end()
+  })
+
+  // ---- alerts ----
+  router.get('/alerts', (req, res) => {
+    const ids = scopeWarehouses(req, res)
+    if (!ids) return
+    const today = bangkokDate()
+    const maxDays = Math.max(...expiryWarnDays(), 0)
+    const inList = ids.map(() => '?').join(',') || "''"
+    const lowStock = db.prepare(`SELECT i.id AS item_id, i.sku, i.name, i.min_stock, w.id AS warehouse_id, w.name AS warehouse_name, SUM(b.on_hand) AS on_hand
+                                 FROM stock_balances b JOIN item_variants v ON v.id = b.variant_id JOIN items i ON i.id = v.item_id JOIN warehouses w ON w.id = b.warehouse_id
+                                 WHERE b.warehouse_id IN (${inList}) AND i.min_stock > 0 AND i.is_active = 1 GROUP BY i.id, w.id HAVING SUM(b.on_hand) < i.min_stock
+                                 ORDER BY i.name COLLATE NOCASE`).all(...ids)
+    const lots = db.prepare(`SELECT i.id AS item_id, i.name, v.id AS variant_id, v.label, l.lot_no, l.expiry_date, w.id AS warehouse_id, w.name AS warehouse_name, b.on_hand
+                             FROM stock_balances b JOIN stock_lots l ON l.id = b.lot_id JOIN item_variants v ON v.id = b.variant_id JOIN items i ON i.id = v.item_id JOIN warehouses w ON w.id = b.warehouse_id
+                             WHERE b.warehouse_id IN (${inList}) AND b.on_hand > 0 AND l.expiry_date != '' ORDER BY l.expiry_date`).all(...ids)
+    res.json({
+      lowStock: lowStock.map((row) => ({ itemId: row.item_id, sku: row.sku, name: row.name, warehouseId: row.warehouse_id, warehouseName: row.warehouse_name, onHand: row.on_hand, minStock: row.min_stock })),
+      expiring: lots.map((row) => ({ itemId: row.item_id, variantId: row.variant_id, name: row.name, variantLabel: row.label, warehouseId: row.warehouse_id, warehouseName: row.warehouse_name, lotNo: row.lot_no, expiryDate: row.expiry_date, daysLeft: daysBetween(today, row.expiry_date), onHand: row.on_hand }))
+        .filter((row) => row.daysLeft <= maxDays),
+      expiryWarnDays: expiryWarnDays(),
+    })
+  })
+
   app.use('/api/inventory', router)
-  return { router, canUseWarehouse, requireStockStaff }
+  return { router, canUseWarehouse, requireStockStaff, stock, counts, guarded, scopeWarehouses, writableWarehouse }
 }

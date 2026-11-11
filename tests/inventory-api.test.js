@@ -2,6 +2,7 @@ import { after, before, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import ExcelJS from 'exceljs'
 import { ADMIN_PASSWORD, employeeBody, loginAs, startServer } from './helpers.js'
 
 let server
@@ -169,5 +170,147 @@ describe('catalog and warehouse API', () => {
     const rows = db.prepare("SELECT action FROM audit_log WHERE target_type = 'inventory_item' AND target_id = ? ORDER BY created_at").all(item.id)
     db.close()
     assert.equal(rows.length, 3)
+  })
+})
+
+let fixtureCounter = 0
+const bangkokDate = (offsetDays = 0) => {
+  const date = new Date(Date.now() + offsetDays * 86_400_000)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(date)
+}
+
+/** A fresh warehouse + PPE item (one default variant) + medicine item, so tests never share stock. */
+async function stockFixture(adminClient) {
+  const n = ++fixtureCounter
+  const warehouse = (await inv(adminClient, 'POST', '/warehouses', { code: `ST-${n}`, name: `คลังทดสอบ ${n}` })).json.warehouse
+  const ppe = (await inv(adminClient, 'POST', '/items', { sku: `ST-PPE-${n}`, name: `หน้ากาก ${n}`, type: 'ppe', unit: 'ชิ้น', minStock: 10 })).json.item
+  const med = (await inv(adminClient, 'POST', '/items', { sku: `ST-MED-${n}`, name: `ยาแก้ปวด ${n}`, type: 'medicine', unit: 'แผง', minStock: 5 })).json.item
+  return { warehouse, ppe, med, ppeVariant: ppe.variants[0].id, medVariant: med.variants[0].id }
+}
+const assign = async (adminClient, warehouse, userId) => assert.equal((await inv(adminClient, 'PUT', `/warehouses/${warehouse.id}/staff`, { userIds: [userId] })).status, 200)
+
+describe('stock operations API', () => {
+  test('receipt with a bad line writes nothing', async () => {
+    const adminClient = await admin()
+    const f = await stockFixture(adminClient)
+    const result = await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, lines: [{ variantId: f.ppeVariant, qty: 5 }, { variantId: f.ppeVariant, qty: 0 }] })
+    assert.equal(result.status, 400)
+    assert.equal((await inv(adminClient, 'GET', `/movements?warehouseId=${f.warehouse.id}`)).json.total, 0)
+    assert.equal((await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, lines: [] })).status, 400)
+  })
+
+  test('receipt, stock list, lots and movements agree', async () => {
+    const adminClient = await admin()
+    const f = await stockFixture(adminClient)
+    const receipt = await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, note: 'รับเข้าใหม่', lines: [
+      { variantId: f.ppeVariant, qty: 20 },
+      { variantId: f.medVariant, qty: 8, lotNo: 'L-1', expiryDate: bangkokDate(200) },
+    ] })
+    assert.equal(receipt.status, 201, JSON.stringify(receipt.json))
+    const stockList = await inv(adminClient, 'GET', `/stock?warehouseId=${f.warehouse.id}`)
+    const rows = Object.fromEntries(stockList.json.rows.map((row) => [row.variantId, row]))
+    assert.equal(rows[f.ppeVariant].onHand, 20)
+    assert.equal(rows[f.medVariant].onHand, 8)
+    assert.equal(rows[f.medVariant].nearestExpiry, bangkokDate(200))
+    assert.equal(rows[f.medVariant].available, 8)
+    const lots = await inv(adminClient, 'GET', `/stock/lots?warehouseId=${f.warehouse.id}&variantId=${f.medVariant}`)
+    assert.deepEqual(lots.json.lots.map((lot) => [lot.lotNo, lot.onHand]), [['L-1', 8]])
+    const movements = await inv(adminClient, 'GET', `/movements?warehouseId=${f.warehouse.id}`)
+    assert.equal(movements.json.total, 2)
+    assert.deepEqual(movements.json.rows.map((row) => [row.type, row.qty]).sort(), [['receive', 20], ['receive', 8]].sort())
+    assert.ok(movements.json.rows[0].warehouseName && movements.json.rows[0].userName)
+  })
+
+  test('storekeeper cannot receive into an unassigned warehouse and sees only assigned stock', async () => {
+    const adminClient = await admin()
+    const mine = await stockFixture(adminClient)
+    const other = await stockFixture(adminClient)
+    const { client, userId } = await makeStorekeeper(`SK2${fixtureCounter}`)
+    await assign(adminClient, mine.warehouse, userId)
+    assert.equal((await inv(client, 'POST', '/receipts', { warehouseId: other.warehouse.id, lines: [{ variantId: other.ppeVariant, qty: 1 }] })).status, 403)
+    assert.equal((await inv(client, 'POST', '/receipts', { warehouseId: mine.warehouse.id, lines: [{ variantId: mine.ppeVariant, qty: 3 }] })).status, 201)
+    assert.equal((await inv(client, 'GET', `/stock?warehouseId=${other.warehouse.id}`)).status, 403)
+    assert.equal((await inv(client, 'GET', `/movements?warehouseId=${other.warehouse.id}`)).status, 403)
+    const all = await inv(client, 'GET', '/stock')
+    assert.ok(all.json.rows.length > 0)
+    assert.ok(all.json.rows.every((row) => row.warehouseId === mine.warehouse.id))
+  })
+
+  test('adjustments and write-offs need a reason and cannot go below zero', async () => {
+    const adminClient = await admin()
+    const f = await stockFixture(adminClient)
+    const lot = (await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, lines: [{ variantId: f.medVariant, qty: 5, lotNo: 'L-1', expiryDate: bangkokDate(100) }] })).json.movements[0]
+    const base = { warehouseId: f.warehouse.id, variantId: f.medVariant, lotId: lot.lotId }
+    assert.equal((await inv(adminClient, 'POST', '/adjustments', { ...base, delta: -1 })).status, 400)
+    assert.equal((await inv(adminClient, 'POST', '/adjustments', { ...base, delta: -1, reason: 'นับขาด' })).status, 201)
+    assert.equal((await inv(adminClient, 'POST', '/adjustments', { ...base, delta: -99, reason: 'x' })).status, 409)
+    assert.equal((await inv(adminClient, 'POST', '/write-offs', { ...base, qty: 1, reason: 'stolen' })).status, 400)
+    assert.equal((await inv(adminClient, 'POST', '/write-offs', { ...base, qty: 2, reason: 'damaged', note: 'แตก' })).status, 201)
+    const row = (await inv(adminClient, 'GET', `/stock?warehouseId=${f.warehouse.id}`)).json.rows.find((entry) => entry.variantId === f.medVariant)
+    assert.equal(row.onHand, 2)
+  })
+
+  test('transfer needs both warehouses and moves the lot', async () => {
+    const adminClient = await admin()
+    const from = await stockFixture(adminClient)
+    const to = await stockFixture(adminClient)
+    const { client, userId } = await makeStorekeeper(`SK3${fixtureCounter}`)
+    await assign(adminClient, from.warehouse, userId)
+    const lot = (await inv(adminClient, 'POST', '/receipts', { warehouseId: from.warehouse.id, lines: [{ variantId: from.medVariant, qty: 6, lotNo: 'L-T', expiryDate: bangkokDate(90) }] })).json.movements[0]
+    const body = { fromWarehouseId: from.warehouse.id, toWarehouseId: to.warehouse.id, lines: [{ variantId: from.medVariant, lotId: lot.lotId, qty: 4 }] }
+    assert.equal((await inv(client, 'POST', '/transfers', body)).status, 403)
+    assert.equal((await inv(adminClient, 'POST', '/transfers', { ...body, toWarehouseId: from.warehouse.id })).status, 400)
+    assert.equal((await inv(adminClient, 'POST', '/transfers', body)).status, 201)
+    const destination = (await inv(adminClient, 'GET', `/stock?warehouseId=${to.warehouse.id}`)).json.rows.find((row) => row.variantId === from.medVariant)
+    assert.equal(destination.onHand, 4)
+  })
+
+  test('alerts list low stock and expiring lots (expired ones with negative daysLeft)', async () => {
+    const adminClient = await admin()
+    const f = await stockFixture(adminClient)
+    await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, lines: [
+      { variantId: f.ppeVariant, qty: 3 },
+      { variantId: f.medVariant, qty: 4, lotNo: 'SOON', expiryDate: bangkokDate(20) },
+      { variantId: f.medVariant, qty: 2, lotNo: 'GONE', expiryDate: bangkokDate(-5) },
+      { variantId: f.medVariant, qty: 9, lotNo: 'FAR', expiryDate: bangkokDate(400) },
+    ] })
+    const alerts = (await inv(adminClient, 'GET', `/alerts?warehouseId=${f.warehouse.id}`)).json
+    const low = alerts.lowStock.find((row) => row.itemId === f.ppe.id)
+    assert.deepEqual([low.onHand, low.minStock], [3, 10])
+    assert.ok(!alerts.lowStock.some((row) => row.itemId === f.med.id), 'medicine total 15 is above its minimum of 5')
+    const expiring = Object.fromEntries(alerts.expiring.filter((row) => row.warehouseId === f.warehouse.id).map((row) => [row.lotNo, row]))
+    assert.equal(expiring.SOON.daysLeft, 20)
+    assert.equal(expiring.GONE.daysLeft, -5)
+    assert.equal(expiring.FAR, undefined)
+    const filtered = await inv(adminClient, 'GET', `/stock?warehouseId=${f.warehouse.id}&filter=low`)
+    assert.deepEqual(filtered.json.rows.map((row) => row.variantId), [f.ppeVariant])
+    const expiringRows = await inv(adminClient, 'GET', `/stock?warehouseId=${f.warehouse.id}&filter=expiring`)
+    assert.deepEqual(expiringRows.json.rows.map((row) => row.variantId), [f.medVariant])
+  })
+
+  test('movements export returns an xlsx with a header row', async () => {
+    const adminClient = await admin()
+    const f = await stockFixture(adminClient)
+    await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, lines: [{ variantId: f.ppeVariant, qty: 2 }] })
+    const response = await fetch(`${baseUrl}/api/inventory/movements/export?warehouseId=${f.warehouse.id}`, { headers: { Cookie: adminClient.cookie } })
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type') || '', /spreadsheetml/)
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()))
+    const sheet = workbook.worksheets[0]
+    assert.ok(sheet.getRow(1).getCell(1).value)
+    assert.equal(sheet.rowCount, 2)
+  })
+
+  test('settings: storekeeper can read, only admin can write, values are validated', async () => {
+    const adminClient = await admin()
+    const { client } = await makeStorekeeper('SK400')
+    assert.deepEqual((await inv(client, 'GET', '/settings')).json.expiryWarnDays, [30, 60, 90])
+    assert.equal((await inv(client, 'PUT', '/settings', { expiryWarnDays: [10] })).status, 403)
+    for (const bad of [[], [0], [-5], [1.5], ['x'], [1, 2, 3, 4, 5, 6], 'abc']) assert.equal((await inv(adminClient, 'PUT', '/settings', { expiryWarnDays: bad })).status, 400, JSON.stringify(bad))
+    const saved = await inv(adminClient, 'PUT', '/settings', { expiryWarnDays: [45, 15] })
+    assert.deepEqual(saved.json.expiryWarnDays, [15, 45])
+    assert.deepEqual((await inv(adminClient, 'GET', '/settings')).json.expiryWarnDays, [15, 45])
+    await inv(adminClient, 'PUT', '/settings', { expiryWarnDays: [30, 60, 90] })
   })
 })
