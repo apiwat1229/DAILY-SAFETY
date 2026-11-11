@@ -21,6 +21,7 @@ import { ADDITIONAL_ASSESSMENTS } from './assessment-seeds.js'
 import { importRosters, readRoster } from './employee-roster.js'
 import compression from 'compression'
 import { createBackup } from './backup.js'
+import { migrateInventory } from './inventory/schema.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
@@ -52,7 +53,7 @@ db.exec(`
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
     employee_code TEXT NOT NULL DEFAULT '',
-    role TEXT NOT NULL CHECK(role IN ('admin', 'leader', 'employee')),
+    role TEXT NOT NULL CHECK(role IN ('admin', 'leader', 'employee', 'storekeeper')),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
     created_at TEXT NOT NULL
   );
@@ -329,7 +330,7 @@ if (!userColumns.some((column) => column.name === 'is_active')) {
   db.exec('ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))')
 }
 const usersSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()?.sql || ''
-if (!usersSchema.includes("'employee'")) {
+if (!usersSchema.includes("'storekeeper'")) {
   db.exec(`
     PRAGMA foreign_keys = OFF;
     BEGIN IMMEDIATE;
@@ -339,7 +340,7 @@ if (!usersSchema.includes("'employee'")) {
       password_hash TEXT NOT NULL,
       display_name TEXT NOT NULL,
       employee_code TEXT NOT NULL DEFAULT '',
-      role TEXT NOT NULL CHECK(role IN ('admin', 'leader', 'employee')),
+      role TEXT NOT NULL CHECK(role IN ('admin', 'leader', 'employee', 'storekeeper')),
       is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
       created_at TEXT NOT NULL
     );
@@ -351,6 +352,8 @@ if (!usersSchema.includes("'employee'")) {
     PRAGMA foreign_keys = ON;
   `)
 }
+
+migrateInventory(db)
 
 const checklistCount = db.prepare('SELECT COUNT(*) AS count FROM checklist_items').get().count
 if (!checklistCount) {
@@ -3124,7 +3127,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   const role = String(req.body?.role || 'leader')
   if (!displayName || !inputEmployeeCode) return res.status(400).json({ error: 'กรุณาเลือกชื่อและรหัสพนักงานจากทะเบียน' })
   if (password.length < 6 || password.length > 32) return res.status(400).json({ error: 'รหัสผ่านต้องมี 6–32 ตัวอักษร' })
-  if (!['admin', 'leader', 'employee'].includes(role)) return res.status(400).json({ error: 'ประเภทผู้ใช้ไม่ถูกต้อง' })
+  if (!['admin', 'leader', 'employee', 'storekeeper'].includes(role)) return res.status(400).json({ error: 'ประเภทผู้ใช้ไม่ถูกต้อง' })
   const employee = db.prepare('SELECT employee_code,name_th,name_en FROM employee_directory WHERE UPPER(TRIM(employee_code)) = ?').get(inputEmployeeCode)
   if (!employee) return res.status(400).json({ error: 'กรุณาเลือกพนักงานจากทะเบียน' })
   const validNames = [employee.name_th, employee.name_en].filter(Boolean)
@@ -3167,7 +3170,7 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
   const role = String(req.body?.role ?? existing.role)
   if (!/^[a-z0-9._-]{1,40}$/.test(username)) return res.status(400).json({ error: 'ชื่อบัญชีต้องมี 1–40 ตัว ใช้ a-z, 0-9, จุด ขีดกลาง หรือขีดล่าง' })
   if (!displayName || !employeeCode) return res.status(400).json({ error: 'กรุณากรอกชื่อและรหัสพนักงาน' })
-  if (!['admin', 'leader', 'employee'].includes(role)) return res.status(400).json({ error: 'ประเภทผู้ใช้ไม่ถูกต้อง' })
+  if (!['admin', 'leader', 'employee', 'storekeeper'].includes(role)) return res.status(400).json({ error: 'ประเภทผู้ใช้ไม่ถูกต้อง' })
   const duplicate = db.prepare('SELECT id FROM users WHERE lower(username) = ? AND id != ?').get(username, existing.id)
   if (duplicate) return res.status(409).json({ error: 'ชื่อผู้ใช้นี้มีในระบบแล้ว' })
   const isDemotingAdmin = existing.role === 'admin' && role !== 'admin'

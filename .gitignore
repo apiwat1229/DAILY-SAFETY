@@ -31,3 +31,5 @@ data/uploads/
 *.sln
 *.sw?
 data/backups/
+
+.superpowers/
