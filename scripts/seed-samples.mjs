@@ -16,11 +16,11 @@ async function askPassword() {
     let text = ''
     process.stdin.on('data', (chunk) => {
       for (const char of chunk) {
-        if (char === '' || char === '
-') { process.stdin.setRawMode(false); process.stdin.pause(); process.stdout.write('
-'); return resolve(text) }
-        if (char === '') process.exit(1)
-        if (char === '' || char === '') text = text.slice(0, -1); else text += char
+        const code = char.charCodeAt(0)
+        if (code === 13 || code === 10) { process.stdin.setRawMode(false); process.stdin.pause(); process.stdout.write(String.fromCharCode(10)); return resolve(text) }
+        if (code === 3) process.exit(1)
+        if (code === 127 || code === 8) text = text.slice(0, -1)
+        else if (code >= 32) text += char
       }
     })
   })
