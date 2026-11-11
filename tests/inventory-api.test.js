@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import ExcelJS from 'exceljs'
-import { ADMIN_PASSWORD, employeeBody, loginAs, startServer } from './helpers.js'
+import sharp from 'sharp'
+import { readdir } from 'node:fs/promises'
+import { ADMIN_PASSWORD, employeeBody, imageBlob, loginAs, startServer } from './helpers.js'
 
 let server
 let baseUrl
@@ -380,5 +382,123 @@ describe('stock count API', () => {
     const result = await inv(adminClient, 'PUT', `/counts/${id}/lines`, { lines: [{ variantId: b.ppeVariant, lotId: b.lots[b.ppeVariant], countedQty: 1 }] })
     assert.equal(result.status, 404)
     assert.match(result.json.error, /ใบนับสต็อก/)
+  })
+})
+
+describe('item images', () => {
+  const imageDir = () => path.join(server.dataDir, 'uploads', 'inventory')
+  const files = async () => (await readdir(imageDir()).catch(() => [])).sort()
+  const bigPng = () => sharp({ create: { width: 1600, height: 1200, channels: 3, background: '#336699', noise: { type: 'gaussian', mean: 128, sigma: 40 } } }).png().toBuffer()
+  const upload = async (client, itemId, blob = null, name = 'photo.png') => {
+    const form = new FormData()
+    form.append('image', blob ?? await imageBlob(), name)
+    return client.call('POST', `/api/inventory/items/${itemId}/image`, form)
+  }
+  const rawGet = (client, url) => fetch(`${baseUrl}${url}`, { headers: { Cookie: client.cookie } })
+  const newItem = async (adminClient, suffix) => (await inv(adminClient, 'POST', '/items', { sku: `IMG-${suffix}`, name: `สินค้ารูป ${suffix}`, type: 'ppe', unit: 'ชิ้น' })).json.item
+
+  test('admin uploads an item image and imageUrl appears on the item', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'A')
+    assert.equal(item.imageUrl, null)
+    const result = await upload(adminClient, item.id)
+    assert.equal(result.status, 200, JSON.stringify(result.json))
+    assert.match(result.json.item.imageUrl, new RegExp(`^/api/inventory/items/${item.id}/image\\?v=`))
+    const listed = (await inv(adminClient, 'GET', '/items?q=IMG-A')).json.items[0]
+    assert.equal(listed.imageUrl, result.json.item.imageUrl)
+  })
+
+  test('any signed-in user can fetch the image and the thumbnail is smaller than the full image', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'B')
+    const big = await bigPng()
+    assert.equal((await upload(adminClient, item.id, new Blob([big], { type: 'image/png' }))).status, 200)
+    assert.equal((await adminClient.call('POST', '/api/admin/employees', employeeBody('EMIMG', 'พนักงาน รูป'))).status, 201)
+    assert.equal((await adminClient.call('POST', '/api/admin/users', { name: 'พนักงาน รูป', employeeCode: 'EMIMG', password: 'Emp-pass-9', role: 'employee' })).status, 201)
+    const employee = await loginAs(baseUrl, 'emimg', 'Emp-pass-9')
+    const full = await rawGet(employee, `/api/inventory/items/${item.id}/image`)
+    const thumb = await rawGet(employee, `/api/inventory/items/${item.id}/image?size=thumb`)
+    assert.equal(full.status, 200)
+    assert.equal(full.headers.get('content-type'), 'image/jpeg')
+    assert.equal(full.headers.get('x-content-type-options'), 'nosniff')
+    assert.match(full.headers.get('cache-control') || '', /private/)
+    const [fullSize, thumbSize] = [(await full.arrayBuffer()).byteLength, (await thumb.arrayBuffer()).byteLength]
+    assert.ok(thumbSize > 0 && thumbSize < fullSize, `thumb ${thumbSize} < full ${fullSize}`)
+    const meta = await sharp(Buffer.from(await (await rawGet(employee, `/api/inventory/items/${item.id}/image`)).arrayBuffer())).metadata()
+    assert.ok(meta.width <= 1280 && meta.height <= 1280)
+  })
+
+  test('anonymous gets 401 and an item without an image gets 404', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'C')
+    assert.equal((await fetch(`${baseUrl}/api/inventory/items/${item.id}/image`)).status, 401)
+    assert.equal((await rawGet(adminClient, `/api/inventory/items/${item.id}/image`)).status, 404)
+    assert.equal((await rawGet(adminClient, '/api/inventory/items/nope/image')).status, 404)
+  })
+
+  test('storekeeper and employee cannot upload or delete (403)', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'D')
+    const { client } = await makeStorekeeper('SKIMG')
+    assert.equal((await upload(client, item.id)).status, 403)
+    assert.equal((await client.call('DELETE', `/api/inventory/items/${item.id}/image`)).status, 403)
+  })
+
+  test('non-image and oversize files are 400 and nothing is stored', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'E')
+    const before = (await files()).length
+    assert.equal((await upload(adminClient, item.id, new Blob(['not an image'], { type: 'image/png' }))).status, 400)
+    assert.equal((await upload(adminClient, item.id, new Blob([Buffer.alloc(9 * 1024 * 1024)], { type: 'image/png' }))).status, 400)
+    assert.equal((await upload(adminClient, item.id, new Blob([Buffer.from('GIF89a')], { type: 'image/gif' }))).status, 400)
+    assert.equal((await upload(adminClient, 'missing-item')).status, 404)
+    assert.equal((await files()).length, before)
+    assert.equal((await inv(adminClient, 'GET', '/items?q=IMG-E')).json.items[0].imageUrl, null)
+  })
+
+  test('replacing removes the old files; deleting the image or the item removes the rest', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'F')
+    const start = (await files()).length
+    await upload(adminClient, item.id)
+    assert.equal((await files()).length, start + 2)
+    const first = (await inv(adminClient, 'GET', '/items?q=IMG-F')).json.items[0].imageUrl
+    await upload(adminClient, item.id)
+    assert.equal((await files()).length, start + 2)
+    assert.notEqual((await inv(adminClient, 'GET', '/items?q=IMG-F')).json.items[0].imageUrl, first)
+    assert.equal((await inv(adminClient, 'DELETE', `/items/${item.id}/image`)).status, 200)
+    assert.equal((await files()).length, start)
+    assert.equal((await rawGet(adminClient, `/api/inventory/items/${item.id}/image`)).status, 404)
+    await upload(adminClient, item.id)
+    assert.equal((await inv(adminClient, 'DELETE', `/items/${item.id}`)).status, 200)
+    assert.equal((await files()).length, start)
+  })
+
+  test('image changes are audited', async () => {
+    const adminClient = await admin()
+    const item = await newItem(adminClient, 'G')
+    await upload(adminClient, item.id)
+    await inv(adminClient, 'DELETE', `/items/${item.id}/image`)
+    const db = openDb()
+    const rows = db.prepare("SELECT action FROM audit_log WHERE target_type = 'inventory_item' AND target_id = ? ORDER BY created_at").all(item.id)
+    db.close()
+    assert.ok(rows.length >= 3)
+  })
+})
+
+describe('stock rows and images', () => {
+  test('stock rows carry the item image url (null without an image)', async () => {
+    const adminClient = await admin()
+    const warehouse = (await inv(adminClient, 'POST', '/warehouses', { code: 'IMGW', name: 'คลังรูป' })).json.warehouse
+    const withImage = (await inv(adminClient, 'POST', '/items', { sku: 'IMG-STK-1', name: 'มีรูป', type: 'ppe', unit: 'ชิ้น' })).json.item
+    const without = (await inv(adminClient, 'POST', '/items', { sku: 'IMG-STK-2', name: 'ไม่มีรูป', type: 'ppe', unit: 'ชิ้น' })).json.item
+    const form = new FormData()
+    form.append('image', await imageBlob(), 'x.png')
+    const uploaded = await adminClient.call('POST', `/api/inventory/items/${withImage.id}/image`, form)
+    assert.equal(uploaded.status, 200)
+    await inv(adminClient, 'POST', '/receipts', { warehouseId: warehouse.id, lines: [{ variantId: withImage.variants[0].id, qty: 2 }, { variantId: without.variants[0].id, qty: 2 }] })
+    const rows = (await inv(adminClient, 'GET', `/stock?warehouseId=${warehouse.id}`)).json.rows
+    assert.equal(rows.find((row) => row.itemId === withImage.id).imageUrl, uploaded.json.item.imageUrl)
+    assert.equal(rows.find((row) => row.itemId === without.id).imageUrl, null)
   })
 })

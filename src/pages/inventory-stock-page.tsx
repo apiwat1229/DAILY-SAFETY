@@ -19,6 +19,7 @@ import { ReceiveDialog } from '@/components/inventory/receive-dialog'
 import { StockActionDialog } from '@/components/inventory/adjust-dialog'
 import { StockAlertsCard } from '@/components/inventory/stock-alerts-card'
 import { daysUntil, expiryTone, toneClass } from '@/components/inventory/expiry'
+import { ItemThumb } from '@/components/item-thumb'
 
 const ALL = '__all__'
 type Action = { mode: 'adjust' | 'writeoff' | 'transfer'; row: StockRow } | null
@@ -106,7 +107,7 @@ export function InventoryStockPage({ user }: { user: User }) {
           <TableBody>{pagination.visibleItems.map((row) => {
             const days = row.nearestExpiry ? daysUntil(row.nearestExpiry) : null
             return <TableRow key={`${row.variantId}:${row.warehouseId}`}>
-              <TableCell><p className="font-medium">{row.name}{row.variantLabel && <span className="ml-1 font-normal text-muted-foreground">· {row.variantLabel}</span>}</p><p className="text-xs text-muted-foreground">{row.sku} · {row.unit}</p></TableCell>
+              <TableCell><div className="flex items-center gap-3"><ItemThumb url={row.imageUrl} name={row.name} size={40} /><div className="min-w-0"><p className="font-medium">{row.name}{row.variantLabel && <span className="ml-1 font-normal text-muted-foreground">· {row.variantLabel}</span>}</p><p className="text-xs text-muted-foreground">{row.sku} · {row.unit}</p></div></div></TableCell>
               <TableCell>{row.warehouseName}</TableCell>
               <TableCell className="text-right tabular-nums">{row.onHand}{row.isLow && <Badge variant="outline" className="ml-2 border-warning/25 bg-warning/10 text-warning">{t('ใกล้หมด')}</Badge>}</TableCell>
               <TableCell className="text-right tabular-nums">{row.reserved}</TableCell>

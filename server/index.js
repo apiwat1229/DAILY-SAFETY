@@ -22,7 +22,9 @@ import { importRosters, readRoster } from './employee-roster.js'
 import compression from 'compression'
 import { createBackup } from './backup.js'
 import { migrateInventory } from './inventory/schema.js'
+import { migrateRequisitions } from './requisitions/schema.js'
 import { registerInventoryRoutes } from './inventory/routes.js'
+import { registerRequisitionRoutes } from './requisitions/routes.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
@@ -31,6 +33,8 @@ const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path
 const uploadDir = path.join(dataDir, 'uploads')
 const trainingUploadDir = path.join(uploadDir, 'training')
 const hiyariUploadDir = path.join(uploadDir, 'hiyari')
+const inventoryUploadDir = path.join(uploadDir, 'inventory')
+const requisitionUploadDir = path.join(uploadDir, 'requisitions')
 const dbPath = path.join(dataDir, 'daily-safety.sqlite')
 const port = Number(process.env.PORT || 4000)
 const host = process.env.HOST || '127.0.0.1'
@@ -42,7 +46,7 @@ if (isProduction && (!process.env.SESSION_SECRET || !process.env.ADMIN_PASSWORD 
   throw new Error('Production requires SESSION_SECRET, ADMIN_PASSWORD, and LEADER_PASSWORD environment variables.')
 }
 
-await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true })])
+await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true }), mkdir(inventoryUploadDir, { recursive: true }), mkdir(requisitionUploadDir, { recursive: true })])
 
 const db = new DatabaseSync(dbPath)
 db.exec(`
@@ -355,6 +359,7 @@ if (!usersSchema.includes("'storekeeper'")) {
 }
 
 migrateInventory(db)
+migrateRequisitions(db)
 
 const checklistCount = db.prepare('SELECT COUNT(*) AS count FROM checklist_items').get().count
 if (!checklistCount) {
@@ -3249,7 +3254,21 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
   res.json({ ok: true })
 })
 
-registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso })
+const inventory = registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir })
+const requisitions = registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir, stock: inventory.stock })
+// Ledger vs balances check, once per Bangkok day; the admin sees the latest result in the reports page.
+function runNightlyIntegrity() {
+  const bangkokDay = (value) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(value)
+  const last = requisitions.reports.lastIntegrity()
+  if (last && bangkokDay(new Date(last.at)) === bangkokDay(new Date())) return
+  const result = requisitions.reports.runIntegrityCheck()
+  if (!result.ok) console.error(`stock integrity check found ${result.mismatchCount} mismatched balance(s)`)
+}
+setTimeout(() => { try { runNightlyIntegrity() } catch (error) { console.error('integrity check failed', error) } }, 30_000).unref()
+// Stale approved requisitions expire and overdue approval steps escalate; checked hourly.
+setInterval(() => {
+  try { requisitions.service.expireStale(); requisitions.service.escalateOverdue(); runNightlyIntegrity() } catch (error) { console.error('requisition maintenance failed', error) }
+}, 60 * 60 * 1000).unref()
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' }))
 

@@ -4,14 +4,14 @@ export type Category = { id: string; name: string; type: InventoryType; sortOrde
 export type Variant = { id: string; label: string; isActive: boolean }
 export type Item = {
   id: string; sku: string; name: string; type: InventoryType; categoryId: string; categoryName: string; unit: string; image: string
-  minStock: number; trackLot: boolean; trackExpiry: boolean; isActive: boolean; variants: Variant[]
+  minStock: number; trackLot: boolean; trackExpiry: boolean; isActive: boolean; variants: Variant[]; imageUrl: string | null
 }
 export type Warehouse = { id: string; code: string; name: string; isActive: boolean; staff: { userId: string; name: string }[] }
 
 export type StockRow = {
   variantId: string; itemId: string; sku: string; name: string; variantLabel: string; type: InventoryType; unit: string
   warehouseId: string; warehouseName: string; onHand: number; reserved: number; available: number; minStock: number
-  nearestExpiry: string; isLow: boolean; isExpiring: boolean
+  nearestExpiry: string; isLow: boolean; isExpiring: boolean; imageUrl: string | null
 }
 export type Lot = { lotId: string; lotNo: string; expiryDate: string; onHand: number; reserved: number }
 

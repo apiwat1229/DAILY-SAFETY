@@ -4,12 +4,13 @@ export const PAGE_KEYS = [
   'dashboard', 'inspections', 'new', 'users', 'employees', 'checklist', 'assessments',
   'assessment-reports', 'training-materials', 'hiyari', 'hiyari-reports', 'audit-log',
   'inventory-stock', 'inventory-items', 'inventory-warehouses', 'inventory-counts', 'inventory-movements',
+  'requisition-new', 'requisitions', 'approvals', 'issue-queue', 'workflow-admin', 'requisitions-admin', 'reports',
 ] as const
 export type PageKey = (typeof PAGE_KEYS)[number]
 
-const leaderPages: PageKey[] = ['dashboard', 'inspections', 'new']
-const employeePages: PageKey[] = ['new', 'inspections']
-const storekeeperPages: PageKey[] = ['inventory-stock', 'inventory-movements', 'inventory-counts', 'new', 'inspections']
+const leaderPages: PageKey[] = ['dashboard', 'inspections', 'new', 'requisition-new', 'requisitions', 'approvals', 'reports']
+const employeePages: PageKey[] = ['new', 'inspections', 'requisition-new', 'requisitions']
+const storekeeperPages: PageKey[] = ['inventory-stock', 'inventory-movements', 'inventory-counts', 'new', 'inspections', 'requisition-new', 'requisitions', 'approvals', 'issue-queue', 'reports']
 
 /** Pages a role may open (the server enforces the same rules on every API call). */
 export function pagesFor(role: User['role']): readonly PageKey[] {

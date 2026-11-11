@@ -10,13 +10,15 @@ import { iconFor } from '@/components/nav-icons'
 import { renderPage, type NavigateFn } from '@/components/app-pages'
 import type { PageKey } from '@/lib/pages'
 import { LanguageSwitch } from '@/components/language-switch'
+import { useBadges } from '@/lib/use-badges'
 
 export type ShellProps = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
 
 export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   const [mobileMenu, setMobileMenu] = useState(false)
   const { t } = useI18n()
-  const navItems = navFor(user.role).all.map((entry) => ({ key: entry.key, label: t(entry.label), icon: iconFor(entry.icon) }))
+  const badges = useBadges(true)
+  const navItems = navFor(user.role).all.map((entry) => ({ key: entry.key, label: t(entry.label), icon: iconFor(entry.icon), badge: entry.badge ? badges[entry.badge] : 0 }))
   const primaryKeys: PageKey[] = user.role === 'storekeeper' ? ['inventory-stock', 'inventory-counts', 'new'] : ['dashboard', 'inspections', 'new']
   const primaryItems = navItems.filter((item) => primaryKeys.includes(item.key))
   const handleLogout = () => signOut(onUserChange, t('ออกจากระบบแล้ว'))
@@ -26,7 +28,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
         <div className="flex items-center justify-between gap-1"><Brand /><LanguageSwitch compact className="shrink-0 text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
         <div className="mt-9 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
-        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
+        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
         <ProfileBlock user={user} onLogout={handleLogout} />
       </aside>
 
@@ -49,7 +51,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
           <div className="flex items-center justify-between gap-1"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
           <div className="mt-2 flex justify-end"><LanguageSwitch compact className="text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
           <div className="mt-8 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
-          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
+          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
           <ProfileBlock user={user} onLogout={handleLogout} />
         </aside>
       </div>}
@@ -79,9 +81,9 @@ function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) 
   </div>
 }
 
-type NavLinkProps = { label: string; icon: typeof Activity; active: boolean; onClick: () => void }
-function NavLink({ label, icon: Icon, active, onClick }: NavLinkProps) {
+type NavLinkProps = { label: string; icon: typeof Activity; active: boolean; badge?: number; onClick: () => void }
+function NavLink({ label, icon: Icon, active, badge = 0, onClick }: NavLinkProps) {
   return <Button type="button" variant="ghost" data-active={active} onClick={onClick} className="side-link flex h-auto w-full items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-medium">
-    <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{active && <span className="ml-auto size-1.5 rounded-full bg-sidebar-active" />}
+    <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{badge > 0 ? <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold text-white">{badge}</span> : active && <span className="ml-auto size-1.5 rounded-full bg-sidebar-active" />}
   </Button>
 }

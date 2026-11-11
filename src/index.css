@@ -442,3 +442,10 @@ body:has(input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):n
 body:has(input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):focus, textarea:focus) .inspection-action-bar { bottom: 0; }
 [data-view="mobile"] table[data-stack] td[data-actions] [data-slot="button"] { min-width: 2.75rem; min-height: 2.75rem; }
 [data-view="mobile"] input, [data-view="mobile"] textarea { scroll-margin-block: 5rem 9rem; }
+
+/* Badges on the bottom tabs (cart lines, approvals waiting, issue queue). */
+.mobile-tab-icon { position: relative; display: inline-grid; place-items: center; }
+.mobile-tab-badge {
+  position: absolute; top: -.35rem; right: -.75rem; display: grid; place-items: center; min-width: 1.1rem; height: 1.1rem; padding: 0 .3rem;
+  border-radius: 9999px; background: var(--destructive); color: #fff; font-size: .625rem; font-weight: 600; line-height: 1;
+}
