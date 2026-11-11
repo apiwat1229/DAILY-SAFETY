@@ -18,7 +18,7 @@ export function StockAlertsCard({ alerts, onSelect }: Props) {
   const tile = (icon: typeof PackageMinus, label: string, value: number, tone: string, kind?: Selection, key?: number) => {
     const Icon = icon
     return <button key={key ?? label} type="button" disabled={!onSelect || !kind} onClick={() => kind && onSelect?.(kind)} className="flex min-w-0 items-center justify-between gap-2 rounded-2xl border border-border bg-surface-subtle p-3 text-left transition-colors enabled:hover:border-primary/40 enabled:hover:bg-secondary/40 disabled:cursor-default">
-      <div className="min-w-0"><p className="truncate text-sm text-muted-foreground">{label}</p><p className="mt-0.5 text-2xl font-semibold tabular-nums">{value}</p></div>
+      <div className="min-w-0"><p className="text-sm leading-tight text-muted-foreground">{label}</p><p className="mt-0.5 text-2xl font-semibold tabular-nums">{value}</p></div>
       <div className={`grid size-9 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={17} /></div></button>
   }
   return <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
