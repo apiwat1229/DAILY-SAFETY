@@ -71,6 +71,8 @@ Object.assign(english, {
   'เปลี่ยนรหัสผ่านแล้ว': 'Password changed',
   'ภาพรวมทีม': 'Team overview',
   'เมนู': 'Menu',
+  'เจ้าหน้าที่คลัง': 'Storekeeper', 'สต็อกคงเหลือ': 'Stock on hand', 'สินค้าและหมวด': 'Items & categories', 'คลังสินค้า': 'Warehouses', 'นับสต็อก': 'Stock count', 'ประวัติสต็อก': 'Stock movements',
+  'สินค้า': 'Item', 'หมวดสินค้า': 'Category', 'สต็อกสินค้า': 'Stock', 'ใบนับสต็อก': 'Count sheet', 'ตั้งค่าคลังสินค้า': 'Warehouse settings',
   'กลับเป็นวันนี้': 'Back to today', 'ข้อมูลของวันนี้': 'Data for today', 'ข้อมูลช่วง': 'Data for', 'อัตราการรายงาน': 'Reporting rate', 'จำนวนที่ส่ง': 'Submitted',
   'กู้คืนร่างแบบตรวจที่บันทึกอัตโนมัติไว้แล้ว': 'Restored your autosaved inspection draft',
   'รูปภาพไม่ถูกบันทึกในร่าง กรุณาแนบรูปของหัวข้อ NG อีกครั้ง': 'Photos are not kept in the draft. Please attach the NG photos again.',

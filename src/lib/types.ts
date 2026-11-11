@@ -3,7 +3,7 @@ export type User = {
   username: string
   name: string
   employeeCode: string
-  role: 'admin' | 'leader' | 'employee'
+  role: 'admin' | 'leader' | 'employee' | 'storekeeper'
   isActive: boolean
 }
 

@@ -14,6 +14,8 @@ export const targetLabels: Record<string, string> = {
   training_material: 'สื่ออบรม',
   hiyari_form: 'ฟอร์ม Hiyari Hat',
   hiyari_submission: 'รายงาน Hiyari Hat',
+  inventory_item: 'สินค้า', inventory_category: 'หมวดสินค้า', inventory_warehouse: 'คลังสินค้า', inventory_stock: 'สต็อกสินค้า',
+  inventory_count: 'ใบนับสต็อก', inventory_settings: 'ตั้งค่าคลังสินค้า',
 }
 
 export function targetLabel(type: string) { return targetLabels[type] ?? type }
@@ -25,7 +27,7 @@ const fieldLabels: Record<string, string> = {
   photoCount: 'จำนวนรูป', addedPhotos: 'รูปที่เพิ่ม', removedPhotos: 'รูปที่ลบ', deletedSubmissions: 'ผลคำตอบที่ถูกลบ', deletedViews: 'ประวัติอ่านที่ถูกลบ',
   imported: 'นำเข้า', created: 'เพิ่มใหม่', updated: 'อัปเดต', type: 'ประเภท', reportDate: 'วันที่รายงาน', inspectionId: 'รหัสรายการตรวจ', responseId: 'รหัสหัวข้อ',
 }
-const roleLabels: Record<string, string> = { admin: 'ผู้ดูแลระบบ', leader: 'หัวหน้างาน', employee: 'พนักงาน' }
+const roleLabels: Record<string, string> = { admin: 'ผู้ดูแลระบบ', leader: 'หัวหน้างาน', employee: 'พนักงาน', storekeeper: 'เจ้าหน้าที่คลัง' }
 const statusLabels: Record<string, string> = { received: 'รับเรื่อง', in_progress: 'กำลังแก้ไข', closed: 'ปิดแล้ว', before: 'ก่อนแก้ไข', after: 'หลังแก้ไข' }
 const groupLabels: Record<string, string> = { before: 'ก่อน', after: 'หลัง' }
 /** Technical identifiers are kept out of the readable summary. */

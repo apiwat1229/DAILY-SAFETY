@@ -2,7 +2,7 @@ import type { SupervisorReport, TrainingViewReport, HiyariStatus, AuditLogFilter
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
-async function request<T>(url: string, options: ApiOptions = {}): Promise<T> {
+export async function request<T>(url: string, options: ApiOptions = {}): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', ...options })
   const type = response.headers.get('content-type') || ''
   const payload = type.includes('application/json') ? await response.json() : null

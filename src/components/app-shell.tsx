@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, BookOpenText, History, KeyRound, ClipboardCheck, ClipboardPenLine, ContactRound, FileBarChart2, FileSpreadsheet, ListChecks, LogOut, Menu, Plus, ShieldCheck, UserRoundCog, X } from 'lucide-react'
+import { Activity, ArrowLeftRight, Boxes, BookOpenText, ClipboardList, Package, Warehouse, History, KeyRound, ClipboardCheck, ClipboardPenLine, ContactRound, FileBarChart2, FileSpreadsheet, ListChecks, LogOut, Menu, Plus, ShieldCheck, UserRoundCog, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
@@ -16,9 +16,14 @@ import { TrainingMaterialsPage } from '@/pages/training-materials-page'
 import { HiyariPage } from '@/pages/hiyari-page'
 import { HiyariReportsPage } from '@/pages/hiyari-reports-page'
 import { AuditLogPage } from '@/pages/audit-log-page'
+import { InventoryStockPage } from '@/pages/inventory-stock-page'
+import { InventoryItemsPage } from '@/pages/inventory-items-page'
+import { InventoryWarehousesPage } from '@/pages/inventory-warehouses-page'
+import { InventoryCountsPage } from '@/pages/inventory-counts-page'
+import { InventoryMovementsPage } from '@/pages/inventory-movements-page'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { useI18n } from '@/lib/i18n'
-import { isManager } from '@/lib/roles'
+import { isManager, isStockStaff } from '@/lib/roles'
 import type { PageKey } from '@/lib/pages'
 import { clearPersistentState } from '@/lib/persistent-state'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -42,6 +47,11 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
         { key: 'training-materials' as const, label: t('สื่ออบรม'), icon: BookOpenText },
         { key: 'hiyari' as const, label: t('Hiyari Hat'), icon: ClipboardPenLine },
         { key: 'hiyari-reports' as const, label: t('รายงาน Hiyari Hat'), icon: FileSpreadsheet },
+        { key: 'inventory-stock' as const, label: t('สต็อกคงเหลือ'), icon: Boxes },
+        { key: 'inventory-items' as const, label: t('สินค้าและหมวด'), icon: Package },
+        { key: 'inventory-warehouses' as const, label: t('คลังสินค้า'), icon: Warehouse },
+        { key: 'inventory-counts' as const, label: t('นับสต็อก'), icon: ClipboardList },
+        { key: 'inventory-movements' as const, label: t('ประวัติสต็อก'), icon: ArrowLeftRight },
         { key: 'audit-log' as const, label: t('บันทึกการใช้งาน'), icon: History },
       ]
     : user.role === 'leader'
@@ -50,11 +60,20 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           { key: 'inspections' as const, label: t('ติดตามงานทีม'), icon: FileBarChart2 },
           { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
         ]
-      : [
-          { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
-          { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
-        ]
-  const primaryItems = navItems.filter((item) => ['dashboard', 'inspections', 'new'].includes(item.key))
+      : user.role === 'storekeeper'
+        ? [
+            { key: 'inventory-stock' as const, label: t('สต็อกคงเหลือ'), icon: Boxes },
+            { key: 'inventory-movements' as const, label: t('ประวัติสต็อก'), icon: ArrowLeftRight },
+            { key: 'inventory-counts' as const, label: t('นับสต็อก'), icon: ClipboardList },
+            { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
+            { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
+          ]
+        : [
+            { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
+            { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
+          ]
+  const primaryKeys: PageKey[] = user.role === 'storekeeper' ? ['inventory-stock', 'inventory-counts', 'new'] : ['dashboard', 'inspections', 'new']
+  const primaryItems = navItems.filter((item) => primaryKeys.includes(item.key))
   async function handleLogout() {
     try { await api.logout() } catch { /* session may already have expired */ }
     navigator.serviceWorker?.controller?.postMessage('clear-data')
@@ -89,6 +108,11 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           {page === 'hiyari' && user.role === 'admin' ? <HiyariPage /> : null}
           {page === 'hiyari-reports' && user.role === 'admin' ? <HiyariReportsPage /> : null}
           {page === 'audit-log' && user.role === 'admin' ? <AuditLogPage /> : null}
+          {page === 'inventory-stock' && isStockStaff(user) ? <InventoryStockPage user={user} /> : null}
+          {page === 'inventory-movements' && isStockStaff(user) ? <InventoryMovementsPage user={user} /> : null}
+          {page === 'inventory-counts' && isStockStaff(user) ? <InventoryCountsPage user={user} /> : null}
+          {page === 'inventory-items' && user.role === 'admin' ? <InventoryItemsPage /> : null}
+          {page === 'inventory-warehouses' && user.role === 'admin' ? <InventoryWarehousesPage /> : null}
         </main>
       </div>
 
@@ -124,7 +148,7 @@ function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) 
   return <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.05] p-3.5">
     <div className="flex items-center gap-2.5">
       <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-sidebar-soft text-xs font-semibold text-sidebar-foreground">{user.name.slice(0, 1)}</div>
-      <div className="min-w-0"><p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p><p className="mt-0.5 text-xs text-sidebar-muted">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
+      <div className="min-w-0"><p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p><p className="mt-0.5 text-xs text-sidebar-muted">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : user.role === 'storekeeper' ? 'เจ้าหน้าที่คลัง' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
       <Button variant="ghost" size="icon" aria-label={t('เปลี่ยนรหัสผ่าน')} title={t('เปลี่ยนรหัสผ่าน')} onClick={() => setPasswordOpen(true)} className="ml-auto text-sidebar-muted hover:bg-white/10 hover:text-white"><KeyRound size={15} /></Button>
       <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="text-sidebar-muted hover:bg-white/10 hover:text-white"><LogOut size={15} /></Button>
     </div>
