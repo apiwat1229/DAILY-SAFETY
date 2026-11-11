@@ -19,6 +19,12 @@ import { InventoryItemsPage } from '@/pages/inventory-items-page'
 import { InventoryWarehousesPage } from '@/pages/inventory-warehouses-page'
 import { InventoryCountsPage } from '@/pages/inventory-counts-page'
 import { InventoryMovementsPage } from '@/pages/inventory-movements-page'
+import { RequisitionNewPage } from '@/pages/requisition-new-page'
+import { RequisitionsPage } from '@/pages/requisitions-page'
+import { ApprovalsPage } from '@/pages/approvals-page'
+import { IssueQueuePage } from '@/pages/issue-queue-page'
+import { WorkflowAdminPage } from '@/pages/workflow-admin-page'
+import { RequisitionsAdminPage } from '@/pages/requisitions-admin-page'
 
 export type NavigateFn = (page: PageKey, query?: string) => void
 type PageArgs = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -44,5 +50,11 @@ export function renderPage({ user, page, onPage, onUserChange }: PageArgs): Reac
     {page === 'inventory-counts' && isStockStaff(user) ? <InventoryCountsPage user={user} /> : null}
     {page === 'inventory-items' && admin ? <InventoryItemsPage /> : null}
     {page === 'inventory-warehouses' && admin ? <InventoryWarehousesPage /> : null}
+    {page === 'requisition-new' ? <RequisitionNewPage user={user} onPage={onPage} /> : null}
+    {page === 'requisitions' ? <RequisitionsPage user={user} onPage={onPage} /> : null}
+    {page === 'approvals' && user.role !== 'employee' ? <ApprovalsPage user={user} /> : null}
+    {page === 'issue-queue' && isStockStaff(user) ? <IssueQueuePage user={user} /> : null}
+    {page === 'workflow-admin' && admin ? <WorkflowAdminPage /> : null}
+    {page === 'requisitions-admin' && admin ? <RequisitionsAdminPage /> : null}
   </>
 }

@@ -5,6 +5,7 @@ import { activeSlotIndex, navFor, type TabSlot } from '@/lib/nav-model'
 import { signOut } from '@/lib/sign-out'
 import { useI18n } from '@/lib/i18n'
 import { useViewMode } from '@/lib/use-view-mode'
+import { useBadges } from '@/lib/use-badges'
 import { BottomTabBar } from '@/components/mobile/bottom-tab-bar'
 import { MobileTopBar } from '@/components/mobile/mobile-top-bar'
 import { MoreSheet } from '@/components/mobile/more-sheet'
@@ -13,6 +14,7 @@ import { MoreSheet } from '@/components/mobile/more-sheet'
 export function MobileShell({ user, page, onPage, onUserChange }: ShellProps) {
   const { t } = useI18n()
   const { setPreference } = useViewMode()
+  const badges = useBadges(true)
   const model = useMemo(() => navFor(user.role), [user.role])
   const [moreOpen, setMoreOpen] = useState(false)
   const activeIndex = activeSlotIndex(model.tabs, page)
@@ -31,7 +33,7 @@ export function MobileShell({ user, page, onPage, onUserChange }: ShellProps) {
   return <div className="mobile-shell">
     <MobileTopBar title={t(title)} />
     <main className="app-content-frame app-main-frame mobile-content">{renderPage({ user, page, onPage, onUserChange })}</main>
-    <BottomTabBar tabs={model.tabs} activeIndex={activeIndex} onSelect={select} />
+    <BottomTabBar tabs={model.tabs} activeIndex={activeIndex} badges={badges} onSelect={select} />
     <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} user={user} page={page} groups={model.groups}
       onNavigate={(next) => { setMoreOpen(false); onPage(next); window.scrollTo({ top: 0 }) }}
       onDesktopView={() => { setMoreOpen(false); setPreference('desktop') }}

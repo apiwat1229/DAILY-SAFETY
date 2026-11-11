@@ -5,22 +5,30 @@ export type Role = 'admin' | 'leader' | 'employee' | 'storekeeper'
 export type IconName =
   | 'Activity' | 'FileBarChart2' | 'Plus' | 'UserRoundCog' | 'ContactRound' | 'ListChecks' | 'ClipboardCheck' | 'FileSpreadsheet'
   | 'BookOpenText' | 'ClipboardPenLine' | 'History' | 'Boxes' | 'Package' | 'Warehouse' | 'ClipboardList' | 'ArrowLeftRight' | 'PackagePlus' | 'Menu'
+  | 'ShoppingCart' | 'ReceiptText' | 'BadgeCheck' | 'PackageCheck' | 'ListOrdered' | 'Workflow'
 
 /** `label` is the sidebar text (Thai, passed through t()); `short` is the bottom-bar text when the label is too long. */
-export type NavItem = { key: PageKey; label: string; icon: IconName; short?: string }
+export type BadgeSource = 'cart' | 'approvals' | 'issue'
+export type NavItem = { key: PageKey; label: string; icon: IconName; short?: string; badge?: BadgeSource }
 export type TabSlot =
   | { kind: 'tab'; item: NavItem }
   | { kind: 'center'; label: string; icon: IconName; page: PageKey; query?: string }
   | { kind: 'more' }
 export type NavGroup = { title: string; items: NavItem[] }
 
-const item = (key: PageKey, label: string, icon: IconName, short?: string): NavItem => ({ key, label, icon, short })
+const item = (key: PageKey, label: string, icon: IconName, short?: string, badge?: BadgeSource): NavItem => ({ key, label, icon, short, ...(badge ? { badge } : {}) })
+
+const REQUISITION_NEW = item('requisition-new', 'เบิกของ', 'ShoppingCart', undefined, 'cart')
+const REQUISITIONS = item('requisitions', 'ใบเบิกของฉัน', 'ReceiptText', 'ใบเบิก')
+const APPROVALS = item('approvals', 'รออนุมัติ', 'BadgeCheck', undefined, 'approvals')
+const ISSUE_QUEUE = item('issue-queue', 'จ่ายของ', 'PackageCheck', undefined, 'issue')
 
 const ITEMS: Record<Role, NavItem[]> = {
   admin: [
     item('dashboard', 'ภาพรวม', 'Activity'),
     item('inspections', 'รายการตรวจ', 'FileBarChart2'),
     item('new', 'บันทึกการตรวจ', 'Plus'),
+    REQUISITION_NEW, REQUISITIONS, APPROVALS, ISSUE_QUEUE,
     item('users', 'ผู้ใช้งาน', 'UserRoundCog'),
     item('employees', 'รายชื่อพนักงาน', 'ContactRound'),
     item('checklist', 'หัวข้อตรวจ', 'ListChecks'),
@@ -34,23 +42,29 @@ const ITEMS: Record<Role, NavItem[]> = {
     item('inventory-warehouses', 'คลังสินค้า', 'Warehouse'),
     item('inventory-counts', 'นับสต็อก', 'ClipboardList'),
     item('inventory-movements', 'ประวัติสต็อก', 'ArrowLeftRight'),
+    item('requisitions-admin', 'ใบเบิกทั้งหมด', 'ListOrdered'),
+    item('workflow-admin', 'ตั้งค่าขั้นอนุมัติ', 'Workflow', 'ขั้นอนุมัติ'),
     item('audit-log', 'บันทึกการใช้งาน', 'History'),
   ],
   leader: [
     item('dashboard', 'ภาพรวมทีม', 'Activity'),
     item('inspections', 'ติดตามงานทีม', 'FileBarChart2', 'ติดตามงาน'),
     item('new', 'บันทึกการตรวจ', 'Plus'),
+    REQUISITION_NEW, REQUISITIONS, APPROVALS,
   ],
   employee: [
     item('new', 'บันทึกการตรวจ', 'Plus'),
     item('inspections', 'ประวัติของฉัน', 'FileBarChart2', 'ประวัติ'),
+    REQUISITION_NEW, REQUISITIONS,
   ],
   storekeeper: [
     item('inventory-stock', 'สต็อกคงเหลือ', 'Boxes', 'สต็อก'),
     item('inventory-movements', 'ประวัติสต็อก', 'ArrowLeftRight', 'ประวัติ'),
     item('inventory-counts', 'นับสต็อก', 'ClipboardList'),
+    ISSUE_QUEUE,
     item('new', 'บันทึกการตรวจ', 'Plus'),
     item('inspections', 'ประวัติของฉัน', 'FileBarChart2', 'ประวัติ'),
+    REQUISITION_NEW, REQUISITIONS, APPROVALS,
   ],
 }
 
@@ -60,19 +74,20 @@ const MORE: TabSlot = { kind: 'more' }
 
 /** Bottom-bar layout per role. The centre action always lands at index floor(n / 2). */
 const BAR: Record<Role, { tabs: PageKey[]; center: TabSlot }> = {
-  admin: { tabs: ['dashboard', 'inspections', 'inventory-stock'], center: RECORD },
-  leader: { tabs: ['dashboard', 'inspections'], center: RECORD },
-  employee: { tabs: ['inspections'], center: RECORD },
-  storekeeper: { tabs: ['inventory-stock', 'inventory-movements', 'inventory-counts'], center: RECEIVE },
+  admin: { tabs: ['dashboard', 'inspections', 'approvals'], center: RECORD },
+  leader: { tabs: ['dashboard', 'inspections', 'approvals'], center: RECORD },
+  employee: { tabs: ['requisition-new', 'requisitions'], center: RECORD },
+  storekeeper: { tabs: ['inventory-stock', 'issue-queue', 'inventory-counts'], center: RECEIVE },
 }
 
 const GROUP_OF = (key: PageKey): string => {
   if (key.startsWith('inventory-')) return 'คลังสินค้า'
-  if (key === 'users' || key === 'employees' || key === 'checklist' || key === 'audit-log') return 'ข้อมูลระบบ'
+  if (key === 'requisition-new' || key === 'requisitions' || key === 'approvals' || key === 'issue-queue' || key === 'requisitions-admin') return 'การเบิกของ'
+  if (key === 'users' || key === 'employees' || key === 'checklist' || key === 'audit-log' || key === 'workflow-admin') return 'ข้อมูลระบบ'
   if (key === 'assessments' || key === 'assessment-reports' || key === 'training-materials' || key === 'hiyari' || key === 'hiyari-reports') return 'การตรวจและอบรม'
   return 'การตรวจ'
 }
-const GROUP_ORDER = ['การตรวจ', 'คลังสินค้า', 'การตรวจและอบรม', 'ข้อมูลระบบ']
+const GROUP_ORDER = ['การตรวจ', 'การเบิกของ', 'คลังสินค้า', 'การตรวจและอบรม', 'ข้อมูลระบบ']
 
 export function navFor(role: Role): { all: NavItem[]; tabs: TabSlot[]; groups: NavGroup[] } {
   const all = ITEMS[role]

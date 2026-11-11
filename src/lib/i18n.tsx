@@ -129,6 +129,8 @@ Object.assign(english, {
   'ไม่มีล็อตให้ดำเนินการ': 'No lot to act on', 'ไม่ระบุหมวด': 'No category',
   'เพิ่มเติม': 'More', 'บันทึกตรวจ': 'Record', 'ติดตามงาน': 'Follow-ups', 'ประวัติ': 'History', 'ใช้มุมมองเดสก์ท็อป': 'Use desktop view', 'มุมมองมือถือ': 'Mobile view',
   'การตรวจ': 'Inspections', 'การตรวจและอบรม': 'Inspections and training', 'ข้อมูลระบบ': 'System data',
+  'เบิกของ': 'Request items', 'ใบเบิกของฉัน': 'My requests', 'ใบเบิก': 'Requests', 'รออนุมัติ': 'To approve', 'จ่ายของ': 'Issue', 'ใบเบิกทั้งหมด': 'All requests',
+  'ตั้งค่าขั้นอนุมัติ': 'Approval workflow', 'ขั้นอนุมัติ': 'Workflow', 'การเบิกของ': 'Requisitions',
   'เจ้าหน้าที่คลัง': 'Storekeeper', 'สต็อกคงเหลือ': 'Stock on hand', 'สินค้าและหมวด': 'Items & categories', 'คลังสินค้า': 'Warehouses', 'นับสต็อก': 'Stock count', 'ประวัติสต็อก': 'Stock movements',
   'สินค้า': 'Item', 'หมวดสินค้า': 'Category', 'สต็อกสินค้า': 'Stock', 'ใบนับสต็อก': 'Count sheet', 'ตั้งค่าคลังสินค้า': 'Warehouse settings',
   'กลับเป็นวันนี้': 'Back to today', 'ข้อมูลของวันนี้': 'Data for today', 'ข้อมูลช่วง': 'Data for', 'อัตราการรายงาน': 'Reporting rate', 'จำนวนที่ส่ง': 'Submitted',

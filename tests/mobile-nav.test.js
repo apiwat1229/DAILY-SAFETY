@@ -21,8 +21,8 @@ describe('navFor', () => {
     }
   })
 
-  test('slot counts are admin 5, leader 4, employee 3, storekeeper 5', () => {
-    assert.deepEqual(ROLES.map((role) => navFor(role).tabs.length), [5, 4, 3, 5])
+  test('slot counts are admin 5, leader 5, employee 4, storekeeper 5', () => {
+    assert.deepEqual(ROLES.map((role) => navFor(role).tabs.length), [5, 5, 4, 5])
   })
 
   test('the centre slot sits at floor(n/2) and more is last', () => {
@@ -55,8 +55,44 @@ describe('navFor', () => {
 
   test('sidebar order and labels keep today\'s wording', () => {
     assert.deepEqual(navFor('admin').all.slice(0, 3).map((item) => item.label), ['ภาพรวม', 'รายการตรวจ', 'บันทึกการตรวจ'])
-    assert.deepEqual(navFor('leader').all.map((item) => item.label), ['ภาพรวมทีม', 'ติดตามงานทีม', 'บันทึกการตรวจ'])
-    assert.deepEqual(navFor('employee').all.map((item) => item.label), ['บันทึกการตรวจ', 'ประวัติของฉัน'])
+    assert.deepEqual(navFor('leader').all.map((item) => item.label), ['ภาพรวมทีม', 'ติดตามงานทีม', 'บันทึกการตรวจ', 'เบิกของ', 'ใบเบิกของฉัน', 'รออนุมัติ'])
+    assert.deepEqual(navFor('employee').all.map((item) => item.label), ['บันทึกการตรวจ', 'ประวัติของฉัน', 'เบิกของ', 'ใบเบิกของฉัน'])
+  })
+})
+
+describe('requisition navigation', () => {
+  const keysOf = (role) => navFor(role).all.map((item) => item.key)
+  const bar = (role) => navFor(role).tabs.map((slot) => (slot.kind === 'tab' ? slot.item.key : slot.kind === 'center' ? `center:${slot.page}` : 'more'))
+
+  test('each role gets the requisition pages it may use', () => {
+    assert.ok(keysOf('employee').includes('requisition-new') && keysOf('employee').includes('requisitions'))
+    assert.ok(!keysOf('employee').includes('approvals') && !keysOf('employee').includes('issue-queue'))
+    assert.ok(keysOf('leader').includes('approvals') && !keysOf('leader').includes('issue-queue'))
+    assert.ok(keysOf('storekeeper').includes('issue-queue') && keysOf('storekeeper').includes('approvals'))
+    assert.ok(['requisitions-admin', 'workflow-admin', 'approvals', 'issue-queue'].every((key) => keysOf('admin').includes(key)))
+    for (const role of ['employee', 'leader', 'storekeeper']) assert.ok(!keysOf(role).includes('workflow-admin') && !keysOf(role).includes('requisitions-admin'))
+  })
+
+  test('bottom bars put the requisition work where each role needs it', () => {
+    assert.deepEqual(bar('employee'), ['requisition-new', 'requisitions', 'center:new', 'more'])
+    assert.deepEqual(bar('leader'), ['dashboard', 'inspections', 'center:new', 'approvals', 'more'])
+    assert.deepEqual(bar('admin'), ['dashboard', 'inspections', 'center:new', 'approvals', 'more'])
+    assert.deepEqual(bar('storekeeper'), ['inventory-stock', 'issue-queue', 'center:inventory-stock', 'inventory-counts', 'more'])
+  })
+
+  test('badge sources are attached to cart, approvals and issue queue', () => {
+    const badgeOf = (role, key) => navFor(role).all.find((item) => item.key === key)?.badge
+    assert.equal(badgeOf('employee', 'requisition-new'), 'cart')
+    assert.equal(badgeOf('leader', 'approvals'), 'approvals')
+    assert.equal(badgeOf('storekeeper', 'issue-queue'), 'issue')
+    assert.equal(badgeOf('admin', 'requisitions'), undefined)
+  })
+
+  test('requisition pages are grouped under their own heading in the More sheet', () => {
+    const titles = navFor('admin').groups.map((group) => group.title)
+    assert.ok(titles.includes('การเบิกของ'))
+    assert.ok(navFor('admin').groups.find((group) => group.title === 'การเบิกของ').items.some((item) => item.key === 'requisitions-admin'))
+    assert.ok(navFor('admin').groups.find((group) => group.title === 'ข้อมูลระบบ').items.some((item) => item.key === 'workflow-admin'))
   })
 })
 
@@ -66,7 +102,8 @@ describe('activeSlotIndex', () => {
     assert.equal(activeSlotIndex(tabs, 'dashboard'), 0)
     assert.equal(activeSlotIndex(tabs, 'inspections'), 1)
     assert.equal(activeSlotIndex(tabs, 'new'), 2)
-    assert.equal(activeSlotIndex(tabs, 'inventory-stock'), 3)
+    assert.equal(activeSlotIndex(tabs, 'approvals'), 3)
+    assert.equal(activeSlotIndex(tabs, 'inventory-stock'), 4)
     assert.equal(activeSlotIndex(tabs, 'users'), 4)
     assert.equal(activeSlotIndex(tabs, 'audit-log'), 4)
   })
