@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { BookOpenText, Eye, EyeOff, FileImage, FileText, LoaderCircle, Pencil, Plus, Presentation, QrCode, Trash2 } from 'lucide-react'
+import { BookOpenText, Eye, EyeOff, FileImage, FileText, LoaderCircle, Pencil, Plus, Presentation, QrCode, Trash2, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { TrainingMaterial } from '@/lib/types'
 import { ShareLinkDialog } from '@/components/share-link-dialog'
+import { TrainingViewsDialog } from '@/components/training-views-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -24,6 +25,7 @@ export function TrainingMaterialsPage() {
   const [share, setShare] = useState<TrainingMaterial | null>(null)
   const [busyId, setBusyId] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<TrainingMaterial | null>(null)
+  const [viewsTarget, setViewsTarget] = useState<TrainingMaterial | null>(null)
   const [deleting, setDeleting] = useState(false)
   const pagination = useDataPagination(materials)
 
@@ -47,7 +49,7 @@ export function TrainingMaterialsPage() {
   async function remove() {
     if (!deleteTarget || deleting) return
     setDeleting(true)
-    try { await api.deleteTrainingMaterial(deleteTarget.id); toast.success(t('ลบสื่ออบรมแล้ว')); setDeleteTarget(null); refresh() }
+    try { await api.deleteTrainingMaterial(deleteTarget.id, (deleteTarget.viewCount ?? 0) > 0); toast.success(t('ลบสื่ออบรมแล้ว')); setDeleteTarget(null); refresh() }
     catch (error) { toast.error(error instanceof Error ? t(error.message) : t('ลบสื่ออบรมไม่สำเร็จ')) }
     finally { setDeleting(false) }
   }
@@ -63,15 +65,16 @@ export function TrainingMaterialsPage() {
             <TableCell><div className="flex gap-1.5"><Badge variant="outline">{isPdf ? 'PDF' : isPptx ? 'PPTX' : t('รูปภาพ')}</Badge>{material.companionOriginalName && <Badge variant="outline" className="gap-1"><Presentation size={12} /> PPTX</Badge>}</div></TableCell>
             <TableCell className="min-w-[240px] whitespace-normal"><p>{material.description || t('ไม่มีคำอธิบาย')}</p><p className="mt-1 text-xs text-muted-foreground">{material.originalName}{material.companionOriginalName ? ' · ' + material.companionOriginalName : ''}</p></TableCell>
             <TableCell><Badge variant="outline" className={material.isActive ? 'border-success/25 bg-success/10 text-success' : 'border-info/20 bg-surface-subtle text-info'}>{t(material.isActive ? 'เปิดเผยแพร่' : 'ปิดลิงก์')}</Badge></TableCell>
-            <TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setEditor({ material, key: material.id })} aria-label={t('แก้ไข')} title={t('แก้ไข')}><Pencil size={16} /></Button><Button variant="ghost" size="icon" disabled={busyId === material.id} onClick={() => toggleActive(material)} aria-label={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')} title={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')}>{busyId === material.id ? <LoaderCircle size={16} className="animate-spin" /> : material.isActive ? <EyeOff size={16} /> : <Eye size={16} />}</Button>{material.isActive && <Button variant="ghost" size="icon" onClick={() => setShare(material)} aria-label={t('ลิงก์ / QR')} title={t('ลิงก์ / QR')}><QrCode size={16} /></Button>}<Button variant="ghost" size="icon" onClick={() => setDeleteTarget(material)} aria-label={t('ลบสื่ออบรม')} title={t('ลบสื่ออบรม')} className="text-destructive hover:bg-destructive/10 hover:text-destructive"><Trash2 size={16} /></Button></div></TableCell>
+            <TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setViewsTarget(material)} aria-label={t('ผู้อ่านสื่ออบรม')} title={`${t('ผู้อ่านสื่ออบรม')} (${material.viewCount ?? 0})`}><UsersRound size={16} /></Button><Button variant="ghost" size="icon" onClick={() => setEditor({ material, key: material.id })} aria-label={t('แก้ไข')} title={t('แก้ไข')}><Pencil size={16} /></Button><Button variant="ghost" size="icon" disabled={busyId === material.id} onClick={() => toggleActive(material)} aria-label={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')} title={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')}>{busyId === material.id ? <LoaderCircle size={16} className="animate-spin" /> : material.isActive ? <EyeOff size={16} /> : <Eye size={16} />}</Button>{material.isActive && <Button variant="ghost" size="icon" onClick={() => setShare(material)} aria-label={t('ลิงก์ / QR')} title={t('ลิงก์ / QR')}><QrCode size={16} /></Button>}<Button variant="ghost" size="icon" onClick={() => setDeleteTarget(material)} aria-label={t('ลบสื่ออบรม')} title={t('ลบสื่ออบรม')} className="text-destructive hover:bg-destructive/10 hover:text-destructive"><Trash2 size={16} /></Button></div></TableCell>
           </TableRow>})}</TableBody>
         </Table></div>
         <DataTablePagination total={materials.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
       </> : <CardContent className="grid min-h-48 place-items-center text-center"><div><p className="font-medium">{loading ? t('กำลังโหลดสื่ออบรม…') : t('ยังไม่มีสื่ออบรม')}</p><p className="mt-1 text-sm text-muted-foreground">{t('เพิ่มเอกสารหรือสื่อเพื่อสร้างลิงก์ให้ผู้ใช้')}</p></div></CardContent>}
     </Card>
     <TrainingMaterialEditor key={editor?.key || 'closed'} editor={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); refresh() }} />
-    {share && <ShareLinkDialog kind="training" token={share.token} title={share.title} open onOpenChange={(open) => !open && setShare(null)} />}
-    <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }} title={t('ลบสื่ออบรม')} description={deleteTarget ? `“${deleteTarget.title}” · ${t('การลบนี้ไม่สามารถย้อนกลับได้')}` : ''} confirmLabel={t('ลบ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={remove} />
+    {share && <ShareLinkDialog kind="training" token={share.token} title={share.title} open onOpenChange={(open) => !open && setShare(null)} onRotate={async () => (await api.rotatePublicToken('training-materials', share.id)).token} onRotated={() => refresh()} />}
+    <TrainingViewsDialog materialId={viewsTarget?.id ?? null} title={viewsTarget?.title ?? ''} onOpenChange={(open) => { if (!open) setViewsTarget(null) }} />
+    <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }} title={t('ลบสื่ออบรม')} description={deleteTarget ? `“${deleteTarget.title}” · ${(deleteTarget.viewCount ?? 0) > 0 ? `${t('มีประวัติการอ่าน')} ${deleteTarget.viewCount} ${t('ราย ประวัติทั้งหมดจะถูกลบด้วย แนะนำให้ปิดลิงก์แทน')}` : t('ยังไม่มีประวัติการอ่าน')} · ${t('การลบนี้ไม่สามารถย้อนกลับได้')}` : ''} confirmLabel={t('ลบ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={remove} />
   </div>
 }
 

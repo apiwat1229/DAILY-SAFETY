@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, Download, ExternalLink, QrCode } from 'lucide-react'
+import { Check, Copy, Download, ExternalLink, QrCode, RefreshCw } from 'lucide-react'
 import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -7,12 +7,30 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { publicLink } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
+import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 
-export function ShareLinkDialog({ kind, token, title, open, onOpenChange }: { kind: 'assessment' | 'training' | 'hiyari' | 'inspection'; token: string; title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ShareLinkDialog({ kind, token, title, open, onOpenChange, onRotate, onRotated }: { kind: 'assessment' | 'training' | 'hiyari' | 'inspection'; token: string; title: string; open: boolean; onOpenChange: (open: boolean) => void; onRotate?: () => Promise<string>; onRotated?: (token: string) => void }) {
   const { t } = useI18n()
   const [qrImage, setQrImage] = useState('')
   const [copied, setCopied] = useState(false)
-  const link = kind === 'inspection' ? publicLink(kind) : token ? publicLink(kind, token, title) : ''
+  const [activeToken, setActiveToken] = useState(token)
+  const [confirmRotate, setConfirmRotate] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  useEffect(() => setActiveToken(token), [token])
+  const link = kind === 'inspection' ? publicLink(kind) : activeToken ? publicLink(kind, activeToken, title) : ''
+
+  async function rotateLink() {
+    if (!onRotate) return
+    setRotating(true)
+    try {
+      const next = await onRotate()
+      setActiveToken(next)
+      onRotated?.(next)
+      setConfirmRotate(false)
+      toast.success(t('สร้างลิงก์ใหม่แล้ว ลิงก์เดิมใช้งานไม่ได้อีกต่อไป'))
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'สร้างลิงก์ใหม่ไม่สำเร็จ')) }
+    finally { setRotating(false) }
+  }
 
   useEffect(() => {
     if (!open || !link) return
@@ -50,7 +68,9 @@ export function ShareLinkDialog({ kind, token, title, open, onOpenChange }: { ki
     <div className="space-y-4">
       <div className="flex gap-2"><Input readOnly value={link} aria-label={t('ลิงก์สาธารณะ')} className="h-11" /><Button type="button" variant="outline" onClick={copyLink} className="h-11 shrink-0 gap-2">{copied ? <Check size={16} /> : <Copy size={16} />}{t(copied ? 'คัดลอกแล้ว' : 'คัดลอก')}</Button></div>
       <div className="grid place-items-center rounded-2xl border bg-white p-5">{qrImage ? <img src={qrImage} alt={`${t('QR Code สำหรับเปิด')}: ${title}`} className="size-56 max-w-full" /> : <div className="grid size-56 place-items-center text-sm text-muted-foreground">{t('กำลังสร้าง QR Code…')}</div>}<p className="mt-2 text-center text-sm text-muted-foreground">{t(kind === 'inspection' ? 'สแกนเพื่อเปิดแบบตรวจประจำวัน' : 'สแกนเพื่อเปิดลิงก์สาธารณะ')}</p></div>
-      <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ปิด')}</Button><Button type="button" variant="outline" disabled={!qrImage} onClick={downloadQrCode} className="gap-2"><Download size={15} />{t('ดาวน์โหลด QR Code')}</Button><Button type="button" asChild className="gap-2"><a href={link} target="_blank" rel="noreferrer">{t('เปิดลิงก์')} <ExternalLink size={15} /></a></Button></div>
+      <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">{onRotate && <Button type="button" variant="outline" className="gap-2 text-destructive sm:mr-auto" onClick={() => setConfirmRotate(true)}><RefreshCw size={15} />{t('สร้างลิงก์ใหม่')}</Button>}<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ปิด')}</Button><Button type="button" variant="outline" disabled={!qrImage} onClick={downloadQrCode} className="gap-2"><Download size={15} />{t('ดาวน์โหลด QR Code')}</Button><Button type="button" asChild className="gap-2"><a href={link} target="_blank" rel="noreferrer">{t('เปิดลิงก์')} <ExternalLink size={15} /></a></Button></div>
     </div>
-  </DialogContent></Dialog>
+  </DialogContent>
+  <ConfirmActionDialog open={confirmRotate} onOpenChange={setConfirmRotate} title={t('สร้างลิงก์ใหม่หรือไม่')} description={t('ลิงก์และ QR Code เดิมจะใช้งานไม่ได้ทันที ต้องแจกลิงก์ใหม่ให้พนักงานอีกครั้ง')} confirmLabel={t('สร้างลิงก์ใหม่')} cancelLabel={t('ยกเลิก')} pending={rotating} onConfirm={() => void rotateLink()} />
+  </Dialog>
 }

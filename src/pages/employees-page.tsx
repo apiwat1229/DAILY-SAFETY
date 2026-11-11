@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ContactRound, Download, FileBarChart2, LoaderCircle, Pencil, Plus, Search, Trash2, UsersRound } from 'lucide-react'
+import { ContactRound, Download, Upload, FileBarChart2, LoaderCircle, Pencil, Plus, Search, Trash2, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, hiyariSubmissionExportUrl } from '@/lib/api'
 import type { Employee, EmployeeActivityReport } from '@/lib/types'
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
+import { EmployeeImportDialog } from '@/components/employee-import-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,6 +28,7 @@ export function EmployeesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  const [importOpen, setImportOpen] = useState(false)
   const refresh = useCallback(() => {
     setLoading(true)
     api.employees().then(({ employees: result }) => setEmployees(result))
@@ -60,9 +62,10 @@ export function EmployeesPage() {
   }
 
   return <div className="page-stack">
+    <EmployeeImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><p className="text-sm font-medium text-primary">{t('การจัดการข้อมูล')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('รายชื่อพนักงาน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('จัดการชื่อ รหัสพนักงาน ตำแหน่ง และแผนก สำหรับใช้ค้นหาในรายงาน')}</p></div>
-      <Button onClick={openCreate} className="h-11 w-full gap-2 sm:w-auto"><Plus size={17} /> {t('เพิ่มพนักงาน')}</Button>
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><Button variant="outline" onClick={() => setImportOpen(true)} className="w-full gap-2 sm:w-auto"><Upload size={16} /> {t('นำเข้าจาก Excel')}</Button><Button onClick={openCreate} className="w-full gap-2 sm:w-auto"><Plus size={17} /> {t('เพิ่มพนักงาน')}</Button></div>
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2">

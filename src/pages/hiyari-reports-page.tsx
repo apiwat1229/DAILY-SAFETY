@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Eye, FileBarChart2, FileSpreadsheet, LoaderCircle, Pencil, Printer, Search, Trash2, X } from 'lucide-react'
+import { ClipboardCheck, Download, Eye, FileBarChart2, FileSpreadsheet, LoaderCircle, Pencil, Printer, Search, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, formatDate, formatDateTime, hiyariEmployeeSummaryExportUrl, hiyariSubmissionExportUrl } from '@/lib/api'
-import type { HiyariLanguage, HiyariSubmission } from '@/lib/types'
+import type { HiyariLanguage, HiyariStatus, HiyariSubmission } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -14,6 +14,8 @@ import { DataTablePagination, useDataPagination } from '@/components/data-table-
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
 
 type DocumentLabels = {
   title: string
@@ -38,6 +40,12 @@ type DocumentLabels = {
   sign: string
   footer: string
 }
+
+const statusOptions: { value: HiyariStatus; label: string; className: string }[] = [
+  { value: 'received', label: 'รับเรื่อง', className: 'border-warning/25 bg-warning/10 text-warning' },
+  { value: 'in_progress', label: 'กำลังแก้ไข', className: 'border-info/20 bg-info/10 text-info' },
+  { value: 'closed', label: 'ปิดแล้ว', className: 'border-success/25 bg-success/10 text-success' },
+]
 
 const documentLabels: Record<HiyariLanguage, DocumentLabels> = {
   th: {
@@ -151,6 +159,12 @@ export function HiyariReportsPage() {
   const [editLanguage, setEditLanguage] = useState<HiyariLanguage>('th')
   const [exportFrom, setExportFrom] = useState('')
   const [exportTo, setExportTo] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusTarget, setStatusTarget] = useState<HiyariSubmission | null>(null)
+  const [statusValue, setStatusValue] = useState<HiyariStatus>('received')
+  const [statusResponsible, setStatusResponsible] = useState('')
+  const [statusNote, setStatusNote] = useState('')
+  const [statusSaving, setStatusSaving] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -167,8 +181,8 @@ export function HiyariReportsPage() {
   const visibleSubmissions = useMemo(() => submissions.filter((submission) => {
     const query = search.trim().toLocaleLowerCase()
     const matchesSearch = !query || [submission.employeeName, submission.employeeCode, submission.department, submission.formTitle, submission.reportDate].some((value) => value.toLocaleLowerCase().includes(query))
-    return matchesSearch
-  }), [search, submissions])
+    return matchesSearch && (statusFilter === 'all' || submission.status === statusFilter)
+  }), [search, statusFilter, submissions])
   const pagination = useDataPagination(visibleSubmissions)
 
   function beginEdit(submission: HiyariSubmission) {
@@ -195,6 +209,25 @@ export function HiyariReportsPage() {
       setEditing(null); toast.success(t('บันทึกการแก้ไขแล้ว'))
     } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
     finally { setSaving(false) }
+  }
+
+  function beginStatus(submission: HiyariSubmission) {
+    setStatusValue(submission.status)
+    setStatusResponsible(submission.responsible)
+    setStatusNote(submission.followUpNote)
+    setStatusTarget(submission)
+  }
+
+  async function saveStatus(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!statusTarget) return
+    setStatusSaving(true)
+    try {
+      const { submission: updated } = await api.updateHiyariStatus(statusTarget.id, { status: statusValue, responsible: statusResponsible, followUpNote: statusNote })
+      setSubmissions((current) => current.map((row) => row.id === updated.id ? updated : row))
+      setStatusTarget(null); toast.success(t('อัปเดตสถานะแล้ว'))
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
+    finally { setStatusSaving(false) }
   }
 
   async function deleteSubmission() {
@@ -271,8 +304,10 @@ export function HiyariReportsPage() {
           <div className="relative min-w-0"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-9" /></div>
         </div>
       </CardHeader>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle px-5 py-3"><Label htmlFor="hiyari-status-filter" className="text-sm text-muted-foreground">{t('สถานะ')}</Label>
+        <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger id="hiyari-status-filter" className="w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t('ทุกสถานะ')}</SelectItem>{statusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{t(option.label)}</SelectItem>)}</SelectContent></Select></div>
       {visibleSubmissions.length ? <>
-        <div className="overflow-x-auto"><Table className="min-w-[900px]"><TableHeader><TableRow className="bg-surface-subtle text-left text-muted-foreground"><TableHead className="px-5 font-medium">{t('วันที่รายงาน')}</TableHead><TableHead className="px-3 font-medium">{t('พนักงาน')}</TableHead><TableHead className="px-3 font-medium">{t('แผนก')}</TableHead><TableHead className="px-5 text-right font-medium">{t('การทำรายการ')}</TableHead></TableRow></TableHeader><TableBody>{pagination.visibleItems.map((submission) => <TableRow key={submission.id}><TableCell className="px-5"><p>{formatDate(submission.reportDate, language)}</p><p className="text-xs text-muted-foreground">{formatDateTime(submission.submittedAt, language, false)}</p></TableCell><TableCell className="px-3"><p className="font-medium">{submission.employeeName}</p><p className="text-xs text-muted-foreground">{submission.employeeCode}</p></TableCell><TableCell className="px-3">{submission.department || '—'}</TableCell><TableCell className="px-5"><div className="flex justify-end gap-1"><Button variant="outline" className="h-9 gap-1.5" onClick={() => setSelected(submission)}><Eye size={15} />{t('ดูข้อมูล')}</Button><Button variant="outline" className="h-9 gap-1.5" aria-label={`${t('ดาวน์โหลด PDF')} ${submission.employeeName}`} onClick={() => openPdfWindow(submission, t)}><Download size={15} />PDF</Button><Button variant="ghost" size="icon" aria-label={`${t('พิมพ์')} ${submission.employeeName}`} title={t('พิมพ์')} onClick={() => openPdfWindow(submission, t)}><Printer size={15} /></Button><Button variant="outline" className="h-9 gap-1.5" disabled={busyId === submission.id} onClick={() => void downloadExcel(submission)}>{busyId === submission.id ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{t('Excel')}</Button><Button variant="ghost" size="icon" aria-label={t('แก้ไข')} onClick={() => beginEdit(submission)}><Pencil size={15} /></Button><Button variant="ghost" size="icon" aria-label={t('ลบ')} className="text-destructive" onClick={() => setDeleteTarget(submission)}><Trash2 size={15} /></Button></div></TableCell></TableRow>)}</TableBody></Table></div>
+        <div className="overflow-x-auto"><Table className="min-w-[900px]"><TableHeader><TableRow className="bg-surface-subtle text-left text-muted-foreground"><TableHead className="px-5 font-medium">{t('วันที่รายงาน')}</TableHead><TableHead className="px-3 font-medium">{t('พนักงาน')}</TableHead><TableHead className="px-3 font-medium">{t('แผนก')}</TableHead><TableHead className="px-3 font-medium">{t('สถานะ')}</TableHead><TableHead className="px-5 text-right font-medium">{t('การทำรายการ')}</TableHead></TableRow></TableHeader><TableBody>{pagination.visibleItems.map((submission) => <TableRow key={submission.id}><TableCell className="px-5"><p>{formatDate(submission.reportDate, language)}</p><p className="text-xs text-muted-foreground">{formatDateTime(submission.submittedAt, language, false)}</p></TableCell><TableCell className="px-3"><p className="font-medium">{submission.employeeName}</p><p className="text-xs text-muted-foreground">{submission.employeeCode}</p></TableCell><TableCell className="px-3">{submission.department || '—'}</TableCell><TableCell className="px-3">{(() => { const option = statusOptions.find((row) => row.value === submission.status) ?? statusOptions[0]; return <Badge variant="outline" className={option.className}>{t(option.label)}</Badge> })()}{submission.responsible && <p className="mt-1 text-xs text-muted-foreground">{submission.responsible}</p>}</TableCell><TableCell className="px-5"><div className="flex justify-end gap-1"><Button variant="outline" className="h-9 gap-1.5" onClick={() => setSelected(submission)}><Eye size={15} />{t('ดูข้อมูล')}</Button><Button variant="outline" className="h-9 gap-1.5" aria-label={`${t('ดาวน์โหลด PDF')} ${submission.employeeName}`} onClick={() => openPdfWindow(submission, t)}><Download size={15} />PDF</Button><Button variant="ghost" size="icon" aria-label={`${t('พิมพ์')} ${submission.employeeName}`} title={t('พิมพ์')} onClick={() => openPdfWindow(submission, t)}><Printer size={15} /></Button><Button variant="outline" className="h-9 gap-1.5" disabled={busyId === submission.id} onClick={() => void downloadExcel(submission)}>{busyId === submission.id ? <LoaderCircle size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}{t('Excel')}</Button><Button variant="ghost" size="icon" aria-label={t('อัปเดตสถานะ')} title={t('อัปเดตสถานะ')} onClick={() => beginStatus(submission)}><ClipboardCheck size={15} /></Button><Button variant="ghost" size="icon" aria-label={t('แก้ไข')} onClick={() => beginEdit(submission)}><Pencil size={15} /></Button><Button variant="ghost" size="icon" aria-label={t('ลบ')} className="text-destructive" onClick={() => setDeleteTarget(submission)}><Trash2 size={15} /></Button></div></TableCell></TableRow>)}</TableBody></Table></div>
         <DataTablePagination total={visibleSubmissions.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
       </> : <CardContent className="grid min-h-48 place-items-center p-8 text-center"><div><FileBarChart2 className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-2 font-medium">{loading ? t('กำลังโหลดข้อมูล…') : t('ยังไม่มีรายงาน')}</p><p className="mt-1 text-sm text-muted-foreground">{t('เมื่อพนักงานส่งแบบฟอร์ม รายงานจะแสดงที่นี่')}</p></div></CardContent>}
     </Card>
@@ -289,6 +324,13 @@ export function HiyariReportsPage() {
         <div className="flex justify-end gap-2 border-t pt-3"><Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={saving}>{t('ยกเลิก')}</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button></div>
       </form>}
     </DialogContent></Dialog>
+    <Dialog open={Boolean(statusTarget)} onOpenChange={(open) => !open && setStatusTarget(null)}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{t('อัปเดตสถานะ')}</DialogTitle><DialogDescription>{statusTarget?.employeeName} · {statusTarget && formatDate(statusTarget.reportDate, language)}</DialogDescription></DialogHeader>
+      <form onSubmit={(event) => void saveStatus(event)} className="space-y-3">
+        <div className="grid gap-1.5"><Label htmlFor="hiyari-status">{t('สถานะ')}</Label><Select value={statusValue} onValueChange={(value) => setStatusValue(value as HiyariStatus)}><SelectTrigger id="hiyari-status" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{statusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{t(option.label)}</SelectItem>)}</SelectContent></Select></div>
+        <div className="grid gap-1.5"><Label htmlFor="hiyari-responsible">{t('ผู้รับผิดชอบ')}</Label><Input id="hiyari-responsible" value={statusResponsible} maxLength={160} onChange={(event) => setStatusResponsible(event.target.value)} /></div>
+        <div className="grid gap-1.5"><Label htmlFor="hiyari-follow-note">{t('ผลการแก้ไข / หมายเหตุติดตาม')}</Label><Textarea id="hiyari-follow-note" rows={3} maxLength={3000} value={statusNote} onChange={(event) => setStatusNote(event.target.value)} /></div>
+        <div className="flex justify-end gap-2 border-t pt-3"><Button type="button" variant="outline" onClick={() => setStatusTarget(null)} disabled={statusSaving}>{t('ยกเลิก')}</Button><Button type="submit" disabled={statusSaving} className="gap-2">{statusSaving && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button></div>
+      </form></DialogContent></Dialog>
     <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)} title={t('ลบรายงานนี้หรือไม่')} description={t('การลบจะนำรายงานและรูปภาพประกอบออกจากระบบอย่างถาวร')} confirmLabel={t('ลบรายการ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={() => void deleteSubmission()} />
   </div>
 }

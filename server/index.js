@@ -18,6 +18,7 @@ import { createHiyariWorkbook } from './hiyari-export.js'
 import { createHiyariEmployeeSummaryWorkbook } from './hiyari-summary-export.js'
 import { EXPORT_FONT_FAMILY, EXPORT_FONT_SIZE } from './export-typography.js'
 import { ADDITIONAL_ASSESSMENTS } from './assessment-seeds.js'
+import { importRosters, readRoster } from './employee-roster.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
@@ -208,6 +209,13 @@ db.exec(`
     note TEXT NOT NULL DEFAULT '',
     submitted_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    bucket TEXT NOT NULL,
+    key TEXT NOT NULL,
+    window_start INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    PRIMARY KEY (bucket, key)
+  );
   CREATE TABLE IF NOT EXISTS app_settings (
     setting_key TEXT PRIMARY KEY,
     setting_value TEXT NOT NULL DEFAULT ''
@@ -231,6 +239,16 @@ const hiyariSubmissionColumns = db.prepare('PRAGMA table_info(hiyari_submissions
 if (!hiyariSubmissionColumns.some((column) => column.name === 'photos_json')) {
   db.exec("ALTER TABLE hiyari_submissions ADD COLUMN photos_json TEXT NOT NULL DEFAULT '[]'")
 }
+
+for (const [column, definition] of [
+  ['status', "TEXT NOT NULL DEFAULT 'received'"],
+  ['responsible', "TEXT NOT NULL DEFAULT ''"],
+  ['follow_up_note', "TEXT NOT NULL DEFAULT ''"],
+  ['status_updated_at', "TEXT NOT NULL DEFAULT ''"],
+]) {
+  if (!hiyariSubmissionColumns.some((existing) => existing.name === column)) db.exec(`ALTER TABLE hiyari_submissions ADD COLUMN ${column} ${definition}`)
+}
+const HIYARI_STATUSES = ['received', 'in_progress', 'closed']
 
 const trainingMaterialColumns = db.prepare('PRAGMA table_info(training_materials)').all()
 if (!trainingMaterialColumns.some((column) => column.name === 'companion_original_name')) {
@@ -574,6 +592,39 @@ db.exec(`
 const app = express()
 app.disable('x-powered-by')
 if (isProduction) app.set('trust proxy', 1)
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(), payment=()',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+  })
+  if (isProduction) res.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+  next()
+})
+
+// CSRF defence: browsers always send Origin (or Sec-Fetch-Site) on cross-site writes, so any
+// state-changing API call must come from this site or from an origin listed in ALLOWED_ORIGINS.
+const allowedOrigins = new Set(String(process.env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim().replace(/\/$/, '')).filter(Boolean))
+app.use('/api', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+  const origin = req.get('origin')
+  if (origin) {
+    let sameHost = false
+    try {
+      const { host: originHost, hostname } = new URL(origin)
+      sameHost = originHost === req.get('host') || originHost === req.host
+      // The Vite dev proxy rewrites Host, so allow loopback origins outside production.
+      if (!sameHost && !isProduction && ['localhost', '127.0.0.1', '[::1]'].includes(hostname)) sameHost = true
+    } catch { /* malformed origin */ }
+    if (!sameHost && !allowedOrigins.has(origin.replace(/\/$/, ''))) return res.status(403).json({ error: 'คำขอไม่ได้มาจากเว็บไซต์นี้' })
+  } else if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'คำขอไม่ได้มาจากเว็บไซต์นี้' })
+  }
+  next()
+})
 app.use(express.json({ limit: '1mb' }))
 app.use(session({
   name: 'daily-safety.sid',
@@ -688,6 +739,15 @@ function requireAuth(req, res, next) {
   next()
 }
 
+function isManager(user) { return user.role === 'admin' || user.role === 'leader' }
+
+function requireManager(req, res, next) {
+  requireAuth(req, res, () => {
+    if (!isManager(req.session.user)) return res.status(403).json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้' })
+    next()
+  })
+}
+
 function requireAdmin(req, res, next) {
   requireAuth(req, res, () => {
     if (req.session.user.role !== 'admin') return res.status(403).json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้' })
@@ -695,22 +755,46 @@ function requireAdmin(req, res, next) {
   })
 }
 
-const publicInspectionSubmissions = new Map()
-function limitPublicInspectionSubmissions(req, res, next) {
+// Rate limits are stored in SQLite so they survive restarts and are shared by every request.
+function clientKey(req) { return req.ip || req.socket.remoteAddress || 'unknown' }
+function rateState(bucket, key, windowMs) {
   const now = Date.now()
-  const key = req.ip || req.socket.remoteAddress || 'unknown'
-  const limit = publicInspectionSubmissions.get(key)
-  if (limit && limit.resetAt > now && limit.count >= 30) {
-    res.set('Retry-After', String(Math.ceil((limit.resetAt - now) / 1000)))
-    return res.status(429).json({ error: 'ส่งแบบตรวจหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่' })
-  }
-  if (!limit || limit.resetAt <= now) publicInspectionSubmissions.set(key, { count: 1, resetAt: now + 10 * 60_000 })
-  else limit.count += 1
-  if (publicInspectionSubmissions.size > 1000) {
-    for (const [entryKey, entry] of publicInspectionSubmissions) if (entry.resetAt <= now) publicInspectionSubmissions.delete(entryKey)
-  }
-  next()
+  const row = db.prepare('SELECT window_start, count FROM rate_limits WHERE bucket = ? AND key = ?').get(bucket, key)
+  if (!row || row.window_start + windowMs <= now) return { count: 0, resetAt: now + windowMs }
+  return { count: row.count, resetAt: row.window_start + windowMs }
 }
+function rateHit(bucket, key, windowMs) {
+  const now = Date.now()
+  const state = rateState(bucket, key, windowMs)
+  const windowStart = state.resetAt - windowMs
+  db.prepare(`INSERT INTO rate_limits (bucket, key, window_start, count) VALUES (?, ?, ?, 1)
+    ON CONFLICT(bucket, key) DO UPDATE SET
+      count = CASE WHEN window_start + ? <= ? THEN 1 ELSE count + 1 END,
+      window_start = CASE WHEN window_start + ? <= ? THEN ? ELSE window_start END`)
+    .run(bucket, key, windowStart, windowMs, now, windowMs, now, now)
+  return { count: state.count + 1, resetAt: state.resetAt }
+}
+function rateClear(bucket, key) { db.prepare('DELETE FROM rate_limits WHERE bucket = ? AND key = ?').run(bucket, key) }
+function sendRateLimited(res, resetAt, message) {
+  res.set('Retry-After', String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))))
+  return res.status(429).json({ error: message })
+}
+function rateLimit({ bucket, max, windowMs, message = 'ส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' }) {
+  return (req, res, next) => {
+    const key = clientKey(req)
+    const { count, resetAt } = rateState(bucket, key, windowMs)
+    if (count >= max) return sendRateLimited(res, resetAt, message)
+    rateHit(bucket, key, windowMs)
+    next()
+  }
+}
+setInterval(() => db.prepare('DELETE FROM rate_limits WHERE window_start < ?').run(Date.now() - 24 * 60 * 60_000), 60 * 60_000).unref()
+
+const limitPublicInspectionSubmissions = rateLimit({ bucket: 'public-inspection', max: 30, windowMs: 10 * 60_000, message: 'ส่งแบบตรวจหลายครั้งเกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' })
+const limitPublicHiyari = rateLimit({ bucket: 'public-hiyari', max: 20, windowMs: 10 * 60_000, message: 'ส่งรายงานหลายครั้งเกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' })
+const limitPublicAssessment = rateLimit({ bucket: 'public-assessment', max: 30, windowMs: 10 * 60_000, message: 'ส่งแบบประเมินหลายครั้งเกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' })
+const limitPublicTrainingViews = rateLimit({ bucket: 'public-training-view', max: 60, windowMs: 10 * 60_000 })
+const limitPublicEmployeeSearch = rateLimit({ bucket: 'public-employee-search', max: 240, windowMs: 60_000 })
 
 function addAudit(userId, action, targetType, targetId, details = {}) {
   db.prepare(`INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, created_at)
@@ -843,6 +927,7 @@ function trainingMaterialDto(row) {
     mimeType: row.mime_type,
     companionOriginalName: row.companion_original_name || '',
     isActive: Boolean(row.is_active),
+    viewCount: db.prepare('SELECT COUNT(*) AS count FROM training_views WHERE material_id = ?').get(row.id).count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -882,6 +967,10 @@ function hiyariSubmissionDto(row) {
     suggestions: row.suggestions,
     note: row.note,
     submittedAt: row.submitted_at,
+    status: row.status || 'received',
+    responsible: row.responsible || '',
+    followUpNote: row.follow_up_note || '',
+    statusUpdatedAt: row.status_updated_at || '',
     photos,
   }
 }
@@ -1002,7 +1091,7 @@ function photoDto(row) {
 function buildInspectionWhere(filters, user) {
   const clauses = []
   const params = []
-  if (user.role !== 'admin') {
+  if (!isManager(user)) {
     clauses.push(`(i.inspector_id = ? OR EXISTS (
       SELECT 1 FROM responses assigned
       WHERE assigned.inspection_id = i.id AND assigned.result = 'NG'
@@ -1100,7 +1189,7 @@ function getInspection(id) {
 }
 
 function canReadInspection(user, inspectionId) {
-  if (user.role === 'admin') return true
+  if (isManager(user)) return true
   return Boolean(db.prepare(`SELECT i.id FROM inspections i
     WHERE i.id = ? AND (i.inspector_id = ? OR EXISTS (
       SELECT 1 FROM responses assigned WHERE assigned.inspection_id = i.id AND assigned.result = 'NG'
@@ -1109,7 +1198,7 @@ function canReadInspection(user, inspectionId) {
 }
 
 function canReadResponse(user, responseId) {
-  if (user.role === 'admin') return true
+  if (isManager(user)) return true
   return Boolean(db.prepare(`SELECT r.id FROM responses r JOIN inspections i ON i.id = r.inspection_id
     WHERE r.id = ? AND (i.inspector_id = ? OR (r.result = 'NG'
       AND (r.responsible_user_id = ? OR LOWER(TRIM(r.responsible)) IN (LOWER(?), LOWER(?)))))`)
@@ -1117,7 +1206,7 @@ function canReadResponse(user, responseId) {
 }
 
 function inspectionForUser(user, inspection) {
-  if (!inspection || user.role === 'admin') return inspection
+  if (!inspection || isManager(user)) return inspection
   const isInspector = Boolean(db.prepare('SELECT id FROM inspections WHERE id = ? AND inspector_id = ?').get(inspection.id, user.id))
   return isInspector ? inspection : { ...inspection, items: inspection.items.filter((item) => item.result === 'NG' && (item.responsibleUserId === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === item.responsible.trim().toLocaleLowerCase()))) }
 }
@@ -1133,24 +1222,20 @@ app.get('/api/auth/me', (req, res) => {
   req.session.user = safeUser(user)
   res.json({ user: req.session.user })
 })
-const loginAttempts = new Map()
+const LOGIN_WINDOW_MS = 15 * 60_000
+const LOGIN_MAX_FAILURES = 8
 app.post('/api/auth/login', async (req, res) => {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown'
-  let attempt = loginAttempts.get(ip)
-  if (attempt && Date.now() - attempt.firstAttemptAt > 15 * 60_000) {
-    loginAttempts.delete(ip)
-    attempt = undefined
-  }
-  if (attempt?.blockedUntil > Date.now()) return res.status(429).json({ error: 'เข้าสู่ระบบไม่สำเร็จหลายครั้ง กรุณารอสักครู่แล้วลองใหม่' })
+  const ip = clientKey(req)
+  const attempt = rateState('login', ip, LOGIN_WINDOW_MS)
+  if (attempt.count >= LOGIN_MAX_FAILURES) return sendRateLimited(res, attempt.resetAt, 'เข้าสู่ระบบไม่สำเร็จหลายครั้ง กรุณารอสักครู่แล้วลองอีกครั้ง')
   const username = String(req.body?.username || '').trim().toLowerCase()
   const password = String(req.body?.password || '')
   const row = db.prepare('SELECT * FROM users WHERE lower(username) = ? AND is_active = 1').get(username)
   if (!row || !(await bcrypt.compare(password, row.password_hash))) {
-    const failures = (attempt?.failures || 0) + 1
-    loginAttempts.set(ip, { failures, firstAttemptAt: attempt?.firstAttemptAt || Date.now(), blockedUntil: failures >= 8 ? Date.now() + 10 * 60_000 : 0 })
+    rateHit('login', ip, LOGIN_WINDOW_MS)
     return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' })
   }
-  loginAttempts.delete(ip)
+  rateClear('login', ip)
   req.session.cookie.maxAge = req.body?.rememberMe === true ? rememberedSessionMaxAge : defaultSessionMaxAge
   req.session.user = safeUser(row)
   req.session.save((error) => {
@@ -1272,7 +1357,7 @@ app.delete('/api/admin/checklist/:key', requireAdmin, (req, res) => {
 
 app.get('/api/suggestions', requireAuth, (req, res) => {
   const user = req.session.user
-  const scoped = user.role !== 'admin'
+  const scoped = !isManager(user)
   const language = req.query.lang === 'en' ? 'en' : 'th'
   const inspectionWhere = scoped ? 'WHERE inspector_id = ?' : ''
   const inspectionParams = scoped ? [user.id] : []
@@ -1352,7 +1437,7 @@ app.get('/api/my-tasks', requireAuth, (req, res) => {
   } })
 })
 
-app.get('/api/dashboard', requireAdmin, (req, res) => {
+app.get('/api/dashboard', requireManager, (req, res) => {
   const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
   const [year, month, day] = todayKey.split('-').map(Number)
   const startKey = new Date(Date.UTC(year, month - 1, day - 6)).toISOString().slice(0, 10)
@@ -1406,7 +1491,7 @@ app.get('/api/dashboard', requireAdmin, (req, res) => {
   })
 })
 
-app.get('/api/dashboard/category', requireAdmin, (req, res) => {
+app.get('/api/dashboard/category', requireManager, (req, res) => {
   const category = String(req.query.category || '').trim()
   const from = String(req.query.from || '')
   const to = String(req.query.to || '')
@@ -1840,7 +1925,7 @@ app.patch('/api/responses/:id', requireAuth, upload.array('photos', 10), async (
   if (!response) return res.status(404).json({ error: 'ไม่พบรายการแก้ไข' })
   if (response.result !== 'NG') return res.status(400).json({ error: 'ติดตามสถานะได้เฉพาะรายการ NG' })
   const user = req.session.user
-  const isAdmin = user.role === 'admin'
+  const isAdmin = isManager(user) // admins and leaders may assign, reschedule and reopen follow-ups
   const assignedToUser = response.responsible_user_id === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === String(response.responsible || '').trim().toLocaleLowerCase())
   if (!isAdmin && !assignedToUser) return res.status(403).json({ error: 'เฉพาะผู้รับผิดชอบงานนี้เท่านั้นที่อัปเดตได้' })
   if (!isAdmin && response.follow_up_status === 'แก้ไขแล้ว') return res.status(403).json({ error: 'รายการนี้ปิดงานแล้ว' })
@@ -1892,14 +1977,107 @@ app.patch('/api/responses/:id', requireAuth, upload.array('photos', 10), async (
   res.json({ inspection: inspectionForUser(user, getInspection(response.parent_id)) })
 })
 
+// Admin correction of a single checklist result: change OK/NG/N/A, issue details, assignee, due date, and add "before" photos.
+app.patch('/api/admin/responses/:id/result', requireAdmin, upload.array('photos', 10), async (req, res) => {
+  const response = db.prepare(`SELECT r.*, c.choices_json FROM responses r
+    LEFT JOIN checklist_items c ON c.item_key = r.item_key WHERE r.id = ?`).get(req.params.id)
+  if (!response) return res.status(404).json({ error: 'ไม่พบหัวข้อตรวจ' })
+  const choices = normalizeChecklistChoices(parseJson(response.choices_json, RESULTS)) || RESULTS
+  const result = String(req.body?.result ?? response.result)
+  const files = req.files || []
+  if (!choices.includes(result) && result !== response.result) return res.status(400).json({ error: 'ผลตรวจไม่ถูกต้องสำหรับหัวข้อนี้' })
+  if (!RESULTS.includes(result)) return res.status(400).json({ error: 'ผลตรวจไม่ถูกต้อง' })
+  if (files.reduce((sum, file) => sum + file.size, 0) > 60 * 1024 * 1024) return res.status(413).json({ error: 'ขนาดรูปภาพรวมเกิน 60 MB' })
+
+  const before = {
+    result: response.result, issueDetails: response.issue_details, responsible: response.responsible,
+    followUpStatus: response.follow_up_status, dueDate: response.due_date,
+  }
+  let issueDetails = ''
+  let responsible = ''
+  let responsibleUserId = ''
+  let dueDate = ''
+  let followUpStatus = 'ไม่เกี่ยวข้อง'
+  let resolutionNote = ''
+  let removedPhotos = []
+
+  if (result === 'NG') {
+    issueDetails = String(req.body?.issueDetails ?? response.issue_details).trim()
+    dueDate = String(req.body?.dueDate ?? response.due_date).trim()
+    const requestedAssignee = String(req.body?.responsibleUserId || response.responsible_user_id || '')
+    if (!issueDetails || issueDetails.length > 4000) return res.status(400).json({ error: 'กรุณากรอกรายละเอียดปัญหา (ไม่เกิน 4,000 ตัวอักษร)' })
+    if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return res.status(400).json({ error: 'กำหนดเสร็จไม่ถูกต้อง' })
+    const assignee = db.prepare("SELECT id, display_name FROM users WHERE id = ? AND is_active = 1 AND role IN ('leader', 'employee')").get(requestedAssignee)
+    if (!assignee) return res.status(400).json({ error: 'เลือกบัญชีผู้รับผิดชอบที่เปิดใช้งานจากรายชื่อ' })
+    responsibleUserId = assignee.id
+    responsible = assignee.display_name
+    followUpStatus = response.result === 'NG' ? response.follow_up_status : 'ยังไม่แก้ไข'
+    resolutionNote = response.result === 'NG' ? response.resolution_note : ''
+    const existingBefore = db.prepare("SELECT COUNT(*) AS n FROM attachments WHERE response_id = ? AND attachment_type = 'before'").get(response.id).n
+    if (!existingBefore && !files.length) return res.status(400).json({ error: 'หัวข้อ NG ต้องมีรูปก่อนแก้ไขอย่างน้อย 1 รูป' })
+  } else {
+    if (files.length) return res.status(400).json({ error: 'แนบรูปได้เฉพาะหัวข้อที่เป็น NG' })
+    removedPhotos = db.prepare('SELECT id, stored_name FROM attachments WHERE response_id = ?').all(response.id)
+  }
+
+  const stored = []
+  try {
+    for (const file of files) {
+      stored.push(await persistPhoto(file, { inspectionId: response.inspection_id, responseId: response.id, type: 'before', userId: req.session.user.id }))
+    }
+    db.exec('BEGIN IMMEDIATE')
+    db.prepare(`UPDATE responses SET result = ?, issue_details = ?, responsible = ?, responsible_user_id = ?,
+      follow_up_status = ?, due_date = ?, resolution_note = ?, updated_at = ? WHERE id = ?`)
+      .run(result, issueDetails, responsible, responsibleUserId, followUpStatus, dueDate, resolutionNote, nowIso(), response.id)
+    if (removedPhotos.length) db.prepare('DELETE FROM attachments WHERE response_id = ?').run(response.id)
+    stored.forEach(insertPhoto)
+    addAudit(req.session.user.id, 'แก้ไขผลตรวจรายหัวข้อ', 'response', response.id, {
+      inspectionId: response.inspection_id, item: response.item_title, before,
+      after: { result, issueDetails, responsible, followUpStatus, dueDate }, addedPhotos: stored.length, removedPhotos: removedPhotos.length,
+    })
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* transaction may not have started */ }
+    await Promise.allSettled(stored.map((photo) => unlink(path.join(uploadDir, photo.storedName))))
+    throw error
+  }
+  await Promise.allSettled(removedPhotos.map((photo) => unlink(path.join(uploadDir, path.basename(photo.stored_name)))))
+  res.json({ inspection: getInspection(response.inspection_id) })
+})
+
+// Delete one attached photo. Managers may delete any; an assignee may delete their own "after" photos on an open task.
+app.delete('/api/photos/:id', requireAuth, async (req, res) => {
+  const photo = db.prepare(`SELECT a.*, r.result, r.follow_up_status, r.responsible_user_id, r.responsible FROM attachments a
+    JOIN responses r ON r.id = a.response_id WHERE a.id = ?`).get(req.params.id)
+  if (!photo) return res.status(404).json({ error: 'ไม่พบรูปภาพ' })
+  const user = req.session.user
+  const assigned = photo.responsible_user_id === user.id || [user.name, user.employeeCode].some((value) => value && value.trim().toLocaleLowerCase() === String(photo.responsible || '').trim().toLocaleLowerCase())
+  const allowed = user.role === 'admin' || (isManager(user) && photo.attachment_type === 'after') || (assigned && photo.attachment_type === 'after' && photo.follow_up_status !== 'แก้ไขแล้ว')
+  if (!allowed) return res.status(403).json({ error: 'ไม่มีสิทธิ์ลบรูปภาพนี้' })
+  const siblings = db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE response_id = ? AND attachment_type = ?').get(photo.response_id, photo.attachment_type).n
+  if (photo.result === 'NG' && photo.attachment_type === 'before' && siblings <= 1) return res.status(400).json({ error: 'หัวข้อ NG ต้องมีรูปก่อนแก้ไขอย่างน้อย 1 รูป กรุณาเพิ่มรูปใหม่ก่อนลบรูปนี้' })
+  if (photo.attachment_type === 'after' && photo.follow_up_status === 'แก้ไขแล้ว' && siblings <= 1) return res.status(400).json({ error: 'งานที่ปิดแล้วต้องมีรูปหลังแก้ไขอย่างน้อย 1 รูป' })
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare('DELETE FROM attachments WHERE id = ?').run(photo.id)
+    addAudit(user.id, 'ลบรูปภาพแนบ', 'attachment', photo.id, { inspectionId: photo.inspection_id, responseId: photo.response_id, type: photo.attachment_type, name: photo.original_name })
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* transaction may already be closed */ }
+    throw error
+  }
+  await unlink(path.join(uploadDir, path.basename(photo.stored_name))).catch(() => undefined)
+  res.json({ inspection: inspectionForUser(user, getInspection(photo.inspection_id)) })
+})
+
 app.get('/api/photos/:id', requireAuth, (req, res) => {
   const photo = db.prepare('SELECT * FROM attachments WHERE id = ?').get(req.params.id)
   if (!photo) return res.status(404).json({ error: 'ไม่พบรูปภาพ' })
-  if (req.session.user.role !== 'admin' && !canReadResponse(req.session.user, photo.response_id)) return res.status(403).json({ error: 'ไม่มีสิทธิ์ดูรูปภาพนี้' })
+  if (!canReadResponse(req.session.user, photo.response_id)) return res.status(403).json({ error: 'ไม่มีสิทธิ์ดูรูปภาพนี้' })
   res.type(photo.mime_type).set('X-Content-Type-Options', 'nosniff').sendFile(path.join(uploadDir, photo.stored_name))
 })
 
-app.get('/api/public/employees', (req, res) => {
+app.get('/api/public/employees', limitPublicEmployeeSearch, (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 80) return res.json({ employees: [] })
   const pattern = `%${query}%`
@@ -1922,7 +2100,7 @@ app.get('/api/public/hiyari/:token', (req, res) => {
   res.set('Cache-Control', 'no-store').json({ form: { title: form.title, description: form.description } })
 })
 
-app.post('/api/public/hiyari/:token/submissions', hiyariUpload.array('photos', 5), async (req, res, next) => {
+app.post('/api/public/hiyari/:token/submissions', limitPublicHiyari, hiyariUpload.array('photos', 5), async (req, res, next) => {
   const form = db.prepare('SELECT id FROM hiyari_forms WHERE public_token = ? AND is_active = 1').get(req.params.token)
   if (!form) return res.status(404).json({ error: 'ไม่พบแบบฟอร์มหรือปิดรับรายงานแล้ว' })
   const employeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
@@ -1982,7 +2160,7 @@ app.get('/api/public/assessments/:token', (req, res) => {
   } })
 })
 
-app.post('/api/public/assessments/:token/submissions', (req, res) => {
+app.post('/api/public/assessments/:token/submissions', limitPublicAssessment, (req, res) => {
   const assessment = db.prepare('SELECT * FROM assessments WHERE public_token = ? AND is_published = 1').get(req.params.token)
   if (!assessment) return res.status(404).json({ error: 'ไม่พบแบบประเมินหรือปิดรับคำตอบแล้ว' })
   const employeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
@@ -2036,7 +2214,7 @@ app.get('/api/public/training-materials/:token', (req, res) => {
   } })
 })
 
-app.post('/api/public/training-materials/:token/views', (req, res) => {
+app.post('/api/public/training-materials/:token/views', limitPublicTrainingViews, (req, res) => {
   const material = db.prepare('SELECT id FROM training_materials WHERE public_token = ? AND is_active = 1').get(req.params.token)
   if (!material) return res.status(404).json({ error: 'ไม่พบเอกสารหรือปิดการเผยแพร่แล้ว' })
   const employeeCode = String(req.body?.employeeCode || '').trim().toUpperCase()
@@ -2171,6 +2349,22 @@ app.patch('/api/admin/hiyari-submissions/:id', requireAdmin, (req, res) => {
   res.json({ submission: hiyariSubmissionDto(row) })
 })
 
+app.patch('/api/admin/hiyari-submissions/:id/status', requireAdmin, (req, res) => {
+  const existing = db.prepare('SELECT * FROM hiyari_submissions WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบรายงาน Hiyari Hat' })
+  const status = String(req.body?.status ?? existing.status)
+  const responsible = String(req.body?.responsible ?? existing.responsible).trim()
+  const followUpNote = String(req.body?.followUpNote ?? existing.follow_up_note).trim()
+  if (!HIYARI_STATUSES.includes(status)) return res.status(400).json({ error: 'สถานะไม่ถูกต้อง' })
+  if (responsible.length > 160 || followUpNote.length > 3000) return res.status(400).json({ error: 'ข้อความยาวเกินกำหนด' })
+  if (status === 'closed' && !followUpNote) return res.status(400).json({ error: 'กรุณาบันทึกผลการแก้ไขก่อนปิดเรื่อง' })
+  db.prepare('UPDATE hiyari_submissions SET status = ?, responsible = ?, follow_up_note = ?, status_updated_at = ? WHERE id = ?')
+    .run(status, responsible, followUpNote, nowIso(), existing.id)
+  addAudit(req.session.user.id, 'อัปเดตสถานะ Hiyari Hat', 'hiyari_submission', existing.id, { before: existing.status || 'received', after: status, responsible })
+  const row = db.prepare('SELECT s.*, f.title AS form_title FROM hiyari_submissions s JOIN hiyari_forms f ON f.id = s.form_id WHERE s.id = ?').get(existing.id)
+  res.json({ submission: hiyariSubmissionDto(row) })
+})
+
 app.delete('/api/admin/hiyari-submissions/:id', requireAdmin, async (req, res) => {
   const existing = db.prepare('SELECT * FROM hiyari_submissions WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'ไม่พบรายงาน Hiyari Hat' })
@@ -2295,8 +2489,12 @@ app.patch('/api/admin/assessments/:id', requireAdmin, (req, res) => {
 app.delete('/api/admin/assessments/:id', requireAdmin, (req, res) => {
   const existing = db.prepare('SELECT * FROM assessments WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'ไม่พบแบบประเมิน' })
+  const submissionCount = db.prepare('SELECT COUNT(*) AS count FROM assessment_submissions WHERE assessment_id = ?').get(existing.id).count
+  if (submissionCount && req.query.force !== '1') {
+    return res.status(409).json({ error: `แบบประเมินนี้มีผู้ตอบแล้ว ${submissionCount} ราย การลบจะลบผลการตอบทั้งหมดด้วย แนะนำให้ปิดเผยแพร่แทน`, submissionCount })
+  }
   db.prepare('DELETE FROM assessments WHERE id = ?').run(existing.id)
-  addAudit(req.session.user.id, 'ลบแบบประเมิน', 'assessment', existing.id, { title: existing.title })
+  addAudit(req.session.user.id, 'ลบแบบประเมิน', 'assessment', existing.id, { title: existing.title, deletedSubmissions: submissionCount })
   res.json({ ok: true })
 })
 
@@ -2647,11 +2845,70 @@ app.patch('/api/admin/training-materials/:id', requireAdmin, trainingUpload.fiel
 app.delete('/api/admin/training-materials/:id', requireAdmin, async (req, res) => {
   const existing = db.prepare('SELECT * FROM training_materials WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'ไม่พบสื่ออบรม' })
+  const viewCount = db.prepare('SELECT COUNT(*) AS count FROM training_views WHERE material_id = ?').get(existing.id).count
+  if (viewCount && req.query.force !== '1') {
+    return res.status(409).json({ error: `สื่ออบรมนี้มีประวัติการอ่าน ${viewCount} ราย การลบจะลบประวัติทั้งหมดด้วย แนะนำให้ปิดใช้งานแทน`, viewCount })
+  }
   db.prepare('DELETE FROM training_materials WHERE id = ?').run(existing.id)
   await unlink(path.join(trainingUploadDir, existing.stored_name)).catch(() => undefined)
   if (existing.companion_stored_name) await unlink(path.join(trainingUploadDir, existing.companion_stored_name)).catch(() => undefined)
-  addAudit(req.session.user.id, 'ลบสื่ออบรม', 'training_material', existing.id, { title: existing.title })
+  addAudit(req.session.user.id, 'ลบสื่ออบรม', 'training_material', existing.id, { title: existing.title, deletedViews: viewCount })
   res.json({ ok: true })
+})
+
+// Who has (and has not) read a training material, based on the employee directory.
+app.get('/api/admin/training-materials/:id/views', requireAdmin, (req, res) => {
+  const material = db.prepare('SELECT id, title FROM training_materials WHERE id = ?').get(req.params.id)
+  if (!material) return res.status(404).json({ error: 'ไม่พบสื่ออบรม' })
+  const viewed = db.prepare(`SELECT v.employee_code, v.employee_name, v.viewed_at, COALESCE(NULLIF(e.department_th, ''), e.department_en, '') AS department
+    FROM training_views v LEFT JOIN employee_directory e ON UPPER(TRIM(e.employee_code)) = UPPER(TRIM(v.employee_code))
+    WHERE v.material_id = ? ORDER BY v.viewed_at DESC`).all(material.id)
+  const notViewed = db.prepare(`SELECT e.employee_code, COALESCE(NULLIF(e.name_th, ''), e.name_en) AS name, COALESCE(NULLIF(e.department_th, ''), e.department_en, '') AS department
+    FROM employee_directory e WHERE NOT EXISTS (
+      SELECT 1 FROM training_views v WHERE v.material_id = ? AND UPPER(TRIM(v.employee_code)) = UPPER(TRIM(e.employee_code))
+    ) ORDER BY department, name COLLATE NOCASE`).all(material.id)
+  res.json({
+    material,
+    viewed: viewed.map((row) => ({ employeeCode: row.employee_code, employeeName: row.employee_name, department: row.department, viewedAt: row.viewed_at })),
+    notViewed: notViewed.map((row) => ({ employeeCode: row.employee_code, employeeName: row.name, department: row.department })),
+  })
+})
+
+// Rotate a public link: the old URL/QR stops working immediately.
+const ROTATABLE_TOKENS = {
+  assessments: { table: 'assessments', action: 'เปลี่ยนลิงก์สาธารณะของแบบประเมิน', type: 'assessment' },
+  'training-materials': { table: 'training_materials', action: 'เปลี่ยนลิงก์สาธารณะของสื่ออบรม', type: 'training_material' },
+  'hiyari-forms': { table: 'hiyari_forms', action: 'เปลี่ยนลิงก์สาธารณะของฟอร์ม Hiyari Hat', type: 'hiyari_form' },
+}
+app.post('/api/admin/:resource/:id/rotate-token', requireAdmin, (req, res, next) => {
+  const config = ROTATABLE_TOKENS[req.params.resource]
+  if (!config) return next()
+  const existing = db.prepare(`SELECT id, title FROM ${config.table} WHERE id = ?`).get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบรายการ' })
+  const token = newPublicToken()
+  db.prepare(`UPDATE ${config.table} SET public_token = ?, updated_at = ? WHERE id = ?`).run(token, nowIso(), existing.id)
+  addAudit(req.session.user.id, config.action, config.type, existing.id, { title: existing.title })
+  res.json({ token })
+})
+
+// Bulk import/update employees from Thai and/or English roster workbooks (Code, Name, Position, Department).
+const rosterUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 2 } })
+app.post('/api/admin/employees/import', requireAdmin, rosterUpload.fields([{ name: 'thai', maxCount: 1 }, { name: 'english', maxCount: 1 }]), async (req, res) => {
+  const thaiFile = req.files?.thai?.[0]
+  const englishFile = req.files?.english?.[0]
+  if (!thaiFile && !englishFile) return res.status(400).json({ error: 'กรุณาเลือกไฟล์ Excel อย่างน้อย 1 ไฟล์' })
+  let result
+  try {
+    const [thai, english] = await Promise.all([
+      thaiFile ? readRoster(thaiFile.buffer, thaiFile.originalname) : undefined,
+      englishFile ? readRoster(englishFile.buffer, englishFile.originalname) : undefined,
+    ])
+    result = importRosters(db, { thai, english })
+  } catch (error) {
+    return res.status(400).json({ error: `นำเข้าไม่สำเร็จ: ${error.message}` })
+  }
+  addAudit(req.session.user.id, 'นำเข้าทะเบียนพนักงาน', 'employee', 'bulk', result)
+  res.json(result)
 })
 
 app.get('/api/admin/employees', requireAdmin, (_req, res) => {
@@ -2939,6 +3196,7 @@ app.use((error, req, res, _next) => {
   if (error instanceof multer.MulterError) {
     const isTrainingUpload = req.path.startsWith('/api/admin/training-materials')
     const isHiyariUpload = req.path.startsWith('/api/public/hiyari/')
+    if (req.path === '/api/admin/employees/import') return res.status(400).json({ error: 'ไฟล์ทะเบียนพนักงานต้องไม่เกิน 5 MB และเลือกได้ไม่เกินภาษาละ 1 ไฟล์' })
     const message = error.code === 'LIMIT_FILE_SIZE'
       ? (isTrainingUpload ? 'ไฟล์สื่ออบรมมีขนาดเกิน 25 MB' : 'รูปภาพมีขนาดเกิน 8 MB ต่อรูป')
       : (isTrainingUpload ? 'แนบสื่ออบรมได้ไม่เกิน 2 ไฟล์ต่อรายการ' : isHiyariUpload ? 'แนบรูปภาพ Hiyari Hat ได้ไม่เกิน 5 รูปต่อรายงาน' : 'แนบรูปภาพได้ไม่เกิน 20 รูปต่อครั้ง')

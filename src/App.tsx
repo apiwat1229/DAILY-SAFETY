@@ -47,7 +47,7 @@ function AppContent() {
     if (publicRoute || dailyInspectionRoute) return
     api.me().then(({ user: currentUser }) => {
       setUser(currentUser)
-      if (currentUser && (currentUser.role !== 'admin' || dailyInspectionRoute)) setPage('new')
+      if (currentUser && ((currentUser.role === 'employee') || dailyInspectionRoute)) setPage('new')
     }).catch(() => setUser(null)).finally(() => setLoading(false))
   }, [publicRoute, dailyInspectionRoute])
 
@@ -70,7 +70,7 @@ function AppContent() {
     <>
       {user ? <AppShell user={user} page={page} onPage={setPage} onUserChange={setUser} /> : <LoginScreen onLogin={(currentUser) => {
         setUser(currentUser)
-        setPage(currentUser.role === 'admin' && !dailyInspectionRoute ? 'dashboard' : 'new')
+        setPage(currentUser.role !== 'employee' && !dailyInspectionRoute ? 'dashboard' : 'new')
       }} />}
       <Toaster position="top-right" richColors closeButton />
     </>

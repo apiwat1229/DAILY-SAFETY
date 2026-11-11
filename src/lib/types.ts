@@ -128,6 +128,7 @@ export type TrainingMaterial = {
   mimeType: string
   companionOriginalName?: string
   isActive: boolean
+  viewCount?: number
   createdAt: string
   updatedAt: string
 }
@@ -160,8 +161,13 @@ export type HiyariSubmission = {
   suggestions: string
   note: string
   submittedAt: string
+  status: HiyariStatus
+  responsible: string
+  followUpNote: string
+  statusUpdatedAt: string
   photos: HiyariPhoto[]
 }
+export type HiyariStatus = 'received' | 'in_progress' | 'closed'
 export type HiyariPhoto = { id: string; originalName: string; url: string }
 
 export type MyTask = {
@@ -255,3 +261,9 @@ export type AuditEntry = {
 
 export type AuditLogResponse = { total: number; targetTypes: string[]; entries: AuditEntry[] }
 export type AuditLogFilters = { q?: string; targetType?: string; from?: string; to?: string; limit?: number; offset?: number }
+
+export type TrainingViewReport = {
+  material: { id: string; title: string }
+  viewed: { employeeCode: string; employeeName: string; department: string; viewedAt: string }[]
+  notViewed: { employeeCode: string; employeeName: string; department: string }[]
+}

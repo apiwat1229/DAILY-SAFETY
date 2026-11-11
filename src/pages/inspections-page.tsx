@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DatePicker } from '@/components/date-picker'
+import { isManager } from '@/lib/roles'
 import { useI18n } from '@/lib/i18n'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
@@ -103,7 +104,7 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
     <div className="page-stack">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div><p className="text-sm font-medium text-primary">{t('ศูนย์ติดตาม')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('รายการตรวจ')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('ค้นหาผลตรวจและติดตามการแก้ไขพร้อมหลักฐาน')}</p></div>
-        {user.role === 'admin' && <div className="grid w-full gap-2 sm:flex sm:w-auto sm:items-center"><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-9" /></div><Button asChild variant="outline" className="h-10 w-full gap-2 sm:w-auto"><a href={exportExcelUrl(filters, language)}><FileSpreadsheet size={16} /> {t('ส่งออก Excel พร้อมรูป')}</a></Button></div>}
+        {isManager(user) && <div className="grid w-full gap-2 sm:flex sm:w-auto sm:items-center"><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-10 pl-9" /></div>{user.role === 'admin' && <Button asChild variant="outline" className="h-10 w-full gap-2 sm:w-auto"><a href={exportExcelUrl(filters, language)}><FileSpreadsheet size={16} /> {t('ส่งออก Excel พร้อมรูป')}</a></Button>}</div>}
       </div>
 
       {user.role !== 'admin' && <MyTasksCard tasks={myTasks} loading={tasksLoading} language={language} onOpen={(inspectionId) => setSelectedId(inspectionId)} />}
@@ -123,7 +124,7 @@ export function InspectionsPage({ user, initialFilter, onInitialFilterApplied }:
       </Card>
 
       <Card className="overflow-hidden rounded-2xl border-border">
-        {user.role !== 'admin' && <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-sm">{t('ผลการค้นหา')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดง')} {filteredRecords.length} {t('รายการ')}</CardDescription></div><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></CardHeader>}
+        {!isManager(user) && <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-sm">{t('ผลการค้นหา')}</CardTitle><CardDescription className="mt-1 text-xs">{t('แสดง')} {filteredRecords.length} {t('รายการ')}</CardDescription></div><div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></CardHeader>}
         {filteredRecords.length ? <>
           <div className="hidden overflow-x-auto md:block"><Table>
             <TableHeader><TableRow className="bg-surface-subtle hover:bg-surface-subtle"><TableHead className="pl-5 text-xs">{t('วันที่ / เวลา')}</TableHead><TableHead className="text-xs">{t('พื้นที่ / แผนก')}</TableHead><TableHead className="text-xs">{t('ผู้ตรวจ')}</TableHead><TableHead className="text-xs">{t('กะ')}</TableHead><TableHead className="text-center text-xs">NG</TableHead><TableHead className="text-center text-xs">{t('ค้างงาน')}</TableHead><TableHead className="pr-5 text-right text-xs">{t(user.role === 'admin' ? 'การทำรายการ' : 'รายละเอียด')}</TableHead></TableRow></TableHeader>

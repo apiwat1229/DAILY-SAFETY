@@ -18,6 +18,7 @@ import { HiyariReportsPage } from '@/pages/hiyari-reports-page'
 import { AuditLogPage } from '@/pages/audit-log-page'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { useI18n } from '@/lib/i18n'
+import { isManager } from '@/lib/roles'
 import { LanguageSwitch } from '@/components/language-switch'
 
 export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials' | 'hiyari' | 'hiyari-reports' | 'audit-log'
@@ -41,10 +42,16 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
         { key: 'hiyari-reports' as const, label: t('รายงาน Hiyari Hat'), icon: FileSpreadsheet },
         { key: 'audit-log' as const, label: t('บันทึกการใช้งาน'), icon: History },
       ]
-    : [
-        { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
-        { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
-      ]
+    : user.role === 'leader'
+      ? [
+          { key: 'dashboard' as const, label: t('ภาพรวมทีม'), icon: Activity },
+          { key: 'inspections' as const, label: t('ติดตามงานทีม'), icon: FileBarChart2 },
+          { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
+        ]
+      : [
+          { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
+          { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
+        ]
   async function handleLogout() {
     try { await api.logout() } catch { /* session may already have expired */ }
     onUserChange(null)
@@ -65,7 +72,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           <Button variant="ghost" size="icon" aria-label={t('เปิดเมนู')} onClick={() => setMobileMenu(true)}><Menu size={18} /></Button>
         </div>
         <main className="app-content-frame app-main-frame">
-          {page === 'dashboard' && user.role === 'admin' ? <DashboardPage user={user} onPage={onPage} /> : null}
+          {page === 'dashboard' && isManager(user) ? <DashboardPage user={user} onPage={onPage} /> : null}
           {page === 'inspections' ? <InspectionsPage user={user} initialFilter={null} onInitialFilterApplied={() => undefined} /> : null}
           {page === 'new' ? <InspectionFormPage user={user} onCreated={() => onPage('inspections')} /> : null}
           {page === 'users' && user.role === 'admin' ? <UsersPage currentUser={user} onCurrentUserUpdate={onUserChange} /> : null}

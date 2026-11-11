@@ -1,4 +1,4 @@
-import type { AuditLogFilters, AuditLogResponse, Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
+import type { TrainingViewReport, HiyariStatus, AuditLogFilters, AuditLogResponse, Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
@@ -52,6 +52,8 @@ export const api = {
   deleteInspection: (id: string) => request<{ ok: boolean }>(`/api/inspections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   createInspection: (body: FormData) => request<{ inspection: Inspection }>('/api/inspections', { method: 'POST', body }),
   createPublicInspection: (body: FormData) => request<{ ok: boolean }>('/api/public/daily-inspections', { method: 'POST', body }),
+  updateResponseResult: (id: string, body: FormData) => request<{ inspection: Inspection }>(`/api/admin/responses/${encodeURIComponent(id)}/result`, { method: 'PATCH', body }),
+  deletePhoto: (id: string) => request<{ inspection: Inspection }>(`/api/photos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   updateResponse: (id: string, body: FormData) => request<{ inspection: Inspection }>(`/api/responses/${id}`, { method: 'PATCH', body }),
   users: () => request<{ users: User[] }>('/api/admin/users'),
   createUser: (input: { username: string; name: string; employeeCode: string; password: string; role: User['role'] }) => request<{ user: User }>('/api/admin/users', {
@@ -83,7 +85,7 @@ export const api = {
   updateAssessment: (id: string, input: { title: string; description: string; instructions: string; isPublished: boolean; allowMultipleAttempts: boolean; questions: AssessmentQuestion[] }) => request<{ assessment: Assessment }>(`/api/admin/assessments/${encodeURIComponent(id)}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   }),
-  deleteAssessment: (id: string) => request<{ ok: boolean }>(`/api/admin/assessments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteAssessment: (id: string, force = false) => request<{ ok: boolean }>(`/api/admin/assessments/${encodeURIComponent(id)}${force ? '?force=1' : ''}`, { method: 'DELETE' }),
   assessmentSubmissions: (id: string) => request<{ assessment: Pick<Assessment, 'id' | 'title'>; questions: AssessmentQuestion[]; submissions: AssessmentSubmission[] }>(`/api/admin/assessments/${encodeURIComponent(id)}/submissions`),
   assessmentReportSubmissions: () => request<{ submissions: AssessmentReportSubmission[] }>('/api/admin/assessment-submissions'),
   updateAssessmentSubmissionEmployee: (id: string, input: { employeeCode: string; employeeName: string }) => request<{ ok: boolean; employeeCode: string; employeeName: string }>(`/api/admin/assessment-submissions/${encodeURIComponent(id)}`, {
@@ -107,6 +109,9 @@ export const api = {
   updateHiyariSubmission: (id: string, input: Pick<HiyariSubmission, 'employeeCode' | 'employeeName' | 'language' | 'reportDate' | 'whenText' | 'whereText' | 'whatHappened' | 'suggestions' | 'note'>) => request<{ submission: HiyariSubmission }>(`/api/admin/hiyari-submissions/${encodeURIComponent(id)}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   }),
+  updateHiyariStatus: (id: string, input: { status: HiyariStatus; responsible: string; followUpNote: string }) => request<{ submission: HiyariSubmission }>(`/api/admin/hiyari-submissions/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
   deleteHiyariSubmission: (id: string) => request<{ ok: boolean }>(`/api/admin/hiyari-submissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   publicHiyari: (token: string) => request<{ form: { title: string; description: string } }>(`/api/public/hiyari/${encodeURIComponent(token)}`),
   submitHiyari: (token: string, input: { employeeCode: string; employeeName: string; language: HiyariLanguage; reportDate: string; whenText: string; whereText: string; whatHappened: string; suggestions: string; note: string; photos: File[] }) => {
@@ -120,7 +125,10 @@ export const api = {
   trainingMaterials: () => request<{ materials: TrainingMaterial[] }>('/api/admin/training-materials'),
   createTrainingMaterial: (body: FormData) => request<{ material: TrainingMaterial }>('/api/admin/training-materials', { method: 'POST', body }),
   updateTrainingMaterial: (id: string, body: FormData) => request<{ material: TrainingMaterial }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
-  deleteTrainingMaterial: (id: string) => request<{ ok: boolean }>(`/api/admin/training-materials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteTrainingMaterial: (id: string, force = false) => request<{ ok: boolean }>(`/api/admin/training-materials/${encodeURIComponent(id)}${force ? '?force=1' : ''}`, { method: 'DELETE' }),
+  trainingViews: (id: string) => request<TrainingViewReport>(`/api/admin/training-materials/${encodeURIComponent(id)}/views`),
+  rotatePublicToken: (resource: 'assessments' | 'training-materials' | 'hiyari-forms', id: string) => request<{ token: string }>(`/api/admin/${resource}/${encodeURIComponent(id)}/rotate-token`, { method: 'POST' }),
+  importEmployees: (body: FormData) => request<{ imported: number; created: number; updated: number }>('/api/admin/employees/import', { method: 'POST', body }),
   publicTrainingMaterial: (token: string) => request<{ material: TrainingMaterial & { fileUrl: string; presentationUrl: string } }>(`/api/public/training-materials/${encodeURIComponent(token)}`),
   markTrainingViewed: (token: string, input: { employeeCode: string; employeeName: string }) => request<{ ok: boolean; viewedAt: string }>(`/api/public/training-materials/${encodeURIComponent(token)}/views`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),

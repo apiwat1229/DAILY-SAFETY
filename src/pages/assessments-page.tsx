@@ -61,7 +61,7 @@ export function AssessmentsPage() {
   async function remove() {
     if (!deleteTarget || deleting) return
     setDeleting(true)
-    try { await api.deleteAssessment(deleteTarget.id); toast.success(t('ลบแบบประเมินแล้ว')); setDeleteTarget(null); refresh() }
+    try { await api.deleteAssessment(deleteTarget.id, deleteTarget.submissionCount > 0); toast.success(t('ลบแบบประเมินแล้ว')); setDeleteTarget(null); refresh() }
     catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบแบบประเมินไม่สำเร็จ')) }
     finally { setDeleting(false) }
   }
@@ -84,8 +84,8 @@ export function AssessmentsPage() {
       </> : <CardContent className="grid min-h-48 place-items-center text-center"><div><p className="font-medium">{loading ? t('กำลังโหลดแบบประเมิน…') : t('ยังไม่มีแบบประเมิน')}</p><p className="mt-1 text-sm text-muted-foreground">{t('สร้างแบบประเมินแรกเพื่อเริ่มเก็บคำตอบ')}</p></div></CardContent>}
     </Card>
     <AssessmentEditorDialog key={editor?.key || 'closed'} editor={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); refresh() }} />
-    {share && <ShareLinkDialog kind="assessment" token={share.token} title={share.title} open onOpenChange={(open) => !open && setShare(null)} />}
-    <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }} title={t('ลบแบบประเมิน')} description={deleteTarget ? `“${deleteTarget.title}” · ${t('ผลคำตอบของแบบประเมินนี้จะถูกลบด้วย')} · ${t('การลบนี้ไม่สามารถย้อนกลับได้')}` : ''} confirmLabel={t('ลบ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={remove} />
+    {share && <ShareLinkDialog kind="assessment" token={share.token} title={share.title} open onOpenChange={(open) => !open && setShare(null)} onRotate={async () => (await api.rotatePublicToken('assessments', share.id)).token} onRotated={() => refresh()} />}
+    <ConfirmActionDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }} title={t('ลบแบบประเมิน')} description={deleteTarget ? `“${deleteTarget.title}” · ${deleteTarget.submissionCount > 0 ? `${t('มีผู้ตอบแล้ว')} ${deleteTarget.submissionCount} ${t('ราย ผลคำตอบทั้งหมดจะถูกลบด้วย แนะนำให้ปิดเผยแพร่แทน')}` : t('ยังไม่มีผู้ตอบ')} · ${t('การลบนี้ไม่สามารถย้อนกลับได้')}` : ''} confirmLabel={t('ลบ')} cancelLabel={t('ยกเลิก')} pending={deleting} onConfirm={remove} />
   </div>
 }
 
