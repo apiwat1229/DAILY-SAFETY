@@ -141,7 +141,7 @@ function ItemCard({ item, view, inCart, busy, onAdd }: { item: CatalogItem; view
       <div><p className="font-medium leading-tight">{item.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p></div>
       <div className="flex flex-wrap gap-1">{stockBadge}{basketBadge}</div>
       {picker}
-      <div className="mt-auto flex flex-col gap-2 pt-1">{stepper}{addButton(true)}</div>
+      <div className="mt-auto flex flex-col items-center gap-2 pt-1">{stepper}{addButton(true)}</div>
     </div>
   </div>
 

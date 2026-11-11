@@ -130,20 +130,20 @@
   --type-line-toast: 1.5;
 
   /* Shared color roles. Keep component colors here so every screen follows one theme. */
-  --background: #f4f7f8;
+  --background: #f5f7fb;
   --foreground: #15232b;
   --card: #ffffff;
   --card-foreground: #15232b;
   --popover: #ffffff;
   --popover-foreground: #15232b;
-  --primary: #11675d;
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #e8f2ef;
-  --secondary-foreground: #16574f;
+  --secondary: #e8eefd;
+  --secondary-foreground: #0f368a;
   --muted: #f0f4f4;
   --muted-foreground: #65757b;
-  --accent: #eef5f3;
-  --accent-foreground: #145d54;
+  --accent: #edf2fd;
+  --accent-foreground: #103993;
   --destructive: #b42318;
   --success: #15803d;
   --warning: #a15c07;
@@ -151,7 +151,7 @@
   --border: #e3e9e9;
   --border-subtle: #edf0f0;
   --input: #dce4e4;
-  --ring: #6caaa0;
+  --ring: #6a94f1;
   --surface-subtle: #fafcfc;
 
   /* Shared layout and control dimensions. */
@@ -165,8 +165,8 @@
 
   /* Modal / dialog theme: one look for every dialog, alert dialog and sheet. */
   --modal-radius: 6px;
-  --modal-overlay: rgb(19 46 50 / .5);
-  --modal-shadow: 0 28px 70px -18px rgb(19 46 50 / .45), 0 8px 24px -12px rgb(19 46 50 / .25);
+  --modal-overlay: rgb(15 25 46 / .5);
+  --modal-shadow: 0 28px 70px -18px rgb(15 25 46 / .45), 0 8px 24px -12px rgb(15 25 46 / .25);
   --control-radius: var(--radius);
   --control-padding-x: .875rem;
 
@@ -178,11 +178,11 @@
   --type-size-badge: .8125rem;
   --badge-height: 1.5rem;
 
-  --sidebar: #132e32;
-  --sidebar-soft: #1a3b3e;
-  --sidebar-active: #9fe1cb;
-  --sidebar-muted: #9bb7b3;
-  --sidebar-foreground: #f7fbfa;
+  --sidebar: #12203f;
+  --sidebar-soft: #1d3058;
+  --sidebar-active: #a8c2fa;
+  --sidebar-muted: #afb9cf;
+  --sidebar-foreground: #ffffff;
 }
 
 @layer base {
@@ -233,7 +233,7 @@ button { cursor: pointer; }
   font-size: var(--type-size-badge) !important;
 }
 label { line-height: var(--type-line-label); }
-::selection { background: #d5ece6; color: #143b36; }
+::selection { background: #d7e3fc; color: #14284f; }
 
 /* App-wide content frame keeps navigation and page content aligned. */
 .app-shell { min-height: 100vh; }
@@ -252,7 +252,7 @@ label { line-height: var(--type-line-label); }
 .subsection-heading { font-size: var(--type-size-subsection-heading) !important; line-height: var(--type-line-subsection-heading) !important; }
 .sidebar { background: var(--sidebar); color: var(--sidebar-foreground); }
 .side-link { font-size: var(--type-size-control) !important; line-height: var(--type-line-control) !important; color: var(--sidebar-muted); transition: background .18s ease, color .18s ease; }
-.side-link:hover, .side-link[data-active="true"] { background: var(--sidebar-soft); color: #fff; }
+.side-link:hover, .side-link[data-active="true"] { background: var(--sidebar-soft); color: var(--sidebar-foreground); }
 .metric-card { box-shadow: 0 6px 20px rgba(26, 53, 57, .035); }
 .soft-grid { background-image: radial-gradient(rgba(21, 90, 81, .09) 1px, transparent 1px); background-size: 18px 18px; }
 .safe-area-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }

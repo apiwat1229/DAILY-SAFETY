@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { LanguageSwitch } from '@/components/language-switch'
+import { ThemeButton } from '@/components/theme-dialog'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { iconFor } from '@/components/nav-icons'
 
@@ -33,7 +34,7 @@ export function MoreSheet({ open, onOpenChange, user, page, groups, onNavigate, 
         <SheetHeader className="flex-row items-center gap-3 border-b border-border-subtle p-4 text-left">
           <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-secondary text-base font-semibold text-primary">{user.name.slice(0, 1)}</div>
           <div className="min-w-0 flex-1"><SheetTitle className="truncate text-base">{user.name}</SheetTitle><SheetDescription className="truncate">{t(roleLabel[user.role])} · {user.employeeCode}</SheetDescription></div>
-          <LanguageSwitch />
+          <div className="flex shrink-0 items-center gap-1"><ThemeButton className="text-muted-foreground" /><LanguageSwitch className="text-muted-foreground" /></div>
         </SheetHeader>
         <div className="space-y-4 p-4">
           {groups.map((group) => <section key={group.title}>

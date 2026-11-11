@@ -1,4 +1,4 @@
-// Creates sample PPE and medicine items in every category, with real photos (scripts/sample-photos), a sample warehouse and stock.
+// Creates sample PPE and medicine items in every category, a sample stock count and sample requisitions, with real photos (scripts/sample-photos), a sample warehouse and stock.
 // Safe to re-run: existing sample items are updated (name, category, photo) and never restocked. Sample SKUs start with "DEMO-".
 //
 //   SEED_URL=http://localhost:4000 SEED_USER=admin SEED_PASSWORD=... node scripts/seed-samples.mjs
@@ -120,4 +120,67 @@ if (receipts.length) {
 // The first version of this script used two catch-all categories; drop them once they are empty.
 const leftovers = must(await call('GET', '/api/inventory/categories'), 'categories').categories.filter((row) => LEGACY_CATEGORIES.includes(row.name) && row.itemCount === 0)
 for (const row of leftovers) { await call('DELETE', `/api/inventory/categories/${row.id}`); console.log(`removed empty category ${row.name}`) }
+// ---- sample stock counts: one posted (with a few differences) and one still open ----
+const existingCounts = must(await call('GET', `/api/inventory/counts?warehouseId=${warehouse.id}`), 'counts').counts
+if (existingCounts.length === 0) {
+  const first = must(await call('POST', '/api/inventory/counts', { warehouseId: warehouse.id }), 'create count').id
+  const sheet = must(await call('GET', `/api/inventory/counts/${first}`), 'count sheet').count
+  const diffs = new Map([[1, -2], [4, 1], [9, -1]])
+  must(await call('PUT', `/api/inventory/counts/${first}/lines`, { lines: sheet.lines.map((line, index) => ({ variantId: line.variantId, lotId: line.lotId, countedQty: Math.max(line.systemQty + (diffs.get(index) ?? 0), 0) })) }), 'save count')
+  const posted = must(await call('POST', `/api/inventory/counts/${first}/post`), 'post count')
+  console.log(`stock count posted (${posted.adjustments} adjustments)`)
+  const second = must(await call('POST', '/api/inventory/counts', { warehouseId: warehouse.id }), 'create second count').id
+  const open = must(await call('GET', `/api/inventory/counts/${second}`), 'count sheet').count
+  must(await call('PUT', `/api/inventory/counts/${second}/lines`, { lines: open.lines.slice(0, 6).map((line) => ({ variantId: line.variantId, lotId: line.lotId, countedQty: line.systemQty })) }), 'save open count')
+  console.log('stock count left open (6 lines counted)')
+}
+
+// ---- sample requisitions: an employee asks, the admin approves/rejects, stock is issued ----
+function caller() {
+  let jar = ''
+  return async (method, path, body) => {
+    const response = await fetch(`${base}${path}`, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(jar ? { Cookie: jar } : {}) }, body: body ? JSON.stringify(body) : undefined })
+    const set = response.headers.get('set-cookie')
+    if (set) jar = set.split(';')[0]
+    return { status: response.status, json: (response.headers.get('content-type') || '').includes('json') ? await response.json() : null }
+  }
+}
+const SAMPLE_REASON = '[ตัวอย่าง]'
+const known = must(await call('GET', '/api/requisitions/admin/all?pageSize=100'), 'requisitions').requisitions
+if (!known.some((row) => String(row.reason ?? '').startsWith(SAMPLE_REASON))) {
+  const randomPassword = () => `Demo-${Math.random().toString(36).slice(2, 8)}-${Math.floor(Math.random() * 90 + 10)}`
+  const employeePassword = randomPassword()
+  const code = 'DEMO-E01'
+  await call('POST', '/api/admin/employees', { employeeCode: code, nameTh: 'สมชาย ตัวอย่าง', nameEn: '', positionTh: 'พนักงานผลิต', positionEn: '', departmentTh: 'ผลิต (ตัวอย่าง)', departmentEn: '' })
+  const created = await call('POST', '/api/admin/users', { name: 'สมชาย ตัวอย่าง', employeeCode: code, password: employeePassword, role: 'employee' })
+  if (created.status === 201) {
+    console.log(`sample employee login: ${created.json.user.username} / ${employeePassword}`)
+    const employee = caller()
+    must(await employee('POST', '/api/auth/login', { username: created.json.user.username, password: employeePassword, rememberMe: false }), 'employee login')
+    const all = must(await call('GET', '/api/inventory/items'), 'items').items
+    const variantOf = (sku, label = '') => { const item = all.find((row) => row.sku === sku); return { variantId: item.variants.find((v) => v.label === label)?.id ?? item.variants[0].id, type: item.type } }
+    const submit = async (lines, reason) => {
+      for (const [sku, qty, label] of lines) { const v = variantOf(sku, label); must(await employee('PUT', '/api/requisitions/cart/lines', { type: v.type, variantId: v.variantId, qty }), `cart ${sku}`) }
+      const type = variantOf(lines[0][0]).type
+      return must(await employee('POST', '/api/requisitions/checkout', { type, warehouseId: warehouse.id, reason: `${SAMPLE_REASON} ${reason}`, neededBy: '' }), 'checkout').requisition.id
+    }
+    const approve = async (id) => must(await call('POST', `/api/requisitions/${id}/approve`, {}), 'approve')
+    const issueAll = async (id) => {
+      const detail = must(await call('GET', `/api/requisitions/${id}`), 'detail').requisition
+      must(await call('POST', `/api/requisitions/${id}/issue`, { lines: detail.lines.map((line) => ({ lineId: line.id, qty: line.qtyApproved })) }), 'issue')
+    }
+    const issued = await submit([['DEMO-PPE-003', 10, 'M'], ['DEMO-PPE-001', 2]], 'เปลี่ยนอุปกรณ์เดิมที่ชำรุด')
+    await approve(issued); await issueAll(issued)
+    must(await employee('POST', `/api/requisitions/${issued}/receive`, {}), 'receive')
+    const faceShield = await submit([['DEMO-PPE-008', 3]], 'งานเชื่อมประจำสัปดาห์')
+    await approve(faceShield); await issueAll(faceShield)
+    const waiting = await submit([['DEMO-MED-001', 5]], 'เติมตู้ยาประจำไลน์ผลิต')
+    await approve(waiting)
+    await submit([['DEMO-PPE-010', 20]], 'ฝุ่นในโรงงานเพิ่มขึ้น')
+    const refused = await submit([['DEMO-PPE-006', 1, '41']], 'ขอรองเท้าคู่ใหม่')
+    must(await call('POST', `/api/requisitions/${refused}/reject`, { reason: 'เพิ่งเบิกไปเมื่อเดือนที่แล้ว' }), 'reject')
+    console.log('sample requisitions created: issued, issued, ready to issue, waiting for approval, rejected')
+  } else console.log('sample employee already exists; skipped sample requisitions')
+}
+
 console.log('done')

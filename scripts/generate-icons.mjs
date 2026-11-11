@@ -7,8 +7,8 @@ import sharp from 'sharp'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const publicDir = path.join(root, 'public')
 
-const BG = '#132e32'
-const SHIELD = '#9fe1cb'
+const BG = '#12203f'
+const SHIELD = '#a8c2fa'
 
 const glyph = `
   <path d="M256 92 380 138v116c0 82-55 146-124 176-69-30-124-94-124-176V138Z" fill="${SHIELD}"/>

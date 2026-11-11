@@ -10,6 +10,7 @@ import { iconFor } from '@/components/nav-icons'
 import { renderPage, type NavigateFn } from '@/components/app-pages'
 import type { PageKey } from '@/lib/pages'
 import { LanguageSwitch } from '@/components/language-switch'
+import { ThemeButton } from '@/components/theme-dialog'
 import { useBadges } from '@/lib/use-badges'
 
 export type ShellProps = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -26,7 +27,8 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   return (
     <div className="app-shell min-h-screen md:flex">
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
-        <div className="flex items-center justify-between gap-1"><Brand /><LanguageSwitch compact className="shrink-0 text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
+        <div className="flex items-center justify-between gap-1"><Brand /></div>
+        <div className="mt-3 flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /></div>
         <div className="mt-9 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
         <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 hide-scrollbar">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
         <ProfileBlock user={user} onLogout={handleLogout} />
@@ -48,8 +50,8 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
 
       {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-center justify-between gap-1"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
-          <div className="mt-2 flex justify-end"><LanguageSwitch compact className="text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
+          <div className="flex items-center justify-between gap-1"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
+          <div className="mt-3 flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /></div>
           <div className="mt-8 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
           <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 hide-scrollbar">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
           <ProfileBlock user={user} onLogout={handleLogout} />
@@ -70,12 +72,12 @@ function Brand() {
 function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { t } = useI18n()
   const [passwordOpen, setPasswordOpen] = useState(false)
-  return <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.05] p-3.5">
+  return <div className="mt-auto rounded-2xl border border-sidebar-muted/25 bg-sidebar-soft/60 p-3.5">
     <div className="flex items-center gap-2.5">
       <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-sidebar-soft text-xs font-semibold text-sidebar-foreground">{user.name.slice(0, 1)}</div>
       <div className="min-w-0"><p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p><p className="mt-0.5 text-xs text-sidebar-muted">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : user.role === 'storekeeper' ? 'เจ้าหน้าที่คลัง' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
-      <Button variant="ghost" size="icon" aria-label={t('เปลี่ยนรหัสผ่าน')} title={t('เปลี่ยนรหัสผ่าน')} onClick={() => setPasswordOpen(true)} className="ml-auto text-sidebar-muted hover:bg-white/10 hover:text-white"><KeyRound size={15} /></Button>
-      <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="text-sidebar-muted hover:bg-white/10 hover:text-white"><LogOut size={15} /></Button>
+      <Button variant="ghost" size="icon" aria-label={t('เปลี่ยนรหัสผ่าน')} title={t('เปลี่ยนรหัสผ่าน')} onClick={() => setPasswordOpen(true)} className="ml-auto text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground"><KeyRound size={15} /></Button>
+      <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground"><LogOut size={15} /></Button>
     </div>
     <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
   </div>

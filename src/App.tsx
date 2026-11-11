@@ -74,7 +74,7 @@ function AppContent() {
 
   if (publicRoute) return <>
     {publicRoute.type === 'assessment' ? <PublicAssessmentPage token={publicRoute.token} /> : publicRoute.type === 'training' ? <PublicTrainingPage token={publicRoute.token} /> : <PublicHiyariPage token={publicRoute.token} />}
-    <Toaster position="top-right" richColors closeButton />
+    <Toaster position="top-center" richColors closeButton />
   </>
 
   if (dailyInspectionRoute) return <>
@@ -82,7 +82,7 @@ function AppContent() {
       <div className="mx-auto mb-4 flex max-w-6xl justify-end"><LanguageSwitch /></div>
       <InspectionFormPage user={null} publicMode onCreated={() => undefined} />
     </main>
-    <Toaster position="top-right" richColors closeButton />
+    <Toaster position="top-center" richColors closeButton />
   </>
 
   if (loading) return <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">{t('กำลังเชื่อมต่อระบบ…')}</div>
@@ -90,7 +90,7 @@ function AppContent() {
   return (
     <>
       {user && page ? <AppShell user={user} page={page} onPage={navigate} onUserChange={setUser} /> : <LoginScreen onLogin={setUser} />}
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster position="top-center" richColors closeButton />
     </>
   )
 }
