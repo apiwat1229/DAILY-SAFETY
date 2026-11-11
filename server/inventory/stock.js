@@ -140,5 +140,60 @@ export function createStockService(db, opts = {}) {
     })
   }
 
-  return { transaction, receive, issueFefo, returnStock, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
+  const WRITE_OFF_REASONS = ['expired', 'damaged', 'lost', 'other']
+
+  function findLot(variantId, warehouseId, lotId) {
+    const lot = db.prepare('SELECT id, lot_no, expiry_date FROM stock_lots WHERE id = ? AND variant_id = ? AND warehouse_id = ?').get(lotId, variantId, warehouseId)
+    if (!lot) throw new StockError('NOT_FOUND', 'ไม่พบล็อตสินค้า')
+    return lot
+  }
+
+  /** Manual correction (positive or negative). Works on inactive items; a reason is mandatory. */
+  function adjust({ variantId, warehouseId, lotId, delta, reason, userId = '' }) {
+    if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0) throw new StockError('INVALID_QTY', 'จำนวนที่ปรับต้องเป็นจำนวนเต็มและไม่เป็นศูนย์')
+    const text = String(reason ?? '').trim()
+    if (!text) throw new StockError('REASON_REQUIRED', 'กรุณาระบุเหตุผล')
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(warehouseId)
+      findLot(variantId, warehouseId, lotId)
+      return { movementId: applyMovement({ type: 'adjust', variantId, warehouseId, lotId, qty: delta, reason: text, userId }) }
+    })
+  }
+
+  function writeOff({ variantId, warehouseId, lotId, qty, reason, note = '', userId = '' }) {
+    assertQty(qty)
+    if (!WRITE_OFF_REASONS.includes(reason)) throw new StockError('REASON_REQUIRED', 'กรุณาเลือกเหตุผลการตัดทิ้ง')
+    const detail = String(note || '').trim()
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(warehouseId)
+      findLot(variantId, warehouseId, lotId)
+      return { movementId: applyMovement({ type: 'write_off', variantId, warehouseId, lotId, qty: -qty, reason: detail ? `${reason}: ${detail}` : reason, userId }) }
+    })
+  }
+
+  /** Moves a lot between warehouses; only available (not reserved) stock can move. */
+  function transfer({ variantId, fromWarehouseId, toWarehouseId, lotId, qty, userId = '' }) {
+    assertQty(qty)
+    if (fromWarehouseId === toWarehouseId) throw new StockError('SAME_WAREHOUSE', 'คลังต้นทางและปลายทางต้องไม่ใช่คลังเดียวกัน')
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(fromWarehouseId)
+      assertWarehouse(toWarehouseId)
+      const lot = findLot(variantId, fromWarehouseId, lotId)
+      if (balance({ variantId, warehouseId: fromWarehouseId, lotId }).available < qty) throw new StockError('INSUFFICIENT_STOCK', 'สต็อกที่ใช้ได้ไม่เพียงพอ')
+      let target = db.prepare('SELECT id, expiry_date FROM stock_lots WHERE variant_id = ? AND warehouse_id = ? AND lot_no = ?').get(variantId, toWarehouseId, lot.lot_no)
+      if (target && target.expiry_date !== lot.expiry_date) throw new StockError('EXPIRY_MISMATCH', 'เลขล็อตนี้ในคลังปลายทางมีวันหมดอายุไม่ตรงกัน')
+      if (!target) {
+        target = { id: randomUUID() }
+        db.prepare('INSERT INTO stock_lots (id, variant_id, warehouse_id, lot_no, expiry_date, received_at) VALUES (?, ?, ?, ?, ?, ?)').run(target.id, variantId, toWarehouseId, lot.lot_no, lot.expiry_date, now())
+      }
+      const outId = applyMovement({ type: 'transfer_out', variantId, warehouseId: fromWarehouseId, lotId, qty: -qty, refType: 'warehouse', refId: toWarehouseId, userId })
+      const inId = applyMovement({ type: 'transfer_in', variantId, warehouseId: toWarehouseId, lotId: target.id, qty, refType: 'warehouse', refId: fromWarehouseId, userId })
+      return { outId, inId, toLotId: target.id }
+    })
+  }
+
+  return { transaction, receive, issueFefo, returnStock, adjust, writeOff, transfer, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
 }

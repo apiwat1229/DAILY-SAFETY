@@ -166,3 +166,82 @@ describe('FEFO issue and returns', () => {
     rejects(() => stock.returnStock({ variantId: ids.med, warehouseId: ids.w1, lotId: 'missing', qty: 1, userId: 'u2' }), 'NOT_FOUND')
   })
 })
+
+describe('adjust, write-off and transfer', () => {
+  const receive = (warehouseId = ids.w1, qty = 10) => stock.receive({ variantId: ids.med, warehouseId, qty, lotNo: 'L1', expiryDate: '2026-12-31', userId: 'u1' })
+
+  test('adjust requires a reason', () => {
+    const lot = receive()
+    for (const reason of ['', '   ', undefined]) rejects(() => stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: 1, reason, userId: 'u1' }), 'REASON_REQUIRED')
+  })
+
+  test('adjust moves stock up and down with signed ledger rows and rejects zero delta', () => {
+    const lot = receive()
+    stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: -4, reason: 'นับขาด', userId: 'u1' })
+    stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: 2, reason: 'พบเพิ่ม', userId: 'u1' })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 8)
+    assert.deepEqual(ledger().filter((row) => row.type === 'adjust').map((row) => [row.qty, row.reason]), [[-4, 'นับขาด'], [2, 'พบเพิ่ม']])
+    rejects(() => stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: 0, reason: 'x', userId: 'u1' }), 'INVALID_QTY')
+    rejects(() => stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: 1.5, reason: 'x', userId: 'u1' }), 'INVALID_QTY')
+  })
+
+  test('adjust cannot take on_hand below 0', () => {
+    const lot = receive(ids.w1, 3)
+    rejects(() => stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: -4, reason: 'x', userId: 'u1' }), 'INSUFFICIENT_STOCK')
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 3)
+  })
+
+  test('adjust works on inactive variants', () => {
+    db.exec("UPDATE item_variants SET is_active = 0 WHERE id = 'v-med'")
+    const lot = db.prepare("INSERT INTO stock_lots (id, variant_id, warehouse_id, lot_no, expiry_date, received_at) VALUES ('l-x','v-med','w1','X','2027-01-01','2026-01-01T00:00:00Z') RETURNING id").get()
+    stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.id, delta: 2, reason: 'ยกยอด', userId: 'u1' })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 2)
+  })
+
+  test('writeOff reason must be one of the four', () => {
+    const lot = receive()
+    for (const reason of ['stolen', '', undefined]) rejects(() => stock.writeOff({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, qty: 1, reason, userId: 'u1' }), 'REASON_REQUIRED')
+  })
+
+  test('writeOff reduces stock with type write_off and keeps the note', () => {
+    const lot = receive()
+    stock.writeOff({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, qty: 4, reason: 'expired', note: 'หมดอายุตามล็อต', userId: 'u1' })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 6)
+    const row = ledger().at(-1)
+    assert.equal(row.type, 'write_off')
+    assert.equal(row.qty, -4)
+    assert.equal(row.reason, 'expired: หมดอายุตามล็อต')
+    rejects(() => stock.writeOff({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, qty: 99, reason: 'lost', userId: 'u1' }), 'INSUFFICIENT_STOCK')
+  })
+
+  test('transfer moves stock and keeps lot number and expiry', () => {
+    const lot = receive(ids.w1, 10)
+    const result = stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w2, lotId: lot.lotId, qty: 4, userId: 'u1' })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 6)
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w2 }).onHand, 4)
+    const destination = db.prepare('SELECT lot_no, expiry_date FROM stock_lots WHERE id = ?').get(result.toLotId)
+    assert.deepEqual({ ...destination }, { lot_no: 'L1', expiry_date: '2026-12-31' })
+    assert.deepEqual(ledger().filter((row) => row.type.startsWith('transfer')).map((row) => [row.type, row.warehouse_id, row.qty]), [['transfer_out', 'w1', -4], ['transfer_in', 'w2', 4]])
+    stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w2, lotId: lot.lotId, qty: 1, userId: 'u1' })
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM stock_lots WHERE warehouse_id = 'w2'").get().n, 1)
+    assert.deepEqual(stock.verifyIntegrity(), { ok: true, mismatches: [] })
+  })
+
+  test('transfer to the same warehouse throws SAME_WAREHOUSE', () => {
+    const lot = receive()
+    rejects(() => stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w1, lotId: lot.lotId, qty: 1, userId: 'u1' }), 'SAME_WAREHOUSE')
+  })
+
+  test('transfer more than on hand throws and changes nothing', () => {
+    const lot = receive(ids.w1, 3)
+    rejects(() => stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w2, lotId: lot.lotId, qty: 4, userId: 'u1' }), 'INSUFFICIENT_STOCK')
+    assert.equal(ledger().length, 1)
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM stock_lots WHERE warehouse_id = 'w2'").get().n, 0)
+  })
+
+  test('transfer cannot move reserved stock', () => {
+    const lot = receive(ids.w1, 5)
+    db.exec("UPDATE stock_balances SET reserved = 4 WHERE variant_id = 'v-med'")
+    rejects(() => stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w2, lotId: lot.lotId, qty: 2, userId: 'u1' }), 'INSUFFICIENT_STOCK')
+  })
+})
