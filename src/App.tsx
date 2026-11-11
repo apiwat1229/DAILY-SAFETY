@@ -14,6 +14,7 @@ import { InspectionFormPage } from '@/pages/inspection-form-page'
 import { LanguageSwitch } from '@/components/language-switch'
 import { ConfirmProvider } from '@/components/confirm-provider'
 import { PwaStatus } from '@/components/pwa-status'
+import { useViewMode } from '@/lib/use-view-mode'
 
 function getPublicRoute(): { type: 'assessment' | 'training' | 'hiyari'; token: string } | null {
   const parts = window.location.pathname.split('/').filter(Boolean)
@@ -40,6 +41,9 @@ function AppContent() {
   const [loading, setLoading] = useState(!publicRoute && !dailyInspectionRoute)
   const [requestedPage, setRequestedPage] = useState<PageKey | null>(() => pageFromPath(window.location.pathname))
   const { t } = useI18n()
+  const { mode } = useViewMode()
+  // Mobile-only CSS hangs off this attribute, so it also applies to the login screen.
+  useEffect(() => { document.documentElement.dataset.view = mode }, [mode])
 
   useEffect(() => {
     const updateLocation = () => { setAppLocation(getAppLocation()); setRequestedPage(pageFromPath(window.location.pathname)) }
