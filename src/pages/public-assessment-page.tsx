@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { translateTo, useI18n } from '@/lib/i18n'
+import { useConfirm } from '@/components/confirm-provider'
 
 type PublicAssessment = { title: string; description: string; instructions: string; allowMultipleAttempts: boolean; questions: AssessmentQuestionPublic[] }
 type AssessmentLanguage = 'th' | 'en' | 'my'
@@ -94,6 +95,7 @@ function translatedSampleAssessment(assessment: PublicAssessment, language: Asse
 
 export function PublicAssessmentPage({ token }: { token: string }) {
   const { language: defaultLanguage } = useI18n()
+  const confirm = useConfirm()
   const [language, setLanguage] = useState<AssessmentLanguage>(() => {
     const saved = localStorage.getItem('assessment-language')
     return saved === 'th' || saved === 'en' || saved === 'my' ? saved : defaultLanguage
@@ -168,6 +170,7 @@ export function PublicAssessmentPage({ token }: { token: string }) {
     setHighlightedQuestionId('')
     setSubmitting(true)
     try {
+      if (!(await confirm('submit'))) return
       const response = await api.submitAssessment(token, { employeeName: employeeName.trim(), employeeCode: employeeCode.trim(), answers })
       setResult({ score: response.score, maxScore: response.maxScore })
       window.scrollTo({ top: 0, behavior: 'smooth' })

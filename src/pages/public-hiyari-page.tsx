@@ -10,6 +10,7 @@ import { DatePicker } from '@/components/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useConfirm } from '@/components/confirm-provider'
 
 const words: Record<HiyariLanguage, Record<string, string>> = {
   th: {
@@ -68,6 +69,7 @@ const words: Record<HiyariLanguage, Record<string, string>> = {
 type PublicForm = { title: string; description: string }
 
 export function PublicHiyariPage({ token }: { token: string }) {
+  const confirm = useConfirm()
   const [language, setLanguage] = useState<HiyariLanguage>(() => {
     const saved = localStorage.getItem('hiyari-language')
     return saved === 'en' || saved === 'my' ? saved : 'th'
@@ -172,6 +174,7 @@ export function PublicHiyariPage({ token }: { token: string }) {
     setHighlight('')
     setSubmitting(true)
     try {
+      if (!(await confirm('submit'))) return
       await api.submitHiyari(token, {
         employeeCode: employeeCode.trim(), employeeName: employeeName.trim(), language,
         reportDate, whenText: whenText.trim(), whereText: whereText.trim(), whatHappened: whatHappened.trim(),

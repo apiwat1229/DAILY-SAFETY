@@ -7,25 +7,28 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useConfirm } from '@/components/confirm-provider'
 
 export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
-  const [confirm, setConfirm] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   function close() {
-    setCurrent(''); setNext(''); setConfirm('')
+    setCurrent(''); setNext(''); setConfirmPassword('')
     onOpenChange(false)
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (next.length < 6 || next.length > 32) return toast.error(t('รหัสผ่านต้องมี 6–32 ตัวอักษร'))
-    if (next !== confirm) return toast.error(t('รหัสผ่านไม่ตรงกัน'))
+    if (next !== confirmPassword) return toast.error(t('รหัสผ่านไม่ตรงกัน'))
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       await api.changePassword(current, next)
       toast.success(t('เปลี่ยนรหัสผ่านแล้ว'))
       close()
@@ -44,7 +47,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
         <div className="grid gap-3">
           <div className="grid gap-1.5"><Label htmlFor="current-password">{t('รหัสผ่านปัจจุบัน')}</Label><Input id="current-password" type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></div>
           <div className="grid gap-1.5"><Label htmlFor="new-password">{t('รหัสผ่านใหม่')}</Label><Input id="new-password" type="password" autoComplete="new-password" minLength={6} maxLength={32} value={next} onChange={(event) => setNext(event.target.value)} required /></div>
-          <div className="grid gap-1.5"><Label htmlFor="confirm-password">{t('ยืนยันรหัสผ่านใหม่')}</Label><Input id="confirm-password" type="password" autoComplete="new-password" minLength={6} maxLength={32} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></div>
+          <div className="grid gap-1.5"><Label htmlFor="confirm-password">{t('ยืนยันรหัสผ่านใหม่')}</Label><Input id="confirm-password" type="password" autoComplete="new-password" minLength={6} maxLength={32} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></div>
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button>

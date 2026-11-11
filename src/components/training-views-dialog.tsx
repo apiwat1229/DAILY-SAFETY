@@ -62,7 +62,7 @@ export function TrainingViewsDialog({ materialId, title, onOpenChange }: Props) 
       {loading || !report ? <div className="grid min-h-40 place-items-center text-sm text-muted-foreground"><LoaderCircle className="animate-spin" /></div> : <>
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 text-sm"><span>{t('อ่านแล้ว')} {viewedCount} / {total} {t('คน')} ({percent}%)</span>
-            <Button type="button" variant="outline" className="gap-2" onClick={exportCsv}><Download size={15} />{t('ส่งออก CSV')}</Button></div>
+            <Button iconOnly type="button" variant="outline" className="gap-2" onClick={exportCsv}><Download size={15} />{t('ส่งออก CSV')}</Button></div>
           <Progress value={percent} />
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <Tabs value={tab} onValueChange={(value) => setTab(value as 'viewed' | 'notViewed')}><TabsList>

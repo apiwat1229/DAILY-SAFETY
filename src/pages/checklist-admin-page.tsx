@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useI18n } from '@/lib/i18n'
 import { ShareLinkDialog } from '@/components/share-link-dialog'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
+import { useConfirm } from '@/components/confirm-provider'
 
 type ChecklistDraft = { title: string; description: string; choices: InspectionResult[]; order: string }
 const resultChoices: InspectionResult[] = ['OK', 'NG', 'N/A']
@@ -22,6 +23,7 @@ const emptyDraft: ChecklistDraft = { title: '', description: '', choices: result
 
 export function ChecklistAdminPage() {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -55,6 +57,7 @@ export function ChecklistAdminPage() {
   async function toggleItem(item: ChecklistItem) {
     setBusyKey(item.key)
     try {
+      if (!(await confirm('update'))) return
       await api.updateChecklistItem(item.key, { isActive: !item.isActive })
       toast.success(item.isActive ? t('ปิดใช้หัวข้อตรวจแล้ว') : t('เปิดใช้หัวข้อตรวจแล้ว'))
       refresh()
@@ -66,8 +69,8 @@ export function ChecklistAdminPage() {
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><p className="text-sm font-medium text-primary">{t('การตั้งค่าแบบตรวจ')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('แบบตรวจความปลอดภัยประจำวัน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('เพิ่ม แก้ไข จัดลำดับ และปิดใช้หัวข้อตรวจ')}</p></div>
       <div className="grid gap-2 sm:flex">
-        <Button variant="outline" onClick={() => setShareOpen(true)} className="h-11 w-full gap-2 sm:w-auto"><Link2 size={16} /> {t('ลิงก์และ QR Code')}</Button>
-        <Button onClick={openCreate} className="h-11 w-full gap-2 sm:w-auto"><Plus size={17} /> {t('เพิ่มหัวข้อตรวจ')}</Button>
+        <Button iconOnly variant="outline" onClick={() => setShareOpen(true)} className="h-11 w-full gap-2 sm:w-auto"><Link2 size={16} /> {t('ลิงก์และ QR Code')}</Button>
+        <Button iconOnly onClick={openCreate} className="h-11 w-full gap-2 sm:w-auto"><Plus size={17} /> {t('เพิ่มหัวข้อตรวจ')}</Button>
       </div>
     </div>
 
@@ -85,12 +88,12 @@ export function ChecklistAdminPage() {
           <TableBody>{pagination.visibleItems.map((item) => <TableRow key={item.key} className={!item.isActive ? 'opacity-60' : ''}>
             <TableCell className="pl-5 font-medium">{item.order}</TableCell><TableCell className="min-w-48 font-semibold">{item.title}</TableCell><TableCell className="min-w-64 whitespace-normal text-muted-foreground">{item.description || '—'}</TableCell>
             <TableCell><StatusBadge isActive={Boolean(item.isActive)} /></TableCell>
-            <TableCell className="pr-5"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-9 text-muted-foreground hover:text-foreground" onClick={() => openEdit(item)} aria-label={t('แก้ไข')} title={t('แก้ไข')}><Pencil size={16} /></Button><Button variant="ghost" size="icon" className="size-9 text-muted-foreground hover:text-foreground" disabled={busyKey === item.key} onClick={() => toggleItem(item)} aria-label={t(item.isActive ? 'ปิดใช้' : 'เปิดใช้งาน')} title={t(item.isActive ? 'ปิดใช้' : 'เปิดใช้งาน')}>{busyKey === item.key ? <LoaderCircle size={16} className="animate-spin" /> : item.isActive ? <Archive size={16} /> : <ArchiveRestore size={16} />}</Button></div></TableCell>
+            <TableCell className="pr-5"><div className="flex justify-end gap-1"><Button iconOnly variant="ghost" size="icon" className="size-9 text-muted-foreground hover:text-foreground" onClick={() => openEdit(item)} aria-label={t('แก้ไข')} title={t('แก้ไข')}><Pencil size={16} /></Button><Button iconOnly variant="ghost" size="icon" className="size-9 text-muted-foreground hover:text-foreground" disabled={busyKey === item.key} onClick={() => toggleItem(item)} aria-label={t(item.isActive ? 'ปิดใช้' : 'เปิดใช้งาน')} title={t(item.isActive ? 'ปิดใช้' : 'เปิดใช้งาน')}>{busyKey === item.key ? <LoaderCircle size={16} className="animate-spin" /> : item.isActive ? <Archive size={16} /> : <ArchiveRestore size={16} />}</Button></div></TableCell>
           </TableRow>)}</TableBody>
         </Table></div>
         <div className="space-y-3 p-3 md:hidden">{pagination.visibleItems.map((item) => <Card key={item.key} className={`rounded-xl border-border ${!item.isActive ? 'opacity-70' : ''}`}><CardContent className="space-y-3 p-4">
           <div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-sm font-semibold text-primary">{item.order.toString().padStart(2, '0')}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold">{item.title}</h2><StatusBadge isActive={Boolean(item.isActive)} /></div><p className="mt-1 text-sm leading-6 text-muted-foreground">{item.description || '—'}</p></div></div>
-          <div className="grid grid-cols-2 gap-2"><Button variant="outline" className="h-11 w-full gap-1.5" onClick={() => openEdit(item)}><Pencil size={15} /> {t('แก้ไข')}</Button><Button variant="outline" className="h-11 w-full gap-1.5" disabled={busyKey === item.key} onClick={() => toggleItem(item)}>{busyKey === item.key ? <LoaderCircle size={15} className="animate-spin" /> : item.isActive ? <Archive size={15} /> : <ArchiveRestore size={15} />}{item.isActive ? t('ปิดใช้') : t('เปิดใช้งาน')}</Button></div>
+          <div className="grid grid-cols-2 gap-2"><Button iconOnly variant="outline" className="h-11 w-full gap-1.5" onClick={() => openEdit(item)}><Pencil size={15} /> {t('แก้ไข')}</Button><Button iconOnly variant="outline" className="h-11 w-full gap-1.5" disabled={busyKey === item.key} onClick={() => toggleItem(item)}>{busyKey === item.key ? <LoaderCircle size={15} className="animate-spin" /> : item.isActive ? <Archive size={15} /> : <ArchiveRestore size={15} />}{item.isActive ? t('ปิดใช้') : t('เปิดใช้งาน')}</Button></div>
         </CardContent></Card>)}</div>
         <DataTablePagination total={filteredItems.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
       </> : <CardContent className="grid min-h-48 place-items-center text-center"><div><ClipboardCheck className="mx-auto mb-3 text-primary" size={26} /><p className="text-base font-medium">{loading ? t('กำลังโหลดรายการตรวจ…') : items.length ? t('ไม่พบหัวข้อตรวจที่ตรงกับคำค้น') : t('ไม่พบหัวข้อตรวจ')}</p><p className="mt-1 text-sm text-muted-foreground">{items.length ? t('ปรับคำค้นหาแล้วลองอีกครั้ง') : t('เพิ่มหัวข้อเพื่อให้แสดงในแบบตรวจใหม่')}</p></div></CardContent>}
@@ -111,6 +114,7 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
 
 function ChecklistDialog({ open, onOpenChange, item, nextOrder, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; item: ChecklistItem | null; nextOrder: number; onSaved: () => void }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [draft, setDraft] = useState<ChecklistDraft>(emptyDraft)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -122,6 +126,7 @@ function ChecklistDialog({ open, onOpenChange, item, nextOrder, onSaved }: { ope
     if (!draft.choices.length) return toast.error(t('เลือกคำตอบอย่างน้อย 1 รายการ'))
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       const payload = { title: draft.title.trim(), description: draft.description.trim(), choices: draft.choices, order: Number(draft.order) }
       if (item) await api.updateChecklistItem(item.key, payload)
       else await api.createChecklistItem(payload)

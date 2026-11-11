@@ -16,9 +16,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/lib/i18n'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useConfirm } from '@/components/confirm-provider'
 
 export function TrainingMaterialsPage() {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [materials, setMaterials] = useState<TrainingMaterial[]>([])
   const [loading, setLoading] = useState(true)
   const [editor, setEditor] = useState<{ material: TrainingMaterial | null; key: string } | null>(null)
@@ -41,7 +43,7 @@ export function TrainingMaterialsPage() {
     body.set('description', material.description)
     body.set('isActive', String(!material.isActive))
     setBusyId(material.id)
-    try { await api.updateTrainingMaterial(material.id, body); toast.success(t(material.isActive ? 'ปิดลิงก์สื่อแล้ว' : 'เปิดลิงก์สื่อแล้ว')); refresh() }
+    try { if (!(await confirm('update'))) return; await api.updateTrainingMaterial(material.id, body); toast.success(t(material.isActive ? 'ปิดลิงก์สื่อแล้ว' : 'เปิดลิงก์สื่อแล้ว')); refresh() }
     catch (error) { toast.error(error instanceof Error ? t(error.message) : t('บันทึกไม่สำเร็จ')) }
     finally { setBusyId('') }
   }
@@ -55,7 +57,7 @@ export function TrainingMaterialsPage() {
   }
 
   return <div className="page-stack">
-    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-sm font-medium text-primary">{t('สื่อการเรียนรู้')}</p><h2 className="page-heading mt-1 font-semibold tracking-tight">{t('เอกสารและสื่ออบรม')}</h2></div><Button onClick={() => setEditor({ material: null, key: 'new' })} className="w-full gap-2 sm:w-auto"><Plus size={17} /> {t('เพิ่มสื่ออบรม')}</Button></div>
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-sm font-medium text-primary">{t('สื่อการเรียนรู้')}</p><h2 className="page-heading mt-1 font-semibold tracking-tight">{t('เอกสารและสื่ออบรม')}</h2></div><Button iconOnly onClick={() => setEditor({ material: null, key: 'new' })} className="w-full gap-2 sm:w-auto"><Plus size={17} /> {t('เพิ่มสื่ออบรม')}</Button></div>
     <Card className="overflow-hidden rounded-2xl border-border">
       {materials.length ? <>
         <div className="overflow-x-auto"><Table className="min-w-[860px]">
@@ -65,7 +67,7 @@ export function TrainingMaterialsPage() {
             <TableCell><div className="flex gap-1.5"><Badge variant="outline">{isPdf ? 'PDF' : isPptx ? 'PPTX' : t('รูปภาพ')}</Badge>{material.companionOriginalName && <Badge variant="outline" className="gap-1"><Presentation size={12} /> PPTX</Badge>}</div></TableCell>
             <TableCell className="min-w-[240px] whitespace-normal"><p>{material.description || t('ไม่มีคำอธิบาย')}</p><p className="mt-1 text-xs text-muted-foreground">{material.originalName}{material.companionOriginalName ? ' · ' + material.companionOriginalName : ''}</p></TableCell>
             <TableCell><Badge variant="outline" className={material.isActive ? 'border-success/25 bg-success/10 text-success' : 'border-info/20 bg-surface-subtle text-info'}>{t(material.isActive ? 'เปิดเผยแพร่' : 'ปิดลิงก์')}</Badge></TableCell>
-            <TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setViewsTarget(material)} aria-label={t('ผู้อ่านสื่ออบรม')} title={`${t('ผู้อ่านสื่ออบรม')} (${material.viewCount ?? 0})`}><UsersRound size={16} /></Button><Button variant="ghost" size="icon" onClick={() => setEditor({ material, key: material.id })} aria-label={t('แก้ไข')} title={t('แก้ไข')}><Pencil size={16} /></Button><Button variant="ghost" size="icon" disabled={busyId === material.id} onClick={() => toggleActive(material)} aria-label={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')} title={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')}>{busyId === material.id ? <LoaderCircle size={16} className="animate-spin" /> : material.isActive ? <EyeOff size={16} /> : <Eye size={16} />}</Button>{material.isActive && <Button variant="ghost" size="icon" onClick={() => setShare(material)} aria-label={t('ลิงก์ / QR')} title={t('ลิงก์ / QR')}><QrCode size={16} /></Button>}<Button variant="ghost" size="icon" onClick={() => setDeleteTarget(material)} aria-label={t('ลบสื่ออบรม')} title={t('ลบสื่ออบรม')} className="text-destructive hover:bg-destructive/10 hover:text-destructive"><Trash2 size={16} /></Button></div></TableCell>
+            <TableCell><div className="flex justify-end gap-1"><Button iconOnly variant="ghost" size="icon" onClick={() => setViewsTarget(material)} aria-label={t('ผู้อ่านสื่ออบรม')} title={`${t('ผู้อ่านสื่ออบรม')} (${material.viewCount ?? 0})`}><UsersRound size={16} /></Button><Button iconOnly variant="ghost" size="icon" onClick={() => setEditor({ material, key: material.id })} aria-label={t('แก้ไข')} title={t('แก้ไข')}><Pencil size={16} /></Button><Button iconOnly variant="ghost" size="icon" disabled={busyId === material.id} onClick={() => toggleActive(material)} aria-label={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')} title={t(material.isActive ? 'ปิดลิงก์' : 'เผยแพร่')}>{busyId === material.id ? <LoaderCircle size={16} className="animate-spin" /> : material.isActive ? <EyeOff size={16} /> : <Eye size={16} />}</Button>{material.isActive && <Button iconOnly variant="ghost" size="icon" onClick={() => setShare(material)} aria-label={t('ลิงก์ / QR')} title={t('ลิงก์ / QR')}><QrCode size={16} /></Button>}<Button iconOnly variant="ghost" size="icon" onClick={() => setDeleteTarget(material)} aria-label={t('ลบสื่ออบรม')} title={t('ลบสื่ออบรม')} className="text-destructive hover:bg-destructive/10 hover:text-destructive"><Trash2 size={16} /></Button></div></TableCell>
           </TableRow>})}</TableBody>
         </Table></div>
         <DataTablePagination total={materials.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
@@ -80,6 +82,7 @@ export function TrainingMaterialsPage() {
 
 function TrainingMaterialEditor({ editor, onClose, onSaved }: { editor: { material: TrainingMaterial | null } | null; onClose: () => void; onSaved: () => void }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const material = editor?.material
   const [busy, setBusy] = useState(false)
   const [fileName, setFileName] = useState('')
@@ -100,6 +103,7 @@ function TrainingMaterialEditor({ editor, onClose, onSaved }: { editor: { materi
     body.set('isActive', String(material?.isActive ?? true))
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       if (material) { await api.updateTrainingMaterial(material.id, body); toast.success(t('บันทึกสื่ออบรมแล้ว')) }
       else { await api.createTrainingMaterial(body); toast.success(t('เพิ่มสื่ออบรมแล้ว')) }
       onSaved()

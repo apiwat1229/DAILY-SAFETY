@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Search, ShieldCheck, UserCheck, UserPlus, UserRoundX, UsersRound } from 'lucide-react'
+import { Trash2, Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Search, ShieldCheck, UserCheck, UserPlus, UserRoundX, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
@@ -12,12 +12,15 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useI18n } from '@/lib/i18n'
+import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 import { AutocompleteInput } from '@/components/autocomplete-input'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import type { PublicEmployeeSuggestion } from '@/lib/types'
+import { useConfirm } from '@/components/confirm-provider'
 
 export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: User; onCurrentUserUpdate: (user: User) => void }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [users, setUsers] = useState<User[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -25,6 +28,8 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [deactivatingUser, setDeactivatingUser] = useState<User | null>(null)
   const [resetUser, setResetUser] = useState<User | null>(null)
+  const [deleteUser, setDeleteUser] = useState<User | null>(null)
+  const [deletingUser, setDeletingUser] = useState(false)
   const refresh = useCallback(() => {
     setLoading(true)
     api.users().then(({ users: result }) => setUsers(result)).catch((error) => toast.error(error.message)).finally(() => setLoading(false))
@@ -40,11 +45,24 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
 
   async function activateUser(user: User) {
     try {
+      if (!(await confirm('update'))) return
       const { user: updated } = await api.activateUser(user.id)
       toast.success(t('เปิดใช้งานบัญชีผู้ใช้แล้ว'))
       refresh()
       if (updated.id === currentUser.id) onCurrentUserUpdate(updated)
     } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
+  }
+
+  async function removeUser() {
+    if (!deleteUser) return
+    setDeletingUser(true)
+    try {
+      await api.deleteUser(deleteUser.id)
+      toast.success(t('ลบบัญชีผู้ใช้แล้ว'))
+      setDeleteUser(null)
+      refresh()
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'ลบบัญชีไม่สำเร็จ')) }
+    finally { setDeletingUser(false) }
   }
 
   function handleUserUpdated(updated: User) {
@@ -55,7 +73,7 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
   return <div className="page-stack">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><p className="text-sm font-medium text-primary">{t('สิทธิ์การใช้งาน')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('ผู้ใช้งาน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('จัดการบัญชีหัวหน้างานและผู้ดูแลระบบ')}</p></div>
-      <Button onClick={() => setCreateOpen(true)} className="gap-2 self-start sm:self-auto"><UserPlus size={16} /> {t('เพิ่มผู้ใช้งาน')}</Button>
+      <Button iconOnly onClick={() => setCreateOpen(true)} className="gap-2 self-start sm:self-auto"><UserPlus size={16} /> {t('เพิ่มผู้ใช้งาน')}</Button>
     </div>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <UserMetric label={t('บัญชีทั้งหมด')} value={users.length} icon={UsersRound} />
@@ -66,12 +84,13 @@ export function UsersPage({ currentUser, onCurrentUserUpdate }: { currentUser: U
     <Card className="overflow-hidden rounded-2xl border-border">
       <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><CardTitle className="text-sm">{t('บัญชีในระบบ')}</CardTitle><div className="relative w-full sm:max-w-sm"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหาชื่อหรือรหัสพนักงาน')} aria-label={t('ค้นหาชื่อหรือรหัสพนักงาน')} className="h-9 pl-9" /></div></CardHeader>
       {filteredUsers.length ? <><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-surface-subtle hover:bg-surface-subtle"><TableHead className="min-w-40 pl-5 text-xs">{t('ชื่อผู้ใช้งาน')}</TableHead><TableHead className="min-w-32 text-xs">{t('ชื่อบัญชี')}</TableHead><TableHead className="min-w-32 text-xs">{t('รหัสพนักงาน')}</TableHead><TableHead className="min-w-24 text-xs">{t('สิทธิ์')}</TableHead><TableHead className="min-w-28 text-xs">{t('สถานะบัญชี')}</TableHead><TableHead className="min-w-[340px] pr-5 text-right text-xs">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-      <TableBody>{pagination.visibleItems.map((user) => <TableRow key={user.id} data-inactive={!user.isActive || undefined}><TableCell className="pl-5 text-sm font-medium">{user.name}</TableCell><TableCell className="text-sm text-muted-foreground">{user.username}</TableCell><TableCell className="text-sm text-muted-foreground">{user.employeeCode}</TableCell><TableCell><Badge variant="outline" className={user.role === 'admin' ? 'border-primary/20 bg-secondary text-xs text-primary' : 'border-border bg-surface-subtle text-xs text-muted-foreground'}>{user.role === 'admin' ? 'Admin' : t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')}</Badge></TableCell><TableCell><Badge variant="outline" className={user.isActive ? 'border-success/25 bg-success/10 text-xs text-success' : 'border-info/20 bg-info/10 text-xs text-info'}>{t(user.isActive ? 'ใช้งาน' : 'ปิดใช้งานแล้ว')}</Badge></TableCell><TableCell className="pr-5"><div className="flex flex-wrap justify-end gap-1.5"><Button variant="outline" size="sm" onClick={() => setEditingUser(user)} className="h-9 gap-1.5 text-xs"><Pencil size={14} /> {t('แก้ไข')}</Button>{user.isActive && <Button variant="outline" size="sm" onClick={() => setResetUser(user)} className="h-9 gap-1.5 text-xs"><KeyRound size={14} /> {t('ตั้งรหัสผ่านใหม่')}</Button>}{user.isActive ? <Button variant="outline" size="sm" onClick={() => setDeactivatingUser(user)} className="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"><UserRoundX size={14} /> {t('ปิดใช้งาน')}</Button> : <Button variant="outline" size="sm" onClick={() => activateUser(user)} className="h-9 gap-1.5 text-xs text-success hover:text-success"><UserCheck size={14} /> {t('เปิดใช้งานบัญชี')}</Button>}</div></TableCell></TableRow>)}</TableBody>
+      <TableBody>{pagination.visibleItems.map((user) => <TableRow key={user.id} data-inactive={!user.isActive || undefined}><TableCell className="pl-5 text-sm font-medium">{user.name}</TableCell><TableCell className="text-sm text-muted-foreground">{user.username}</TableCell><TableCell className="text-sm text-muted-foreground">{user.employeeCode}</TableCell><TableCell><Badge variant="outline" className={user.role === 'admin' ? 'border-primary/20 bg-secondary text-xs text-primary' : 'border-border bg-surface-subtle text-xs text-muted-foreground'}>{user.role === 'admin' ? 'Admin' : t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')}</Badge></TableCell><TableCell><Badge variant="outline" className={user.isActive ? 'border-success/25 bg-success/10 text-xs text-success' : 'border-info/20 bg-info/10 text-xs text-info'}>{t(user.isActive ? 'ใช้งาน' : 'ปิดใช้งานแล้ว')}</Badge></TableCell><TableCell className="pr-5"><div className="flex flex-wrap justify-end gap-1.5"><Button iconOnly variant="outline" size="sm" onClick={() => setEditingUser(user)} className="h-9 gap-1.5 text-xs"><Pencil size={14} /> {t('แก้ไข')}</Button>{user.isActive && <Button iconOnly variant="outline" size="sm" onClick={() => setResetUser(user)} className="h-9 gap-1.5 text-xs"><KeyRound size={14} /> {t('ตั้งรหัสผ่านใหม่')}</Button>}{user.isActive ? <Button iconOnly variant="outline" size="sm" onClick={() => setDeactivatingUser(user)} className="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"><UserRoundX size={14} /> {t('ปิดใช้งาน')}</Button> : <Button iconOnly variant="outline" size="sm" onClick={() => activateUser(user)} className="h-9 gap-1.5 text-xs text-success hover:text-success"><UserCheck size={14} /> {t('เปิดใช้งานบัญชี')}</Button>}{user.id !== currentUser.id && <Button iconOnly variant="outline" size="sm" onClick={() => setDeleteUser(user)} className="h-9 gap-1.5 text-xs text-destructive hover:text-destructive"><Trash2 size={14} /> {t('ลบบัญชี')}</Button>}</div></TableCell></TableRow>)}</TableBody>
       </Table></div><DataTablePagination total={filteredUsers.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} /> </> : <CardContent className="grid min-h-48 place-items-center text-center"><div><p className="text-sm font-medium">{loading ? t('กำลังโหลดบัญชี…') : users.length ? t('ไม่พบผู้ใช้งานที่ตรงกับคำค้น') : t('ไม่พบผู้ใช้งาน')}</p><p className="mt-1 text-xs text-muted-foreground">{users.length ? t('ปรับคำค้นหาแล้วลองอีกครั้ง') : t('เพิ่มบัญชีเพื่อเริ่มให้หัวหน้างานใช้งานระบบ')}</p></div></CardContent>}
     </Card>
     <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={refresh} />
     <EditUserDialog user={editingUser} onOpenChange={(open) => !open && setEditingUser(null)} onUpdated={handleUserUpdated} />
     <DeactivateUserDialog user={deactivatingUser} onOpenChange={(open) => !open && setDeactivatingUser(null)} onDeactivated={refresh} />
+    <ConfirmActionDialog open={Boolean(deleteUser)} onOpenChange={(open) => { if (!open && !deletingUser) setDeleteUser(null) }} title={t('ลบบัญชีผู้ใช้ถาวร')} description={deleteUser ? `${deleteUser.name} (${deleteUser.username}) · ${t('การลบไม่สามารถย้อนกลับได้ ถ้าบัญชีมีประวัติการใช้งานจะลบไม่ได้ ให้ปิดใช้งานแทน')}` : ''} confirmLabel={t('ลบบัญชี')} cancelLabel={t('ยกเลิก')} pending={deletingUser} onConfirm={removeUser} />
     <ResetPasswordDialog user={resetUser} onOpenChange={(open) => !open && setResetUser(null)} />
   </div>
 }
@@ -82,6 +101,7 @@ function UserMetric({ label, value, icon: Icon }: { label: string; value: number
 
 function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
   const { language, t } = useI18n()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [role, setRole] = useState<User['role']>('leader')
   const [newName, setNewName] = useState('')
@@ -121,6 +141,7 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     if (password !== confirmPassword) return toast.error(t('รหัสผ่านไม่ตรงกัน'))
     setBusy(true)
     try {
+      if (!(await confirm('create'))) return
       await api.createUser({
         username: String(form.get('username') || ''),
         name: String(form.get('name') || ''),
@@ -165,6 +186,7 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
 
 function EditUserDialog({ user, onOpenChange, onUpdated }: { user: User | null; onOpenChange: (open: boolean) => void; onUpdated: (user: User) => void }) {
   const { language, t } = useI18n()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [role, setRole] = useState<User['role']>('leader')
   const [username, setUsername] = useState('')
@@ -186,6 +208,7 @@ function EditUserDialog({ user, onOpenChange, onUpdated }: { user: User | null; 
     if (!user) return
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       const { user: updated } = await api.updateUser(user.id, { username, name, employeeCode, role })
       toast.success(t('แก้ไขบัญชีผู้ใช้แล้ว'))
       onUpdated(updated)
@@ -230,6 +253,7 @@ function DeactivateUserDialog({ user, onOpenChange, onDeactivated }: { user: Use
 
 function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpenChange: (open: boolean) => void }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -245,6 +269,7 @@ function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpen
     if (password !== confirmPassword) return toast.error(t('รหัสผ่านไม่ตรงกัน'))
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       await api.resetPassword(user.id, password)
       toast.success(`${t('ตั้งรหัสผ่านใหม่ให้')} ${user.name} ${t('แล้ว')}`)
       setPassword('')
@@ -262,5 +287,5 @@ function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpen
 function PasswordInput({ id, label, value, onChange, placeholder, invalid = false }: { id: string; label: string; value: string; onChange: (value: string) => void; placeholder: string; invalid?: boolean }) {
   const { t } = useI18n()
   const [visible, setVisible] = useState(false)
-  return <div className="grid gap-1.5"><Label htmlFor={id}>{label}</Label><div className="relative"><Input id={id} type={visible ? 'text' : 'password'} minLength={6} maxLength={32} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" required placeholder={placeholder} aria-invalid={invalid || undefined} className="pr-11" /><Button type="button" variant="ghost" size="icon" aria-label={t(visible ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')} onClick={() => setVisible((current) => !current)} className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent">{visible ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
+  return <div className="grid gap-1.5"><Label htmlFor={id}>{label}</Label><div className="relative"><Input id={id} type={visible ? 'text' : 'password'} minLength={6} maxLength={32} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" required placeholder={placeholder} aria-invalid={invalid || undefined} className="pr-11" /><Button iconOnly type="button" variant="ghost" size="icon" aria-label={t(visible ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน')} onClick={() => setVisible((current) => !current)} className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent">{visible ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
 }

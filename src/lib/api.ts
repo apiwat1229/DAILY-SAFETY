@@ -63,6 +63,7 @@ export const api = {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   }),
   deactivateUser: (id: string) => request<{ user: User }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteUser: (id: string) => request<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' }),
   activateUser: (id: string) => request<{ user: User }>(`/api/admin/users/${encodeURIComponent(id)}/status`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive: true }),
   }),

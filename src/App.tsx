@@ -10,6 +10,7 @@ import { PublicTrainingPage } from '@/pages/public-training-page'
 import { PublicHiyariPage } from '@/pages/public-hiyari-page'
 import { InspectionFormPage } from '@/pages/inspection-form-page'
 import { LanguageSwitch } from '@/components/language-switch'
+import { ConfirmProvider } from '@/components/confirm-provider'
 
 function getPublicRoute(): { type: 'assessment' | 'training' | 'hiyari'; token: string } | null {
   const parts = window.location.pathname.split('/').filter(Boolean)
@@ -26,7 +27,7 @@ function getAppLocation() {
 }
 
 function App() {
-  return <LanguageProvider><AppContent /></LanguageProvider>
+  return <LanguageProvider><ConfirmProvider><AppContent /></ConfirmProvider></LanguageProvider>
 }
 
 function AppContent() {

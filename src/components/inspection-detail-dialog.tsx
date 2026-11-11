@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog'
 import { EditResultDialog } from '@/components/edit-result-dialog'
 import { inspectionPrintMarkup, openPrintWindow } from '@/lib/print-documents'
+import { useConfirm } from '@/components/confirm-provider'
 
 type Props = { id: string | null; user: User; onOpenChange: (open: boolean) => void; onUpdated?: () => void; startInEditMode?: boolean }
 
@@ -95,7 +96,7 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated, star
   return <Dialog open={Boolean(id)} onOpenChange={onOpenChange}>
     <DialogContent className="grid max-h-[92dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0 sm:max-w-5xl">
       <DialogHeader className="border-b border-border-subtle px-5 py-5 pr-12 sm:px-7 sm:pr-14">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><div className="grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Camera size={18} /></div><div><DialogTitle className="text-base">{t('รายละเอียดการตรวจ')}</DialogTitle><DialogDescription className="mt-1 text-xs">{t('ดูผลตรวจ หลักฐาน และความคืบหน้าการแก้ไข')}</DialogDescription></div></div>{inspection && <div className="flex flex-wrap justify-end gap-1"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" aria-label={t('ดาวน์โหลด PDF')} onClick={() => printReport('pdf')}><FileDown size={14} />PDF</Button><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" aria-label={t('พิมพ์')} onClick={() => printReport('print')}><Printer size={14} />{t('พิมพ์')}</Button>{user.role === 'admin' && <><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditOpen(true)}><Pencil size={14} />{t('แก้ไข')}</Button><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 size={14} />{t('ลบ')}</Button></>}</div>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><div className="grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Camera size={18} /></div><div><DialogTitle className="text-base">{t('รายละเอียดการตรวจ')}</DialogTitle><DialogDescription className="mt-1 text-xs">{t('ดูผลตรวจ หลักฐาน และความคืบหน้าการแก้ไข')}</DialogDescription></div></div>{inspection && <div className="flex flex-wrap justify-end gap-1"><Button iconOnly type="button" variant="outline" size="sm" className="h-9 gap-1.5" aria-label={t('ดาวน์โหลด PDF')} onClick={() => printReport('pdf')}><FileDown size={14} />PDF</Button><Button iconOnly type="button" variant="outline" size="sm" className="h-9 gap-1.5" aria-label={t('พิมพ์')} onClick={() => printReport('print')}><Printer size={14} />{t('พิมพ์')}</Button>{user.role === 'admin' && <><Button iconOnly type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditOpen(true)}><Pencil size={14} />{t('แก้ไข')}</Button><Button iconOnly type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 size={14} />{t('ลบ')}</Button></>}</div>}</div>
       </DialogHeader>
       {loading || !inspection ? <div className="grid min-h-48 place-items-center text-sm text-muted-foreground"><span className="inline-flex items-center gap-2"><LoaderCircle className="animate-spin" size={16} /> {t('กำลังโหลดรายละเอียด…')}</span></div> : <div className="min-h-0 space-y-5 overflow-y-auto px-4 py-5 sm:px-7">
         <div className="grid gap-3 rounded-xl bg-surface-subtle p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -124,6 +125,7 @@ export function InspectionDetailDialog({ id, user, onOpenChange, onUpdated, star
 
 function EditInspectionDialog({ inspection, open, onOpenChange, onSaved }: { inspection: Inspection; open: boolean; onOpenChange: (open: boolean) => void; onSaved: (inspection: Inspection) => void }) {
   const { language, t } = useI18n()
+  const confirm = useConfirm()
   const [date, setDate] = useState(inspection.date)
   const [time, setTime] = useState(inspection.time)
   const [inspector, setInspector] = useState(inspection.inspector)
@@ -142,6 +144,7 @@ function EditInspectionDialog({ inspection, open, onOpenChange, onSaved }: { ins
     event.preventDefault()
     setSaving(true)
     try {
+      if (!(await confirm('update'))) return
       const { inspection: updated } = await api.updateInspection(inspection.id, { date, time, inspector: inspector.trim(), employeeCode: employeeCode.trim(), area: area.trim(), shift: shift.trim() })
       toast.success(t('บันทึกการแก้ไขแล้ว'))
       onSaved(updated)
@@ -177,7 +180,7 @@ function ResponseCard({ item, canManage, manageLabel, onManage, canEditResult, o
     {isNg && <div className="ml-10 mt-3 space-y-3 border-l-2 border-destructive/20 pl-3">
       <p className="text-xs leading-5 text-foreground">{item.issueDetails}</p>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={12} /> {item.responsible}</span>{item.dueDate && <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {t('กำหนด')} {formatDate(item.dueDate, language)}</span>}{item.resolutionNote && <span className="inline-flex items-center gap-1"><Check size={12} /> {item.resolutionNote}</span>}</div>
-      <div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="outline" className={statusClass}>{t(item.followUpStatus)}</Badge>{canManage && <Button variant="outline" size="sm" onClick={onManage} className="h-9 gap-1.5 text-xs"><ChevronRight size={15} /> {t(manageLabel)}</Button>}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="outline" className={statusClass}>{t(item.followUpStatus)}</Badge>{canManage && <Button iconOnly variant="outline" size="sm" onClick={onManage} className="h-9 gap-1.5 text-xs"><ChevronRight size={15} /> {t(manageLabel)}</Button>}</div>
       {item.photos.length > 0 && <div className="flex flex-wrap gap-2">{item.photos.map((photo) => <button key={photo.id} type="button" onClick={() => onPhotoClick(photo)} aria-label={`${t('เปิดรูปขนาดใหญ่')}: ${photo.name}`} className="group relative block size-20 overflow-hidden rounded-lg border bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:size-24"><img src={photo.url} alt={photo.name} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" /><span className="absolute inset-x-0 bottom-0 bg-black/65 px-1 py-1 text-center text-xs font-medium text-white">{t(photo.type === 'before' ? 'ก่อนแก้ไข' : 'หลังแก้ไข')}</span></button>)}</div>}
     </div>}
   </Card>
@@ -201,7 +204,7 @@ function PhotoPreviewDialog({ photo, onOpenChange, onDelete }: { photo: Inspecti
     <DialogContent className="max-h-[94dvh] w-[calc(100vw-1rem)] max-w-[calc(100%-1rem)] gap-3 overflow-hidden p-3 sm:w-[calc(100vw-2rem)] sm:max-w-6xl sm:p-5">
       <DialogHeader className="flex flex-row items-center justify-between gap-2 pr-10">
         <div className="min-w-0"><DialogTitle className="truncate text-base">{photo ? t(photo.type === 'before' ? 'ก่อนแก้ไข' : 'หลังแก้ไข') : t('รูปภาพ')}</DialogTitle><DialogDescription className="truncate text-sm">{photo?.name}</DialogDescription></div>
-        <div className="flex shrink-0 items-center gap-1">{onDelete && <Button type="button" variant="destructive" size="icon" aria-label={t('ลบรูปภาพ')} title={t('ลบรูปภาพ')} onClick={onDelete}><Trash2 size={17} /></Button>}<Button type="button" variant="outline" size="icon" aria-label={t('ย่อรูป')} onClick={() => changeZoom(-0.25)} disabled={zoom <= 1}><ZoomOut size={17} /></Button><span className="min-w-12 text-center text-xs font-medium tabular-nums">{Math.round(zoom * 100)}%</span><Button type="button" variant="outline" size="icon" aria-label={t('ขยายรูป')} onClick={() => changeZoom(0.25)} disabled={zoom >= 5}><ZoomIn size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t('ขนาดพอดี')} onClick={resetZoom}><RotateCcw size={16} /></Button></div>
+        <div className="flex shrink-0 items-center gap-1">{onDelete && <Button type="button" variant="destructive" size="icon" aria-label={t('ลบรูปภาพ')} title={t('ลบรูปภาพ')} onClick={onDelete}><Trash2 size={17} /></Button>}<Button iconOnly type="button" variant="outline" size="icon" aria-label={t('ย่อรูป')} onClick={() => changeZoom(-0.25)} disabled={zoom <= 1}><ZoomOut size={17} /></Button><span className="min-w-12 text-center text-xs font-medium tabular-nums">{Math.round(zoom * 100)}%</span><Button iconOnly type="button" variant="outline" size="icon" aria-label={t('ขยายรูป')} onClick={() => changeZoom(0.25)} disabled={zoom >= 5}><ZoomIn size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t('ขนาดพอดี')} onClick={resetZoom}><RotateCcw size={16} /></Button></div>
       </DialogHeader>
       <div className="flex h-[calc(88dvh-5rem)] min-h-[40dvh] touch-none items-center justify-center overflow-auto rounded-lg bg-[#101719] p-2 sm:h-[calc(90dvh-6rem)] sm:p-4" onPointerDown={(event) => { if (zoom > 1) { dragRef.current = { x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y }; event.currentTarget.setPointerCapture(event.pointerId) } }} onPointerMove={(event) => { if (!dragRef.current) return; setOffset({ x: dragRef.current.offsetX + event.clientX - dragRef.current.x, y: dragRef.current.offsetY + event.clientY - dragRef.current.y }) }} onPointerUp={() => { dragRef.current = null }} onPointerCancel={() => { dragRef.current = null }}>
         {photo && <img src={photo.url} alt={photo.name} draggable={false} className={`max-h-full max-w-full select-none object-contain ${zoom > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: 'center' }} onDoubleClick={() => zoom === 1 ? setZoom(2) : resetZoom()} />}
@@ -212,6 +215,7 @@ function PhotoPreviewDialog({ photo, onOpenChange, onDelete }: { photo: Inspecti
 
 function IssueUpdateDialog({ item, user, onOpenChange, onSaved }: { item: InspectionResponse | null; user: User; onOpenChange: (open: boolean) => void; onSaved: (inspection: Inspection) => void }) {
   const { language, t } = useI18n()
+  const confirm = useConfirm()
   const [status, setStatus] = useState('ยังไม่แก้ไข')
   const [responsibleUserId, setResponsibleUserId] = useState('')
   const [assignees, setAssignees] = useState<Assignee[]>([])
@@ -246,6 +250,7 @@ function IssueUpdateDialog({ item, user, onOpenChange, onSaved }: { item: Inspec
     files.forEach((file) => body.append('photos', file))
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       const { inspection } = await api.updateResponse(item.id, body)
       toast.success(t(status === 'แก้ไขแล้ว' ? 'ปิดรายการแก้ไขแล้ว' : 'บันทึกความคืบหน้าแล้ว'))
       onSaved(inspection)

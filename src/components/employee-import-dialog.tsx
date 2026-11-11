@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useConfirm } from '@/components/confirm-provider'
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onImported: () => void }
 
 export function EmployeeImportDialog({ open, onOpenChange, onImported }: Props) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [thai, setThai] = useState<File | null>(null)
   const [english, setEnglish] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
@@ -26,6 +28,7 @@ export function EmployeeImportDialog({ open, onOpenChange, onImported }: Props) 
     if (english) body.set('english', english)
     setBusy(true)
     try {
+      if (!(await confirm('create'))) return
       const result = await api.importEmployees(body)
       toast.success(`${t('นำเข้าสำเร็จ')} ${result.imported} ${t('คน')} (${t('เพิ่มใหม่')} ${result.created}, ${t('อัปเดต')} ${result.updated})`)
       onImported()

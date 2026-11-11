@@ -3121,6 +3121,32 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   addAudit(req.session.user.id, 'ปิดใช้งานบัญชีผู้ใช้', 'user', existing.id, { username: existing.username })
   res.json({ user: safeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id)) })
 })
+// Permanently delete an account. Only allowed when nothing in the system references it; otherwise deactivate instead.
+app.delete('/api/admin/users/:id/permanent', requireAdmin, (req, res) => {
+  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'ไม่พบบัญชีผู้ใช้' })
+  if (existing.id === req.session.user.id) return res.status(400).json({ error: 'ไม่สามารถลบบัญชีที่กำลังใช้งานอยู่' })
+  if (existing.role === 'admin' && existing.is_active && db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = 1").get().count <= 1) {
+    return res.status(400).json({ error: 'ต้องมีผู้ดูแลระบบที่เปิดใช้งานอย่างน้อย 1 บัญชี' })
+  }
+  const count = (sql) => db.prepare(sql).get(existing.id).count
+  const references = {
+    inspections: count('SELECT COUNT(*) AS count FROM inspections WHERE inspector_id = ?'),
+    followUps: count("SELECT COUNT(*) AS count FROM responses WHERE responsible_user_id = ? AND result = 'NG'"),
+    photos: count('SELECT COUNT(*) AS count FROM attachments WHERE uploaded_by = ?'),
+    auditEntries: count('SELECT COUNT(*) AS count FROM audit_log WHERE user_id = ?'),
+    assessments: count('SELECT COUNT(*) AS count FROM assessments WHERE created_by = ?'),
+    trainingMaterials: count('SELECT COUNT(*) AS count FROM training_materials WHERE created_by = ?'),
+    hiyariForms: count('SELECT COUNT(*) AS count FROM hiyari_forms WHERE created_by = ?'),
+  }
+  const referenced = Object.values(references).reduce((sum, value) => sum + value, 0)
+  if (referenced > 0) {
+    return res.status(409).json({ error: `ลบบัญชีนี้ไม่ได้ เพราะมีข้อมูลที่อ้างอิงอยู่ ${referenced} รายการ กรุณาปิดใช้งานบัญชีแทน`, references })
+  }
+  db.prepare('DELETE FROM users WHERE id = ?').run(existing.id)
+  addAudit(req.session.user.id, 'ลบบัญชีผู้ใช้', 'user', existing.id, { username: existing.username, employeeCode: existing.employee_code, role: existing.role })
+  res.json({ ok: true })
+})
 app.patch('/api/admin/users/:id/status', requireAdmin, (req, res) => {
   const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ error: 'ไม่พบบัญชีผู้ใช้' })

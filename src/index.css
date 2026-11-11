@@ -162,6 +162,12 @@
   --app-sidebar-width: 17.5rem;
   --page-section-gap: .75rem;
   --control-height: 2.5rem;
+
+  /* Modal / dialog theme: one look for every dialog, alert dialog and sheet. */
+  --modal-radius: 1.25rem;
+  --modal-overlay: rgb(19 46 50 / .5);
+  --modal-shadow: 0 28px 70px -18px rgb(19 46 50 / .45), 0 8px 24px -12px rgb(19 46 50 / .25);
+  --modal-accent: linear-gradient(90deg, var(--primary), #3aa595);
   --control-radius: var(--radius);
   --control-padding-x: .875rem;
 
@@ -180,6 +186,10 @@
   --sidebar-foreground: #f7fbfa;
 }
 
+@layer base {
+  /* Tailwind v4 defaults borders to currentColor (black); keep every border on the theme color. */
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--border); }
+}
 * { box-sizing: border-box; }
 html { min-width: 320px; background: var(--background); }
 body {
@@ -302,3 +312,24 @@ label { line-height: var(--type-line-label); }
   .app-main-frame { padding-block: .75rem 1.5rem; }
   [data-sonner-toast] { min-height: 64px !important; padding: 15px 18px !important; }
 }
+
+/* Modal chrome shared by Dialog, AlertDialog and Sheet. */
+[data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="sheet-overlay"] {
+  background: var(--modal-overlay) !important;
+  backdrop-filter: blur(4px);
+}
+[data-slot="dialog-content"], [data-slot="alert-dialog-content"] {
+  border-radius: var(--modal-radius);
+  box-shadow: var(--modal-shadow);
+}
+[data-slot="dialog-content"]::before, [data-slot="alert-dialog-content"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--modal-accent);
+  border-radius: var(--modal-radius) var(--modal-radius) 0 0;
+  pointer-events: none;
+}
+[data-slot="dialog-title"], [data-slot="alert-dialog-title"] { font-weight: 600; letter-spacing: -.01em; }
+[data-slot="dialog-description"], [data-slot="alert-dialog-description"] { color: var(--muted-foreground); }

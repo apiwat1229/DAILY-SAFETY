@@ -14,6 +14,7 @@ import { AutocompleteInput } from '@/components/autocomplete-input'
 import { EmployeeCombobox } from '@/components/employee-combobox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/lib/i18n'
+import { useConfirm } from '@/components/confirm-provider'
 
 type Result = ChecklistItem['choices'][number] | ''
 type DraftResponse = { result: Result; issueDetails: string; responsible: string; responsibleUserId: string; responsibleEmployeeCode: string; beforeFiles: File[] }
@@ -99,6 +100,7 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
   const [submittedPublicly, setSubmittedPublicly] = useState(false)
   const [invalidTarget, setInvalidTarget] = useState<string | null>(null)
   const { language, t } = useI18n()
+  const confirm = useConfirm()
   const selectedEmployee = employeeSuggestions.find((employee) => employee.employeeCode.toLocaleUpperCase() === selectedEmployeeCode.toLocaleUpperCase())
   const searchPublicEmployees = useCallback(async (query: string, currentLanguage: 'th' | 'en') => {
     const { employees } = await api.publicEmployeeSuggestions(query, currentLanguage)
@@ -231,6 +233,7 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
     body.set('photoMetadata', JSON.stringify(photoMetadata))
     setBusy(true)
     try {
+      if (!(await confirm('submit'))) return
       if (publicMode) await api.createPublicInspection(body)
       else await api.createInspection(body)
       toast.success(t('บันทึกแบบตรวจเรียบร้อยแล้ว'))

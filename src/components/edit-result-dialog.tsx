@@ -10,12 +10,14 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/date-picker'
+import { useConfirm } from '@/components/confirm-provider'
 
 type Props = { item: InspectionResponse | null; onOpenChange: (open: boolean) => void; onSaved: (inspection: Inspection) => void }
 
 /** Admin correction of one checklist result (OK / NG / N/A) including NG details, assignee, due date and "before" photos. */
 export function EditResultDialog({ item, onOpenChange, onSaved }: Props) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [result, setResult] = useState('OK')
   const [issueDetails, setIssueDetails] = useState('')
   const [responsibleUserId, setResponsibleUserId] = useState('')
@@ -51,6 +53,7 @@ export function EditResultDialog({ item, onOpenChange, onSaved }: Props) {
     }
     setBusy(true)
     try {
+      if (!(await confirm('update'))) return
       const { inspection } = await api.updateResponseResult(item.id, body)
       toast.success(t('แก้ไขผลตรวจแล้ว'))
       onSaved(inspection)

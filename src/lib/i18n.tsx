@@ -70,6 +70,8 @@ Object.assign(english, {
   'ยืนยันรหัสผ่านใหม่': 'Confirm new password',
   'เปลี่ยนรหัสผ่านแล้ว': 'Password changed',
   'ภาพรวมทีม': 'Team overview',
+  'ลบบัญชี': 'Delete account', 'ลบบัญชีผู้ใช้ถาวร': 'Delete account permanently', 'ลบบัญชีผู้ใช้แล้ว': 'Account deleted',
+  'การลบไม่สามารถย้อนกลับได้ ถ้าบัญชีมีประวัติการใช้งานจะลบไม่ได้ ให้ปิดใช้งานแทน': 'This cannot be undone. Accounts with activity history cannot be deleted; deactivate them instead.',
   'ผู้อ่านสื่ออบรม': 'Training readers', 'อ่านแล้ว': 'Read', 'ยังไม่อ่าน': 'Not read yet', 'คน': 'people', 'ส่งออก CSV': 'Export CSV',
   'อ่านเมื่อ': 'Read at', 'ไม่พบข้อมูล': 'No data found', 'แผนก': 'Department',
   'สร้างลิงก์ใหม่': 'Generate new link', 'สร้างลิงก์ใหม่หรือไม่': 'Generate a new link?',
