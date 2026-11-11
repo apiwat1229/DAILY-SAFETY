@@ -3256,9 +3256,18 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
 
 const inventory = registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir })
 const requisitions = registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir, stock: inventory.stock })
+// Ledger vs balances check, once per Bangkok day; the admin sees the latest result in the reports page.
+function runNightlyIntegrity() {
+  const bangkokDay = (value) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(value)
+  const last = requisitions.reports.lastIntegrity()
+  if (last && bangkokDay(new Date(last.at)) === bangkokDay(new Date())) return
+  const result = requisitions.reports.runIntegrityCheck()
+  if (!result.ok) console.error(`stock integrity check found ${result.mismatchCount} mismatched balance(s)`)
+}
+setTimeout(() => { try { runNightlyIntegrity() } catch (error) { console.error('integrity check failed', error) } }, 30_000).unref()
 // Stale approved requisitions expire and overdue approval steps escalate; checked hourly.
 setInterval(() => {
-  try { requisitions.service.expireStale(); requisitions.service.escalateOverdue() } catch (error) { console.error('requisition maintenance failed', error) }
+  try { requisitions.service.expireStale(); requisitions.service.escalateOverdue(); runNightlyIntegrity() } catch (error) { console.error('requisition maintenance failed', error) }
 }, 60 * 60 * 1000).unref()
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' }))

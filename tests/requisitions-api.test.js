@@ -529,3 +529,80 @@ describe('issue history API', () => {
     assert.equal((await fetch(`${baseUrl}/api/requisitions/issue-history`)).status, 401)
   })
 })
+
+const rp = (client, url) => client.call('GET', `/api/reports${url}`)
+
+/** Submit, approve and issue everything on one fresh scene. */
+async function issuedScene(qty = 5) {
+  const s = await scene()
+  const created = await submit(s, qty)
+  assert.equal((await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})).status, 200)
+  const lineId = (await rq(s.keeper.client, 'GET', '/issue-queue')).json.requisitions.find((row) => row.id === created.id).lines[0].id
+  assert.equal((await rq(s.keeper.client, 'POST', `/${created.id}/issue`, { lines: [{ lineId, qty }] })).status, 200)
+  return { ...s, created }
+}
+
+describe('reports API', () => {
+  test('anonymous is 401', async () => {
+    for (const url of ['/usage', '/cycle-time', '/usage.xlsx', '/options', '/integrity']) assert.equal((await fetch(`${baseUrl}/api/reports${url}`)).status, 401, url)
+  })
+
+  test('scope: admin sees everything, leader their department, employee only themselves, storekeeper their warehouses', async () => {
+    const s = await issuedScene(5)
+    const other = await issuedScene(3)
+    const total = (client, extra = '') => rp(client, `/usage?groupBy=item${extra}`).then((r) => r.json.totals.issued)
+    const adminTotal = await total(s.adminClient)
+    assert.ok(adminTotal >= 8)
+    assert.equal(await total(s.employee.client), 5)
+    assert.equal(await total(other.employee.client), 3)
+    assert.equal(await total(s.keeper.client), 5)
+    // Asking for another warehouse or person never widens the view.
+    assert.equal(await total(s.keeper.client, `&warehouseId=${other.warehouse.id}`), 0)
+    assert.equal(await total(s.employee.client, `&requesterId=${other.employee.userId}`), 5)
+    // The seeded leader has no directory department, so their view is limited to their own requests: none here.
+    assert.equal(await total(s.leaderClient), 0)
+  })
+
+  test('admin lists every department; employees get no department list', async () => {
+    const s = await issuedScene(4)
+    const adminDept = (await rp(s.adminClient, `/usage?groupBy=department`)).json.rows.map((row) => row.label)
+    assert.ok(adminDept.includes(s.department))
+    const asEmployee = await rp(s.employee.client, '/options')
+    assert.equal(asEmployee.json.departments.length, 0)
+  })
+
+  test('validation: bad dates and groupings are 400', async () => {
+    const adminClient = await admin()
+    assert.equal((await rp(adminClient, '/usage?from=2026-13-01&to=2026-12-01&groupBy=item')).status, 400)
+    assert.equal((await rp(adminClient, '/usage?groupBy=colour')).status, 400)
+    assert.equal((await rp(adminClient, '/cycle-time?from=2026-12-01&to=2026-01-01')).status, 400)
+  })
+
+  test('cycle time counts the issued request', async () => {
+    const s = await issuedScene(2)
+    const result = (await rp(s.employee.client, '/cycle-time')).json
+    assert.equal(result.total, 1)
+    assert.equal(result.byStatus.issued, 1)
+  })
+
+  test('the Excel export downloads a workbook and is audited', async () => {
+    const s = await issuedScene(2)
+    const response = await fetch(`${baseUrl}/api/reports/usage.xlsx?groupBy=item`, { headers: { cookie: s.adminClient.cookie } })
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type'), /spreadsheetml/)
+    assert.match(response.headers.get('content-disposition'), /usage-.*\.xlsx/)
+    assert.ok((await response.arrayBuffer()).byteLength > 1000)
+  })
+
+  test('integrity: only admin; a run stores the latest result', async () => {
+    const adminClient = await admin()
+    assert.equal((await rp(await leader(), '/integrity')).status, 403)
+    const employee = await makeUser('employee')
+    assert.equal((await rp(employee.client, '/integrity')).status, 403)
+    assert.equal((await employee.client.call('POST', '/api/reports/integrity/run')).status, 403)
+    const run = await adminClient.call('POST', '/api/reports/integrity/run')
+    assert.equal(run.status, 200)
+    assert.equal(run.json.last.ok, true)
+    assert.equal((await rp(adminClient, '/integrity')).json.last.ok, true)
+  })
+})

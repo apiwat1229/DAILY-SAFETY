@@ -4,6 +4,7 @@ import path from 'node:path'
 import { ImageError, removeImage, saveImage } from '../inventory/images.js'
 import { WorkflowError, createWorkflowService } from './workflow.js'
 import { RequisitionError, createRequisitionService } from './service.js'
+import { registerReportRoutes } from './report-routes.js'
 
 const FORBIDDEN = 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้'
 const STATUS = { INVALID: 400, NOT_FOUND: 404, FORBIDDEN: 403, BAD_STATE: 409, IN_USE: 409, SHORTAGE: 409 }
@@ -257,5 +258,6 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
   }))
 
   app.use('/api/requisitions', reqRouter)
-  return { workflow, service, handle, requireManagerRole }
+  const { reports } = registerReportRoutes(app, { db, requireAuth, requireAdmin, addAudit, stock, service })
+  return { workflow, service, reports, handle, requireManagerRole }
 }
