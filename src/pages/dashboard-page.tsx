@@ -5,6 +5,7 @@ import { api, formatDate, localDateString, formatDateWithTime } from '@/lib/api'
 import type { DashboardCategorySummary, DashboardData, User } from '@/lib/types'
 import type { PageKey } from '@/lib/pages'
 import { SupervisorReportCard } from '@/components/supervisor-report-card'
+import { DashboardStockAlerts } from '@/components/inventory/stock-alerts-card'
 import { InspectionDetailDialog } from '@/components/inspection-detail-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -131,6 +132,7 @@ export function DashboardPage({ user, onPage }: Props) {
       </div>
 
       <SupervisorReportCard refreshKey={refreshKey} />
+      {user.role === 'admin' && <DashboardStockAlerts onOpen={() => onPage('inventory-stock')} />}
 
       <Card className="rounded-2xl border-border">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
