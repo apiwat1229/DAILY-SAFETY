@@ -127,6 +127,8 @@ Object.assign(english, {
   'ใช้ยอดระบบทั้งหมด': 'Use all system quantities', 'ไม่พบรายการที่ตรงกับเงื่อนไข': 'No items match the filters', 'ไม่พบรายการเคลื่อนไหวสต็อก': 'No stock movements found',
   'ไม่พบสินค้าที่ตรงกับคำค้น': 'No items match your search', 'ไม่มีล็อต': 'No lot', 'ไม่มีล็อตที่มีสต็อก': 'No lot has stock',
   'ไม่มีล็อตให้ดำเนินการ': 'No lot to act on', 'ไม่ระบุหมวด': 'No category',
+  'เพิ่มเติม': 'More', 'บันทึกตรวจ': 'Record', 'ติดตามงาน': 'Follow-ups', 'ประวัติ': 'History', 'ใช้มุมมองเดสก์ท็อป': 'Use desktop view', 'มุมมองมือถือ': 'Mobile view',
+  'การตรวจ': 'Inspections', 'การตรวจและอบรม': 'Inspections and training', 'ข้อมูลระบบ': 'System data',
   'เจ้าหน้าที่คลัง': 'Storekeeper', 'สต็อกคงเหลือ': 'Stock on hand', 'สินค้าและหมวด': 'Items & categories', 'คลังสินค้า': 'Warehouses', 'นับสต็อก': 'Stock count', 'ประวัติสต็อก': 'Stock movements',
   'สินค้า': 'Item', 'หมวดสินค้า': 'Category', 'สต็อกสินค้า': 'Stock', 'ใบนับสต็อก': 'Count sheet', 'ตั้งค่าคลังสินค้า': 'Warehouse settings',
   'กลับเป็นวันนี้': 'Back to today', 'ข้อมูลของวันนี้': 'Data for today', 'ข้อมูลช่วง': 'Data for', 'อัตราการรายงาน': 'Reporting rate', 'จำนวนที่ส่ง': 'Submitted',

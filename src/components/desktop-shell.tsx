@@ -1,16 +1,14 @@
 import { useState } from 'react'
 import { Activity, KeyRound, LogOut, Menu, ShieldCheck, X } from 'lucide-react'
-import { toast } from 'sonner'
-import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { useI18n } from '@/lib/i18n'
 import { navFor } from '@/lib/nav-model'
+import { signOut } from '@/lib/sign-out'
 import { iconFor } from '@/components/nav-icons'
 import { renderPage, type NavigateFn } from '@/components/app-pages'
 import type { PageKey } from '@/lib/pages'
-import { clearPersistentState } from '@/lib/persistent-state'
 import { LanguageSwitch } from '@/components/language-switch'
 
 export type ShellProps = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -21,13 +19,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   const navItems = navFor(user.role).all.map((entry) => ({ key: entry.key, label: t(entry.label), icon: iconFor(entry.icon) }))
   const primaryKeys: PageKey[] = user.role === 'storekeeper' ? ['inventory-stock', 'inventory-counts', 'new'] : ['dashboard', 'inspections', 'new']
   const primaryItems = navItems.filter((item) => primaryKeys.includes(item.key))
-  async function handleLogout() {
-    try { await api.logout() } catch { /* session may already have expired */ }
-    navigator.serviceWorker?.controller?.postMessage('clear-data')
-    clearPersistentState()
-    onUserChange(null)
-    toast.success(t('ออกจากระบบแล้ว'))
-  }
+  const handleLogout = () => signOut(onUserChange, t('ออกจากระบบแล้ว'))
 
   return (
     <div className="app-shell min-h-screen md:flex">

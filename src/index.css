@@ -395,3 +395,44 @@ body { overscroll-behavior-y: none; }
    so labels and inputs line up across columns. */
 [data-slot="dialog-body"] .grid, form .grid { align-content: start; }
 form.grid[class*="grid-cols"], form .grid[class*="grid-cols"] { align-items: start; }
+
+/* Mobile mode: shell chrome (data-view="mobile" is set on <html>, see use-view-mode.ts). */
+.mobile-shell { min-height: 100dvh; }
+.mobile-topbar {
+  position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  min-height: calc(3rem + env(safe-area-inset-top)); padding: env(safe-area-inset-top) .5rem 0 1rem;
+  background: color-mix(in srgb, var(--background) 92%, transparent); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mobile-topbar h1 { font-size: 1.0625rem; font-weight: 600; letter-spacing: -.01em; }
+.mobile-content { padding-bottom: calc(5.75rem + env(safe-area-inset-bottom)); overscroll-behavior-y: contain; }
+.mobile-tabbar {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: 40; display: grid; align-items: end;
+  padding-bottom: env(safe-area-inset-bottom); background: var(--card); border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 20px rgb(19 46 50 / .06);
+}
+.mobile-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .15rem;
+  min-width: 0; min-height: 3.5rem; padding: .35rem .15rem .4rem; color: var(--muted-foreground);
+  font-size: .6875rem; line-height: 1.15; background: transparent; border: 0; -webkit-tap-highlight-color: transparent;
+}
+.mobile-tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-tab[data-active="true"] { color: var(--primary); font-weight: 600; }
+.mobile-tab:active { background: var(--muted); }
+.mobile-tab-center, .mobile-tab-center:active { background: transparent; }
+.mobile-tab-fab {
+  display: grid; place-items: center; width: 3.25rem; height: 3.25rem; margin-top: -1.5rem; border-radius: 9999px;
+  background: var(--primary); color: var(--primary-foreground); border: 3px solid var(--card);
+  box-shadow: 0 6px 16px rgb(15 110 86 / .35); transition: transform .12s ease;
+}
+.mobile-tab-center:active .mobile-tab-fab { transform: scale(.94); }
+.mobile-more-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; min-height: 4.75rem; padding: .6rem .25rem;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--primary);
+  font-size: .75rem; line-height: 1.2; text-align: center; -webkit-tap-highlight-color: transparent;
+}
+.mobile-more-item span { color: var(--foreground); }
+.mobile-more-item[data-active="true"] { background: var(--secondary); border-color: var(--primary); }
+.mobile-more-item:active { background: var(--muted); }
+/* Hide the tab bar while typing so the on-screen keyboard never leaves it floating over the field. */
+body:has(input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):focus, textarea:focus) .mobile-tabbar { display: none; }
