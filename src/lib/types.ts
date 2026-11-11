@@ -240,3 +240,18 @@ export type InspectionSuggestions = {
   employeeCodes: string[]
   responsibles: string[]
 }
+
+export type AuditEntry = {
+  id: string
+  action: string
+  targetType: string
+  targetId: string
+  details: Record<string, unknown>
+  createdAt: string
+  userId: string
+  userName: string
+  username: string
+}
+
+export type AuditLogResponse = { total: number; targetTypes: string[]; entries: AuditEntry[] }
+export type AuditLogFilters = { q?: string; targetType?: string; from?: string; to?: string; limit?: number; offset?: number }

@@ -22,7 +22,7 @@ import { ADDITIONAL_ASSESSMENTS } from './assessment-seeds.js'
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(root, '..')
-const dataDir = path.join(appRoot, 'data')
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(appRoot, 'data')
 const uploadDir = path.join(dataDir, 'uploads')
 const trainingUploadDir = path.join(uploadDir, 'training')
 const hiyariUploadDir = path.join(uploadDir, 'hiyari')
@@ -666,6 +666,17 @@ function isValidEmployee(employee) {
     && employee.departmentTh.length <= 160 && employee.departmentEn.length <= 160
 }
 
+function employeeReferenceCounts(code) {
+  const count = (sql) => db.prepare(sql).get(code).count
+  return {
+    inspections: count("SELECT COUNT(*) AS count FROM inspections WHERE UPPER(TRIM(employee_code)) = ?"),
+    users: count("SELECT COUNT(*) AS count FROM users WHERE UPPER(TRIM(employee_code)) = ?"),
+    assessmentSubmissions: count("SELECT COUNT(*) AS count FROM assessment_submissions WHERE UPPER(TRIM(employee_code)) = ?"),
+    hiyariSubmissions: count("SELECT COUNT(*) AS count FROM hiyari_submissions WHERE UPPER(TRIM(employee_code)) = ?"),
+    trainingViews: count("SELECT COUNT(*) AS count FROM training_views WHERE UPPER(TRIM(employee_code)) = ?"),
+  }
+}
+
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบก่อน' })
   const user = db.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').get(req.session.user.id)
@@ -1147,6 +1158,61 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ user: req.session.user })
   })
 })
+app.post('/api/auth/password', requireAuth, async (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || '')
+  const newPassword = String(req.body?.newPassword || '')
+  const row = db.prepare('SELECT id, username, password_hash FROM users WHERE id = ?').get(req.session.user.id)
+  if (!row || !(await bcrypt.compare(currentPassword, row.password_hash))) {
+    return res.status(400).json({ error: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' })
+  }
+  if (newPassword.length < 6 || newPassword.length > 32) return res.status(400).json({ error: 'รหัสผ่านต้องมี 6–32 ตัวอักษร' })
+  if (newPassword === currentPassword) return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องแตกต่างจากรหัสผ่านเดิม' })
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(newPassword, 10), row.id)
+  addAudit(row.id, 'เปลี่ยนรหัสผ่านของตนเอง', 'user', row.id, { username: row.username })
+  res.json({ ok: true })
+})
+
+app.get('/api/admin/audit-log', requireAdmin, (req, res) => {
+  const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit || '50'), 10) || 50, 1), 200)
+  const offset = Math.max(Number.parseInt(String(req.query.offset || '0'), 10) || 0, 0)
+  const where = []
+  const params = []
+  const text = String(req.query.q || '').trim().slice(0, 100)
+  if (text) {
+    const like = `%${text.replace(/[!%_]/g, '!$&')}%`
+    where.push("(a.action LIKE ? ESCAPE '!' OR a.target_id LIKE ? ESCAPE '!' OR a.details LIKE ? ESCAPE '!' OR u.display_name LIKE ? ESCAPE '!' OR u.username LIKE ? ESCAPE '!')")
+    params.push(like, like, like, like, like)
+  }
+  const targetType = String(req.query.targetType || '').trim()
+  if (targetType) { where.push('a.target_type = ?'); params.push(targetType) }
+  const from = String(req.query.from || '')
+  const to = String(req.query.to || '')
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push('a.created_at >= ?'); params.push(`${from}T00:00:00+07:00`) }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to)) { where.push('a.created_at <= ?'); params.push(`${to}T23:59:59.999+07:00`) }
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const base = `FROM audit_log a LEFT JOIN users u ON u.id = a.user_id ${clause}`
+  const total = db.prepare(`SELECT COUNT(*) AS count ${base}`).get(...params).count
+  const rows = db.prepare(`SELECT a.id, a.action, a.target_type, a.target_id, a.details, a.created_at,
+      a.user_id, COALESCE(u.display_name, '') AS user_name, COALESCE(u.username, '') AS username
+    ${base} ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?`).all(...params, limit, offset)
+  const targetTypes = db.prepare('SELECT DISTINCT target_type FROM audit_log ORDER BY target_type').all().map((row) => row.target_type)
+  res.json({
+    total,
+    targetTypes,
+    entries: rows.map((row) => ({
+      id: row.id,
+      action: row.action,
+      targetType: row.target_type,
+      targetId: row.target_id,
+      details: parseJson(row.details, {}),
+      createdAt: row.created_at,
+      userId: row.user_id,
+      userName: row.user_name,
+      username: row.username,
+    })),
+  })
+})
+
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('daily-safety.sid', { httpOnly: true, sameSite: 'lax', secure: isProduction })
@@ -2628,6 +2694,14 @@ app.delete('/api/admin/employees/:code', requireAdmin, (req, res) => {
   const code = String(req.params.code || '').toUpperCase()
   const existing = db.prepare('SELECT * FROM employee_directory WHERE employee_code = ?').get(code)
   if (!existing) return res.status(404).json({ error: 'ไม่พบข้อมูลพนักงาน' })
+  const references = employeeReferenceCounts(code)
+  const referenced = Object.values(references).reduce((sum, count) => sum + count, 0)
+  if (referenced > 0) {
+    return res.status(409).json({
+      error: `ไม่สามารถลบได้ เพราะรหัสพนักงานนี้ถูกใช้งานอยู่ในระบบ ${referenced} รายการ`,
+      references,
+    })
+  }
   db.prepare('DELETE FROM employee_directory WHERE employee_code = ?').run(code)
   addAudit(req.session.user.id, 'ลบข้อมูลพนักงาน', 'employee', code, { nameTh: existing.name_th, nameEn: existing.name_en })
   res.json({ ok: true })

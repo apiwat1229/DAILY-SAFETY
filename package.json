@@ -9,7 +9,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "backup": "node server/backup.js",
+    "test": "node --test tests/"
   },
   "engines": {
     "node": ">=24.0.0"

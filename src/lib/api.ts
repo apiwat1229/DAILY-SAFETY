@@ -1,4 +1,4 @@
-import type { Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
+import type { AuditLogFilters, AuditLogResponse, Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
@@ -15,6 +15,15 @@ export const api = {
   login: (username: string, password: string, rememberMe: boolean) => request<{ user: User }>('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, rememberMe }),
   }),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ ok: boolean }>('/api/auth/password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }),
+  }),
+  auditLog: (filters: AuditLogFilters = {}) => {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== '') query.set(key, String(value))
+    const qs = query.toString()
+    return request<AuditLogResponse>(`/api/admin/audit-log${qs ? `?${qs}` : ''}`)
+  },
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   dashboard: (filters?: Partial<Filters> & { categoryResult?: 'NG' | 'N/A' }) => request<DashboardData>(`/api/dashboard${toQuery(filters)}`),
   dashboardCategory: (category: string, from: string, to: string, result: 'NG' | 'N/A') => {

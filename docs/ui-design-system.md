@@ -68,6 +68,19 @@ Use semantic utility classes backed by variables in `src/index.css`:
 
 Use status colors consistently: green for completed or accepted work, amber for pending attention, red for rejected or failed work, and slate for neutral or unavailable information. Do not use color alone to communicate status; keep a label or icon alongside it.
 
+## Theme settings for component size and text
+
+All interactive components read their size and text from tokens in `:root` of `src/index.css`. Change a token once and every screen follows; do not size controls with page-level `h-*` or `text-*` classes (they are neutralised by the `[data-slot=...]` rules; add `.control-free` only for a deliberate exception).
+
+| Token | Desktop | Mobile | Applies to |
+| --- | ---: | ---: | --- |
+| `--control-height` | 2.5rem | 2.75rem | Buttons, inputs, selects, date/time pickers, result choices, icon buttons (square) |
+| `--control-radius` | 10px | 10px | Buttons, inputs, selects, textareas |
+| `--type-size-control` | 15px | 16px | Text in buttons, inputs, selects, tabs, sidebar links |
+| `--type-size-label` | 15px | 16px | Form labels |
+| `--type-size-table` | 15px | 16px | Table headers and cells |
+| `--type-size-badge` / `--badge-height` | 13px / 1.5rem | same | Badges |
+
 ## Responsive behavior
 
 Use Tailwind's standard `sm`, `md`, and `lg` breakpoints. Keep form actions reachable on narrow screens, allow data tables to scroll horizontally when columns cannot be collapsed, and provide a card layout when the same content is more usable as a list on mobile.

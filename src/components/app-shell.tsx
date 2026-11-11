@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, BookOpenText, ClipboardCheck, ClipboardPenLine, ContactRound, FileBarChart2, FileSpreadsheet, ListChecks, LogOut, Menu, Plus, ShieldCheck, UserRoundCog, X } from 'lucide-react'
+import { Activity, BookOpenText, History, KeyRound, ClipboardCheck, ClipboardPenLine, ContactRound, FileBarChart2, FileSpreadsheet, ListChecks, LogOut, Menu, Plus, ShieldCheck, UserRoundCog, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
@@ -15,10 +15,12 @@ import { AssessmentReportsPage } from '@/pages/assessment-reports-page'
 import { TrainingMaterialsPage } from '@/pages/training-materials-page'
 import { HiyariPage } from '@/pages/hiyari-page'
 import { HiyariReportsPage } from '@/pages/hiyari-reports-page'
+import { AuditLogPage } from '@/pages/audit-log-page'
+import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { useI18n } from '@/lib/i18n'
 import { LanguageSwitch } from '@/components/language-switch'
 
-export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials' | 'hiyari' | 'hiyari-reports'
+export type PageKey = 'dashboard' | 'inspections' | 'new' | 'users' | 'employees' | 'checklist' | 'assessments' | 'assessment-reports' | 'training-materials' | 'hiyari' | 'hiyari-reports' | 'audit-log'
 type Props = { user: User; page: PageKey; onPage: (page: PageKey) => void; onUserChange: (user: User | null) => void }
 
 export function AppShell({ user, page, onPage, onUserChange }: Props) {
@@ -37,6 +39,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
         { key: 'training-materials' as const, label: t('สื่ออบรม'), icon: BookOpenText },
         { key: 'hiyari' as const, label: t('Hiyari Hat'), icon: ClipboardPenLine },
         { key: 'hiyari-reports' as const, label: t('รายงาน Hiyari Hat'), icon: FileSpreadsheet },
+        { key: 'audit-log' as const, label: t('บันทึกการใช้งาน'), icon: History },
       ]
     : [
         { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
@@ -73,6 +76,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           {page === 'training-materials' && user.role === 'admin' ? <TrainingMaterialsPage /> : null}
           {page === 'hiyari' && user.role === 'admin' ? <HiyariPage /> : null}
           {page === 'hiyari-reports' && user.role === 'admin' ? <HiyariReportsPage /> : null}
+          {page === 'audit-log' && user.role === 'admin' ? <AuditLogPage /> : null}
         </main>
       </div>
 
@@ -93,18 +97,21 @@ function Brand() {
   const { t } = useI18n()
   return <div className="flex min-w-0 items-center gap-2.5">
     <div className="grid size-10 place-items-center rounded-lg bg-secondary text-primary"><ShieldCheck size={21} /></div>
-    <p className="min-w-0 whitespace-nowrap text-[11px] text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p>
+    <p className="min-w-0 whitespace-nowrap text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p>
   </div>
 }
 
 function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { t } = useI18n()
+  const [passwordOpen, setPasswordOpen] = useState(false)
   return <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.05] p-3.5">
     <div className="flex items-center gap-2.5">
       <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-sidebar-soft text-xs font-semibold text-sidebar-foreground">{user.name.slice(0, 1)}</div>
       <div className="min-w-0"><p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p><p className="mt-0.5 text-xs text-sidebar-muted">{user.role === 'admin' ? t('ผู้ดูแลระบบ') : `${t(user.role === 'leader' ? 'หัวหน้างาน' : 'พนักงาน')} · ${user.employeeCode}`}</p></div>
-      <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="ml-auto text-sidebar-muted hover:bg-white/10 hover:text-white"><LogOut size={15} /></Button>
+      <Button variant="ghost" size="icon" aria-label={t('เปลี่ยนรหัสผ่าน')} title={t('เปลี่ยนรหัสผ่าน')} onClick={() => setPasswordOpen(true)} className="ml-auto text-sidebar-muted hover:bg-white/10 hover:text-white"><KeyRound size={15} /></Button>
+      <Button variant="ghost" size="icon" aria-label={t('ออกจากระบบ')} onClick={onLogout} className="text-sidebar-muted hover:bg-white/10 hover:text-white"><LogOut size={15} /></Button>
     </div>
+    <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
   </div>
 }
 

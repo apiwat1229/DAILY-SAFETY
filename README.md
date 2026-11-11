@@ -67,6 +67,15 @@ node server/import-employees.js "C:\path\to\employees-th.xlsx" "C:\path\to\emplo
 
 สคริปต์จะเพิ่มหรือปรับปรุงข้อมูลในฐานข้อมูลของแอป โดยไม่ลบค่าภาษาที่มีอยู่เมื่อช่องจากไฟล์ใดไฟล์หนึ่งว่าง
 
+## สำรองข้อมูลและทดสอบ
+
+```sh
+pnpm backup        # สำรองฐานข้อมูล + รูปแนบไปที่ data/backups/ (เก็บ 14 ชุดล่าสุด)
+pnpm test          # ทดสอบ API: สิทธิ์, เปลี่ยนรหัสผ่าน, Audit log, ปิดงาน NG, กันลบพนักงาน, backup
+```
+
+กู้คืน: หยุดแอป คัดลอก `daily-safety.sqlite` และโฟลเดอร์ `uploads/` จากชุดสำรองกลับไปที่ `data/` แล้วเริ่มแอปใหม่ ตั้งเวลาสำรองอัตโนมัติด้วย cron/Task Scheduler เรียก `pnpm backup` (ใน Docker: `docker compose exec daily-safety node server/backup.js`)
+
 ## Deploy ด้วย Docker
 
 ```sh

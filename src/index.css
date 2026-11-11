@@ -161,7 +161,17 @@
   --app-content-gutter: clamp(1rem, 2.5vw, 2.5rem);
   --app-sidebar-width: 17.5rem;
   --page-section-gap: .75rem;
-  --control-height: 2.25rem;
+  --control-height: 2.5rem;
+  --control-radius: var(--radius);
+  --control-padding-x: .875rem;
+
+  /* Component text roles. Every button, field, tab, table cell, label and badge reads from these. */
+  --type-size-control: .9375rem;
+  --type-line-control: 1.4;
+  --type-size-label: .9375rem;
+  --type-size-table: .9375rem;
+  --type-size-badge: .8125rem;
+  --badge-height: 1.5rem;
 
   --sidebar: #132e32;
   --sidebar-soft: #1a3b3e;
@@ -183,15 +193,35 @@ body {
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 
-[data-slot="button"] { min-height: var(--control-height) !important; }
-[data-slot="button"][data-size^="icon"] {
+/* Control sizing: one height, one radius and one text size for every interactive control.
+   Page-level h-9/h-10/h-11/h-12 overrides are neutralised here. Opt out with .control-free. */
+[data-slot="button"]:not(.side-link, .result-choice, .control-free, [data-variant="link"]),
+[data-slot="input"]:not(.control-free),
+[data-slot="select-trigger"]:not(.control-free) {
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  font-size: var(--type-size-control) !important;
+  line-height: var(--type-line-control) !important;
+}
+[data-slot="button"]:not(.side-link, .result-choice, .control-free, [data-variant="link"]) { border-radius: var(--control-radius); }
+[data-slot="button"][data-size^="icon"]:not(.side-link, .control-free) {
   width: var(--control-height) !important;
   min-width: var(--control-height) !important;
   padding-inline: 0 !important;
 }
-[data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] {
-  min-height: var(--control-height);
-  border-radius: var(--radius);
+[data-slot="input"], [data-slot="select-trigger"] { border-radius: var(--control-radius); }
+[data-slot="textarea"] {
+  min-height: calc(var(--control-height) * 2.5);
+  border-radius: var(--control-radius);
+  font-size: var(--type-size-control) !important;
+  line-height: var(--type-line-control) !important;
+}
+[data-slot="tabs-trigger"] { font-size: var(--type-size-control) !important; }
+[data-slot="label"], label { font-size: var(--type-size-label); }
+[data-slot="table-head"], [data-slot="table-cell"] { font-size: var(--type-size-table) !important; }
+[data-slot="badge"] {
+  height: var(--badge-height) !important;
+  font-size: var(--type-size-badge) !important;
 }
 label { line-height: var(--type-line-label); }
 ::selection { background: #d5ece6; color: #143b36; }
@@ -212,7 +242,7 @@ label { line-height: var(--type-line-label); }
 .section-heading { font-size: var(--type-size-section-heading) !important; line-height: var(--type-line-section-heading) !important; }
 .subsection-heading { font-size: var(--type-size-subsection-heading) !important; line-height: var(--type-line-subsection-heading) !important; }
 .sidebar { background: var(--sidebar); color: var(--sidebar-foreground); }
-.side-link { color: var(--sidebar-muted); transition: background .18s ease, color .18s ease; }
+.side-link { font-size: var(--type-size-control) !important; line-height: var(--type-line-control) !important; color: var(--sidebar-muted); transition: background .18s ease, color .18s ease; }
 .side-link:hover, .side-link[data-active="true"] { background: var(--sidebar-soft); color: #fff; }
 .metric-card { box-shadow: 0 6px 20px rgba(26, 53, 57, .035); }
 .soft-grid { background-image: radial-gradient(rgba(21, 90, 81, .09) 1px, transparent 1px); background-size: 18px 18px; }
@@ -227,6 +257,8 @@ label { line-height: var(--type-line-label); }
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.result-choice { height: var(--control-height) !important; min-height: var(--control-height) !important; font-size: var(--type-size-control) !important; }
+[data-slot="button"][data-variant="link"] { font-size: var(--type-size-control) !important; }
 .result-choice[data-selected="true"][data-result="OK"] {
   background-color: var(--success) !important;
   border-color: var(--success) !important;
@@ -254,7 +286,10 @@ label { line-height: var(--type-line-label); }
 @media (max-width: 767px) {
   :root {
     --page-section-gap: .625rem;
-    --control-height: 2.5rem;
+    --control-height: 2.75rem;
+    --type-size-control: 1rem;
+    --type-size-label: 1rem;
+    --type-size-table: 1rem;
     --type-size-xs: .875rem;
     --type-line-xs: 1.45rem;
     --type-size-page-heading: 1.5rem;
@@ -265,9 +300,5 @@ label { line-height: var(--type-line-label); }
     --type-size-toast-description: 1rem;
   }
   .app-main-frame { padding-block: .75rem 1.5rem; }
-  [data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] {
-    min-height: 2.75rem;
-    font-size: var(--type-size-base) !important;
-  }
   [data-sonner-toast] { min-height: 64px !important; padding: 15px 18px !important; }
 }
