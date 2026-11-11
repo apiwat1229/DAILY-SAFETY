@@ -160,3 +160,39 @@ Every transition writes a `requisition_events` row and runs in `stock.transactio
 - [ ] **Step 1: Run** `npx tsc -b`, `npx oxlint` (no new errors), `npx vite build`, `node --test tests/` → all pass.
 - [ ] **Step 2: Verify in the browser:** all four roles at 375px and desktop: bars and badges, no horizontal scroll on the six new pages at 360px, the full happy path end to end, a rejected and a returned path.
 - [ ] **Step 3:** Fix anything found; commit `fix(requisitions): verification fixes` if needed.
+
+---
+
+## Addendum (added during execution): images and staged testing
+
+New requirement from the owner: stock and requisitions must show and accept uploaded photos, and each stage must be built and tested before the next.
+
+**Staged testing rule:** every task ends with `node --test tests/` green (and `npx tsc -b` for client tasks) before its commit; server tasks add API tests for permissions and failure paths; client tasks are verified in the browser (desktop and 375px) before commit; a short smoke run of the full suite happens after Tasks 1B, 5B, 6B and 11.
+
+### Task 1B: Item images (server)
+
+**Files:** Create `server/inventory/images.js`; Modify `server/inventory/routes.js`, `server/index.js` (create `uploads/inventory` and `uploads/requisitions`, pass `uploadDir`), Test `tests/inventory-api.test.js`.
+
+**Interfaces:** `saveImage(buffer: Buffer, dir: string): Promise<{ stored: string; thumb: string }>` — validates with sharp (JPEG/PNG/WebP only, ≤ 8 MB, ≤ 40 MP), auto-rotates, writes `<uuid>.jpg` (max 1280px) and `<uuid>.thumb.jpg` (max 320px); `removeImage(dir, stored): Promise<void>` removes both, ignoring missing files. `items.image` stores `stored`. Item DTO gains `imageUrl: string | null` (`/api/inventory/items/:id/image?v=<stored>`). Endpoints: `POST /api/inventory/items/:id/image` (admin, multipart field `image`, replaces and deletes the old files, audited), `DELETE /api/inventory/items/:id/image` (admin), `GET /api/inventory/items/:id/image?size=thumb|full` (any logged-in user, `Cache-Control: private, max-age=86400`, `X-Content-Type-Options: nosniff`, 404 when none). Deleting an item removes its files.
+
+- [ ] **Step 1: Failing API tests:** `admin uploads an item image and imageUrl appears`; `employee can fetch the image, thumb is smaller than full`; `anonymous gets 401`; `storekeeper and employee cannot upload (403)`; `non-image and oversize files are 400`; `replacing removes the old files`; `deleting the image or the item removes files and returns 404 afterwards`.
+- [ ] **Step 2–4:** run, implement, run `node --test tests/`. **Step 5: Commit** `feat(inventory): item images`.
+
+### Task 5B: Requisition photos (server)
+
+**Files:** Modify `server/requisitions/schema.js` (table `requisition_photos(id, requisition_id, stored_name, thumb_name, original_name, uploaded_by, uploaded_at)`), `service.js`, `routes.js`; Test `tests/requisitions-api.test.js`.
+
+**Interfaces:** `addPhoto({ id, userId, buffer, originalName }): { photoId }` (requester or admin; only while `in_approval` or `returned_for_edit`; max 6 per requisition), `removePhoto({ id, photoId, userId })`; detail gains `photos: { id, originalName, url, thumbUrl }[]`. Endpoints: `POST /api/requisitions/:id/photos` (multipart `photos`, up to 6), `GET /api/requisitions/photos/:photoId?size=thumb|full` (same access rule as the requisition), `DELETE /api/requisitions/:id/photos/:photoId`. Cancelling or force-cancelling keeps photos (audit trail).
+
+- [ ] **Step 1: Failing API tests:** `requester uploads photos and they appear on the detail`; `stranger gets 403 on upload and on fetch`; `approver and storekeeper of the warehouse can view`; `seventh photo is refused`; `uploads after approval are refused`; `non-image is 400`; `requester can delete own photo while editable`.
+- [ ] **Step 2–4:** run, implement, run. **Step 5: Commit** `feat(requisitions): requisition photos`.
+
+### Task 6B: Images in the inventory UI
+
+**Files:** Modify `src/lib/inventory-types.ts`, `src/lib/inventory-api.ts`, `src/components/inventory/item-dialog.tsx` (upload/replace/remove with preview, camera capture on phones via `accept="image/*" capture="environment"`), `src/pages/inventory-items-page.tsx` (thumbnail column), `src/pages/inventory-stock-page.tsx` (thumbnail beside the item name, click opens a larger preview), new `src/components/image-viewer.tsx` (shared lightbox) and `item-thumb.tsx` (thumbnail with placeholder icon). Item and `StockRow` types gain `imageUrl`; the stock endpoint returns it.
+
+- [ ] **Step 1:** implement (add `imageUrl` to `GET /stock` rows with an API test `stock rows carry the item image url`). **Step 2: Run** `node --test tests/`, `npx tsc -b`, `npx vite build`. **Step 3: Verify in the browser:** upload a photo on an item, see thumbnails in the items list and stock list, open the preview, remove it. **Step 4: Commit** `feat(inventory): item images in the UI`.
+
+### Image display and upload inside Tasks 7–10
+
+Task 7 cards and cart lines show the item thumbnail; the checkout dialog accepts up to 6 photos (uploaded right after the requisition is created); Task 8 detail shows line thumbnails and a photo gallery with add/remove while editable; Task 9 approval detail shows the same gallery read-only; Task 10 pick list shows line thumbnails.
