@@ -36,10 +36,25 @@ export function InventoryStockPage({ user }: { user: User }) {
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [action, setAction] = useState<Action>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [warehousesLoaded, setWarehousesLoaded] = useState(false)
+  const [wantReceive, setWantReceive] = useState(false)
+
+  // The mobile "Receive" action opens this page with ?action=receive; consume the query so a reload does not reopen the dialog.
+  useEffect(() => {
+    const check = () => {
+      if (new URLSearchParams(window.location.search).get('action') !== 'receive') return
+      window.history.replaceState(null, '', window.location.pathname)
+      setWantReceive(true)
+    }
+    check()
+    window.addEventListener('ds:navigate', check)
+    return () => window.removeEventListener('ds:navigate', check)
+  }, [])
 
   useEffect(() => {
     inventoryApi.warehouses().then(({ warehouses: list }) => {
       setWarehouses(list)
+      setWarehousesLoaded(true)
       setWarehouseId((current) => (current !== ALL && !list.some((warehouse) => warehouse.id === current) ? ALL : current))
     }).catch((error) => toast.error(t(error instanceof Error ? error.message : 'โหลดคลังไม่สำเร็จ')))
   }, [t, setWarehouseId])
@@ -61,6 +76,12 @@ export function InventoryStockPage({ user }: { user: User }) {
 
   const pagination = useDataPagination(rows)
   const activeWarehouses = warehouses.filter((warehouse) => warehouse.isActive)
+  useEffect(() => {
+    if (!wantReceive || !warehousesLoaded) return
+    setWantReceive(false)
+    if (activeWarehouses.length > 0) setReceiveOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantReceive, warehousesLoaded, warehouses])
   const warnDays = alerts?.expiryWarnDays ?? [30, 60, 90]
   const toggleFilter = (kind: 'low' | 'expiring') => setFilter((current) => (current === kind ? '' : kind))
   const done = () => { setAction(null); setReceiveOpen(false); setReloadKey((key) => key + 1) }

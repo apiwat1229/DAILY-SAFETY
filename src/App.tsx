@@ -67,6 +67,8 @@ function AppContent() {
   const navigate = useCallback((next: PageKey, query = '') => {
     window.history.pushState(null, '', `${pagePath(next)}${query}`)
     setRequestedPage(next)
+    // Pages already mounted (e.g. Stock receiving a ?action=receive shortcut) cannot see pushState, so tell them.
+    window.dispatchEvent(new Event('ds:navigate'))
     window.scrollTo({ top: 0 })
   }, [])
 

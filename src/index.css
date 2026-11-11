@@ -436,3 +436,9 @@ form.grid[class*="grid-cols"], form .grid[class*="grid-cols"] { align-items: sta
 .mobile-more-item:active { background: var(--muted); }
 /* Hide the tab bar while typing so the on-screen keyboard never leaves it floating over the field. */
 body:has(input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):focus, textarea:focus) .mobile-tabbar { display: none; }
+
+/* Mobile mode: touch polish. */
+[data-view="mobile"] .inspection-action-bar { bottom: calc(3.5rem + env(safe-area-inset-bottom)); padding-bottom: .75rem; }
+body:has(input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):focus, textarea:focus) .inspection-action-bar { bottom: 0; }
+[data-view="mobile"] table[data-stack] td[data-actions] [data-slot="button"] { min-width: 2.75rem; min-height: 2.75rem; }
+[data-view="mobile"] input, [data-view="mobile"] textarea { scroll-margin-block: 5rem 9rem; }
