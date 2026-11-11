@@ -112,5 +112,92 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
   }))
 
   app.use('/api/workflow', wfRouter)
+
+  // ---- requisitions ----
+  const reqRouter = express.Router()
+  reqRouter.use(requireAuth)
+  const actor = (req) => req.session.user
+  const detailBody = (id) => ({ requisition: service.get(id) })
+
+  reqRouter.get('/catalog', handle((req, res) => res.json({ items: service.catalog({ type: req.query.type, q: req.query.q }) })))
+
+  reqRouter.get('/cart', handle((req, res) => res.json({ cart: service.getCart(actor(req).id, String(req.query.type ?? '')) })))
+  reqRouter.put('/cart/lines', handle((req, res) => res.json({ cart: service.setCartLine(actor(req).id, String(req.body?.type ?? ''), String(req.body?.variantId ?? ''), req.body?.qty) })))
+  reqRouter.delete('/cart', handle((req, res) => {
+    service.clearCart(actor(req).id, String(req.query.type ?? ''))
+    res.json({ ok: true })
+  }))
+
+  reqRouter.post('/checkout', handle((req, res) => {
+    const { id } = service.checkout({ userId: actor(req).id, type: String(req.body?.type ?? ''), warehouseId: req.body?.warehouseId, reason: req.body?.reason, neededBy: req.body?.neededBy ?? '' })
+    addAudit(actor(req).id, 'ส่งใบเบิก', 'requisition', id, { type: req.body.type })
+    res.status(201).json(detailBody(id))
+  }))
+
+  reqRouter.get('/mine', handle((req, res) => res.json({ requisitions: service.listMine(actor(req).id, { status: req.query.status ? String(req.query.status) : undefined }) })))
+  reqRouter.get('/inbox', requireManagerRole, handle((req, res) => res.json({ requisitions: service.inbox(actor(req).id) })))
+  reqRouter.get('/issue-queue', requireManagerRole, handle((req, res) => res.json({ requisitions: service.issueQueue(actor(req).id, actor(req).role) })))
+  reqRouter.get('/badges', handle((req, res) => {
+    const user = actor(req)
+    const cart = ['ppe', 'medicine'].reduce((sum, type) => sum + service.getCart(user.id, type).lines.length, 0)
+    res.json({ ...service.badges(user), cart })
+  }))
+
+  reqRouter.get('/admin/all', requireAdmin, handle((req, res) => {
+    const result = service.listAll({ status: req.query.status ? String(req.query.status) : undefined, q: req.query.q, page: Number(req.query.page) || 1, pageSize: Number(req.query.pageSize) || 25 })
+    res.json({ requisitions: result.rows, total: result.total, page: result.page, pageSize: result.pageSize })
+  }))
+
+  reqRouter.post('/bulk-approve', requireManagerRole, handle((req, res) => {
+    const ids = req.body?.ids
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) return res.status(400).json({ error: 'เลือกใบเบิก 1–50 ใบ' })
+    const results = ids.map((rawId) => {
+      const id = String(rawId)
+      try {
+        service.approve({ id, userId: actor(req).id, comment: String(req.body?.comment ?? '') })
+        addAudit(actor(req).id, 'อนุมัติใบเบิก', 'requisition', id, { bulk: true })
+        return { id, ok: true }
+      } catch (error) {
+        if (!(error instanceof RequisitionError)) throw error
+        return { id, ok: false, code: error.code, error: error.message }
+      }
+    })
+    res.json({ results })
+  }))
+
+  reqRouter.get('/:id', handle((req, res) => {
+    const detail = service.get(req.params.id)
+    if (!service.canView(actor(req), detail)) return res.status(403).json({ error: FORBIDDEN })
+    res.json({ requisition: detail })
+  }))
+
+  /** Declares a mutation: runs the service call, writes the audit row and returns the fresh detail. */
+  const action = (path, label, run) => reqRouter.post(path, handle((req, res) => {
+    run(req)
+    addAudit(actor(req).id, label, 'requisition', req.params.id, { ...(req.body?.reason ? { reason: String(req.body.reason).slice(0, 200) } : {}) })
+    res.json(detailBody(req.params.id))
+  }))
+
+  action('/:id/approve', 'อนุมัติใบเบิก', (req) => service.approve({ id: req.params.id, userId: actor(req).id, comment: String(req.body?.comment ?? ''), lines: req.body?.lines }))
+  action('/:id/reject', 'ปฏิเสธใบเบิก', (req) => service.reject({ id: req.params.id, userId: actor(req).id, reason: req.body?.reason }))
+  action('/:id/request-changes', 'ส่งใบเบิกกลับให้แก้ไข', (req) => service.requestChanges({ id: req.params.id, userId: actor(req).id, reason: req.body?.reason }))
+  action('/:id/cancel', 'ยกเลิกใบเบิก', (req) => service.cancel({ id: req.params.id, userId: actor(req).id, reason: req.body?.reason }))
+  action('/:id/resubmit', 'ส่งใบเบิกใหม่หลังแก้ไข', (req) => service.resubmit({ id: req.params.id, userId: actor(req).id, lines: req.body?.lines, reason: req.body?.reason, neededBy: req.body?.neededBy }))
+  action('/:id/receive', 'ยืนยันรับของ', (req) => service.confirmReceipt({ id: req.params.id, userId: actor(req).id }))
+  action('/:id/issue', 'จ่ายของตามใบเบิก', (req) => service.issue({ id: req.params.id, userId: actor(req).id, lines: req.body?.lines }))
+  action('/:id/close', 'ปิดรายการค้างจ่าย', (req) => service.closeRemainder({ id: req.params.id, userId: actor(req).id, reason: req.body?.reason }))
+  action('/:id/returns', 'รับคืนของ', (req) => service.recordReturn({ id: req.params.id, userId: actor(req).id, lines: req.body?.lines, reason: req.body?.reason }))
+  reqRouter.post('/:id/admin/reassign', requireAdmin, handle((req, res) => {
+    service.reassign({ id: req.params.id, userId: actor(req).id, toUserId: req.body?.toUserId, reason: req.body?.reason })
+    addAudit(actor(req).id, 'ผู้ดูแลระบบเปลี่ยนผู้อนุมัติ', 'requisition', req.params.id, { to: req.body.toUserId, reason: String(req.body.reason).slice(0, 200) })
+    res.json(detailBody(req.params.id))
+  }))
+  reqRouter.post('/:id/admin/force-cancel', requireAdmin, handle((req, res) => {
+    service.cancel({ id: req.params.id, userId: actor(req).id, reason: req.body?.reason, asAdmin: true })
+    addAudit(actor(req).id, 'ผู้ดูแลระบบยกเลิกใบเบิก', 'requisition', req.params.id, { reason: String(req.body.reason).slice(0, 200) })
+    res.json(detailBody(req.params.id))
+  }))
+
+  app.use('/api/requisitions', reqRouter)
   return { workflow, service, handle, requireManagerRole }
 }

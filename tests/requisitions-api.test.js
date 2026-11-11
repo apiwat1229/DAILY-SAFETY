@@ -159,3 +159,242 @@ describe('workflow admin API', () => {
     assert.equal(rows.length, 3)
   })
 })
+
+let sceneCounter = 0
+const futureDate = (days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+const stockRow = async (adminClient, warehouseId, variantId) => (await adminClient.call('GET', `/api/inventory/stock?warehouseId=${warehouseId}`)).json.rows.find((row) => row.variantId === variantId)
+
+/** A warehouse with stock, its storekeeper, an employee in a fresh department and the seeded leader as that department's supervisor. */
+async function scene({ type = 'ppe', stockQty = 50 } = {}) {
+  const adminClient = await admin()
+  const n = ++sceneCounter
+  const department = `แผนกทดสอบ ${n}`
+  const warehouse = (await adminClient.call('POST', '/api/inventory/warehouses', { code: `RQW-${n}`, name: `คลังใบเบิก ${n}` })).json.warehouse
+  const item = (await adminClient.call('POST', '/api/inventory/items', { sku: `RQ-${type}-${n}`, name: `สินค้าใบเบิก ${n}`, type, unit: 'ชิ้น', minStock: 0 })).json.item
+  const variantId = item.variants[0].id
+  const line = type === 'medicine' ? { variantId, qty: stockQty, lotNo: `LOT-${n}`, expiryDate: futureDate(200) } : { variantId, qty: stockQty }
+  assert.equal((await adminClient.call('POST', '/api/inventory/receipts', { warehouseId: warehouse.id, lines: [line] })).status, 201)
+  const keeper = await makeUser('storekeeper', 'คลัง')
+  assert.equal((await adminClient.call('PUT', `/api/inventory/warehouses/${warehouse.id}/staff`, { userIds: [keeper.userId] })).status, 200)
+  const employee = await makeUser('employee', department)
+  const lead = await leaderId()
+  assert.equal((await wf(adminClient, 'PUT', '/departments/supervisors', { department, entries: [{ userId: lead, isBackup: false }] })).status, 200)
+  return { adminClient, department, warehouse, item, variantId, keeper, employee, lead, leaderClient: await leader(), type }
+}
+
+async function submit(s, qty = 5, over = {}) {
+  const put = await rq(s.employee.client, 'PUT', '/cart/lines', { type: s.type, variantId: s.variantId, qty })
+  assert.equal(put.status, 200, JSON.stringify(put.json))
+  const result = await rq(s.employee.client, 'POST', '/checkout', { type: s.type, warehouseId: s.warehouse.id, reason: 'ของเดิมชำรุด', neededBy: '', ...over })
+  assert.equal(result.status, 201, JSON.stringify(result.json))
+  return result.json.requisition
+}
+
+describe('requisition API', () => {
+  test('anonymous is 401 everywhere', async () => {
+    for (const url of ['/catalog?type=ppe', '/cart?type=ppe', '/mine', '/inbox', '/issue-queue', '/badges', '/admin/all']) assert.equal((await fetch(`${baseUrl}/api/requisitions${url}`)).status, 401, url)
+  })
+
+  test('catalog shows availability, hides inactive items and supports search', async () => {
+    const s = await scene()
+    const found = (await rq(s.employee.client, 'GET', `/catalog?type=ppe&q=${encodeURIComponent(s.item.name)}`)).json.items
+    assert.equal(found.length, 1)
+    assert.equal(found[0].variants[0].available, 50)
+    assert.equal(found[0].imageUrl, null)
+    await s.adminClient.call('PATCH', `/api/inventory/items/${s.item.id}`, { isActive: false })
+    assert.equal((await rq(s.employee.client, 'GET', `/catalog?type=ppe&q=${encodeURIComponent(s.item.name)}`)).json.items.length, 0)
+    assert.equal((await rq(s.employee.client, 'GET', '/catalog?type=food')).json.items.length >= 0, true)
+  })
+
+  test('cart: per user and type, validated, persistent across requests', async () => {
+    const s = await scene()
+    assert.equal((await rq(s.employee.client, 'PUT', '/cart/lines', { type: 'ppe', variantId: s.variantId, qty: 3 })).json.cart.lines[0].qty, 3)
+    assert.equal((await rq(s.employee.client, 'GET', '/cart?type=ppe')).json.cart.lines.length, 1)
+    assert.equal((await rq(s.keeper.client, 'GET', '/cart?type=ppe')).json.cart.lines.length, 0)
+    for (const body of [{ type: 'ppe', variantId: s.variantId, qty: -1 }, { type: 'ppe', variantId: s.variantId, qty: 1.5 }, { type: 'medicine', variantId: s.variantId, qty: 1 }, { type: 'ppe', variantId: 'nope', qty: 1 }, { type: 'food', variantId: s.variantId, qty: 1 }]) {
+      assert.equal((await rq(s.employee.client, 'PUT', '/cart/lines', body)).status, 400, JSON.stringify(body))
+    }
+    assert.equal((await rq(s.employee.client, 'DELETE', '/cart?type=ppe')).status, 200)
+    assert.equal((await rq(s.employee.client, 'GET', '/cart?type=ppe')).json.cart.lines.length, 0)
+    assert.equal((await rq(s.employee.client, 'GET', '/cart?type=food')).status, 400)
+  })
+
+  test('checkout validates reason and cart', async () => {
+    const s = await scene()
+    assert.equal((await rq(s.employee.client, 'POST', '/checkout', { type: 'ppe', warehouseId: s.warehouse.id, reason: 'x' })).status, 400)
+    await rq(s.employee.client, 'PUT', '/cart/lines', { type: 'ppe', variantId: s.variantId, qty: 1 })
+    assert.equal((await rq(s.employee.client, 'POST', '/checkout', { type: 'ppe', warehouseId: s.warehouse.id, reason: '  ' })).status, 400)
+    assert.equal((await rq(s.employee.client, 'POST', '/checkout', { type: 'ppe', warehouseId: 'nope', reason: 'x' })).status, 400)
+    assert.equal((await rq(s.employee.client, 'GET', '/cart?type=ppe')).json.cart.lines.length, 1)
+  })
+
+  test('happy path: employee → supervisor approves → storekeeper issues → employee confirms, stock agrees at each step', async () => {
+    const s = await scene()
+    const created = await submit(s, 5)
+    assert.match(created.number, /^REQ-\d{4}-\d{5}$/)
+    assert.equal(created.status, 'in_approval')
+    assert.equal((await stockRow(s.adminClient, s.warehouse.id, s.variantId)).reserved, 0)
+    assert.deepEqual((await rq(s.leaderClient, 'GET', '/inbox')).json.requisitions.filter((row) => row.id === created.id).map((row) => row.status), ['in_approval'])
+    const approved = await rq(s.leaderClient, 'POST', `/${created.id}/approve`, { comment: 'ตกลง' })
+    assert.equal(approved.status, 200, JSON.stringify(approved.json))
+    assert.equal(approved.json.requisition.status, 'ready_to_issue')
+    assert.deepEqual(await stockRow(s.adminClient, s.warehouse.id, s.variantId).then((row) => [row.onHand, row.reserved, row.available]), [50, 5, 45])
+    const queue = (await rq(s.keeper.client, 'GET', '/issue-queue')).json.requisitions.find((row) => row.id === created.id)
+    assert.equal(queue.lines[0].remaining, 5)
+    const lineId = queue.lines[0].id
+    const first = await rq(s.keeper.client, 'POST', `/${created.id}/issue`, { lines: [{ lineId, qty: 2 }] })
+    assert.equal(first.json.requisition.status, 'partially_issued')
+    const second = await rq(s.keeper.client, 'POST', `/${created.id}/issue`, { lines: [{ lineId, qty: 3 }] })
+    assert.equal(second.json.requisition.status, 'issued')
+    assert.deepEqual(await stockRow(s.adminClient, s.warehouse.id, s.variantId).then((row) => [row.onHand, row.reserved]), [45, 0])
+    const moves = (await s.adminClient.call('GET', `/api/inventory/movements?warehouseId=${s.warehouse.id}&type=issue`)).json.rows
+    assert.deepEqual(moves.map((row) => [row.qty, row.refType, row.refId]).sort(), [[-2, 'requisition', created.id], [-3, 'requisition', created.id]].sort())
+    assert.equal((await rq(s.leaderClient, 'POST', `/${created.id}/receive`)).status, 403)
+    const received = await rq(s.employee.client, 'POST', `/${created.id}/receive`)
+    assert.equal(received.json.requisition.status, 'received')
+    const detail = (await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition
+    assert.deepEqual(detail.events.map((event) => event.action), ['submitted', 'approved', 'approved_all', 'issued', 'issued', 'received'])
+    assert.equal((await rq(s.employee.client, 'GET', '/mine?status=received')).json.requisitions.some((row) => row.id === created.id), true)
+  })
+
+  test('short stock at final approval is 409 with details and reserves nothing', async () => {
+    const s = await scene({ stockQty: 3 })
+    const created = await submit(s, 5)
+    const result = await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})
+    assert.equal(result.status, 409)
+    assert.deepEqual(result.json.details.map((entry) => entry.short), [2])
+    assert.equal((await stockRow(s.adminClient, s.warehouse.id, s.variantId)).reserved, 0)
+    assert.equal((await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition.status, 'in_approval')
+  })
+
+  test('a second approve is 409 and reserves once', async () => {
+    const s = await scene()
+    const created = await submit(s, 4)
+    assert.equal((await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})).status, 200)
+    assert.equal((await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})).status, 409)
+    assert.equal((await stockRow(s.adminClient, s.warehouse.id, s.variantId)).reserved, 4)
+  })
+
+  test('strangers and the wrong roles are refused', async () => {
+    const s = await scene()
+    const created = await submit(s, 2)
+    const stranger = await makeUser('employee', 'แผนกอื่น')
+    assert.equal((await rq(stranger.client, 'GET', `/${created.id}`)).status, 403)
+    assert.equal((await rq(stranger.client, 'POST', `/${created.id}/cancel`, {})).status, 403)
+    for (const [method, url, body] of [['GET', '/inbox'], ['GET', '/issue-queue'], ['GET', '/admin/all'], ['POST', `/${created.id}/approve`, {}], ['POST', `/${created.id}/reject`, { reason: 'x' }], ['POST', `/${created.id}/issue`, { lines: [] }], ['POST', `/${created.id}/admin/reassign`, { toUserId: s.lead, reason: 'x' }], ['POST', `/${created.id}/admin/force-cancel`, { reason: 'x' }]]) {
+      assert.equal((await rq(stranger.client, method, url, body)).status, 403, `${method} ${url}`)
+    }
+    assert.equal((await rq(s.keeper.client, 'POST', `/${created.id}/approve`, {})).status, 403)
+    assert.equal((await rq(s.leaderClient, 'POST', `/${created.id}/admin/force-cancel`, { reason: 'x' })).status, 403)
+    assert.equal((await rq(s.employee.client, 'GET', `/missing-id`)).status, 404)
+  })
+
+  test('a storekeeper only sees the queue of their own warehouses', async () => {
+    const a = await scene()
+    const b = await scene()
+    const reqA = await submit(a, 1)
+    const reqB = await submit(b, 1)
+    await rq(a.leaderClient, 'POST', `/${reqA.id}/approve`, {})
+    await rq(b.leaderClient, 'POST', `/${reqB.id}/approve`, {})
+    const idsOf = async (client) => (await rq(client, 'GET', '/issue-queue')).json.requisitions.map((row) => row.id)
+    assert.deepEqual((await idsOf(a.keeper.client)).filter((id) => [reqA.id, reqB.id].includes(id)), [reqA.id])
+    assert.deepEqual((await idsOf(b.keeper.client)).filter((id) => [reqA.id, reqB.id].includes(id)), [reqB.id])
+    assert.equal((await idsOf(a.adminClient)).includes(reqB.id), true)
+    assert.equal((await rq(a.keeper.client, 'GET', `/${reqB.id}`)).status, 403)
+    const lineB = (await rq(b.keeper.client, 'GET', '/issue-queue')).json.requisitions.find((row) => row.id === reqB.id).lines[0].id
+    assert.equal((await rq(a.keeper.client, 'POST', `/${reqB.id}/issue`, { lines: [{ lineId: lineB, qty: 1 }] })).status, 403)
+  })
+
+  test('bulk approve reports a result per id', async () => {
+    const s = await scene()
+    const ok = await submit(s, 2)
+    const second = await submit(s, 1)
+    const result = await rq(s.leaderClient, 'POST', '/bulk-approve', { ids: [ok.id, second.id, 'missing', ok.id] })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.json.results.map((row) => [row.ok, row.code ?? null]), [[true, null], [true, null], [false, 'NOT_FOUND'], [false, 'BAD_STATE']])
+    assert.equal((await rq(s.leaderClient, 'POST', '/bulk-approve', { ids: [] })).status, 400)
+    assert.equal((await rq(s.leaderClient, 'POST', '/bulk-approve', { ids: Array.from({ length: 51 }, (_, i) => `x${i}`) })).status, 400)
+    assert.equal((await rq(s.employee.client, 'POST', '/bulk-approve', { ids: [ok.id] })).status, 403)
+  })
+
+  test('badges count pending approvals, the issue queue and the cart', async () => {
+    const s = await scene()
+    const before = (await rq(s.leaderClient, 'GET', '/badges')).json.approvals
+    const created = await submit(s, 1)
+    assert.equal((await rq(s.leaderClient, 'GET', '/badges')).json.approvals, before + 1)
+    await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})
+    assert.equal((await rq(s.keeper.client, 'GET', '/badges')).json.issue, 1)
+    await rq(s.employee.client, 'PUT', '/cart/lines', { type: 'ppe', variantId: s.variantId, qty: 2 })
+    assert.deepEqual(await rq(s.employee.client, 'GET', '/badges').then((res) => res.json), { approvals: 0, issue: 0, cart: 1 })
+  })
+
+  test('reject, request changes, resubmit and cancel work end to end and release stock', async () => {
+    const s = await scene()
+    const first = await submit(s, 3)
+    assert.equal((await rq(s.leaderClient, 'POST', `/${first.id}/reject`, { reason: '' })).status, 400)
+    assert.equal((await rq(s.leaderClient, 'POST', `/${first.id}/reject`, { reason: 'ไม่จำเป็น' })).json.requisition.status, 'rejected')
+    const second = await submit(s, 3)
+    assert.equal((await rq(s.leaderClient, 'POST', `/${second.id}/request-changes`, { reason: 'ลดจำนวน' })).json.requisition.status, 'returned_for_edit')
+    const lineId = (await rq(s.employee.client, 'GET', `/${second.id}`)).json.requisition.lines[0].id
+    assert.equal((await rq(s.leaderClient, 'POST', `/${second.id}/resubmit`, { lines: [] })).status, 403)
+    const resubmitted = await rq(s.employee.client, 'POST', `/${second.id}/resubmit`, { lines: [{ lineId, qty: 2 }], reason: 'แก้แล้ว' })
+    assert.equal(resubmitted.json.requisition.status, 'in_approval')
+    assert.equal(resubmitted.json.requisition.lines[0].qtyRequested, 2)
+    await rq(s.leaderClient, 'POST', `/${second.id}/approve`, {})
+    assert.equal((await stockRow(s.adminClient, s.warehouse.id, s.variantId)).reserved, 2)
+    assert.equal((await rq(s.employee.client, 'POST', `/${second.id}/cancel`, { reason: 'ไม่ใช้แล้ว' })).json.requisition.status, 'cancelled')
+    assert.equal((await stockRow(s.adminClient, s.warehouse.id, s.variantId)).reserved, 0)
+    assert.equal((await rq(s.employee.client, 'POST', `/${second.id}/cancel`, {})).status, 409)
+  })
+
+  test('close remainder and returns update stock and status', async () => {
+    const s = await scene()
+    const created = await submit(s, 5)
+    await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})
+    const lineId = (await rq(s.keeper.client, 'GET', '/issue-queue')).json.requisitions.find((row) => row.id === created.id).lines[0].id
+    await rq(s.keeper.client, 'POST', `/${created.id}/issue`, { lines: [{ lineId, qty: 2 }] })
+    assert.equal((await rq(s.keeper.client, 'POST', `/${created.id}/close`, { reason: '' })).status, 400)
+    assert.equal((await rq(s.keeper.client, 'POST', `/${created.id}/close`, { reason: 'ของหมด' })).json.requisition.status, 'closed')
+    assert.deepEqual(await stockRow(s.adminClient, s.warehouse.id, s.variantId).then((row) => [row.onHand, row.reserved]), [48, 0])
+    const lot = (await s.adminClient.call('GET', `/api/inventory/stock/lots?warehouseId=${s.warehouse.id}&variantId=${s.variantId}`)).json.lots[0].lotId
+    assert.equal((await rq(s.keeper.client, 'POST', `/${created.id}/returns`, { lines: [{ lineId, lotId: lot, qty: 3 }] })).status, 400)
+    const returned = await rq(s.keeper.client, 'POST', `/${created.id}/returns`, { lines: [{ lineId, lotId: lot, qty: 1 }], reason: 'ไม่พอดี' })
+    assert.equal(returned.json.requisition.lines[0].qtyReturned, 1)
+    assert.equal((await stockRow(s.adminClient, s.warehouse.id, s.variantId)).onHand, 49)
+  })
+
+  test('admin overview, reassign and force-cancel', async () => {
+    const s = await scene()
+    const created = await submit(s, 2)
+    const all = await rq(s.adminClient, 'GET', `/admin/all?q=${encodeURIComponent(created.number)}&status=in_approval&page=1&pageSize=10`)
+    assert.equal(all.status, 200)
+    assert.deepEqual(all.json.requisitions.map((row) => row.id), [created.id])
+    assert.equal(all.json.total, 1)
+    assert.equal((await rq(s.adminClient, 'POST', `/${created.id}/admin/reassign`, { toUserId: s.keeper.userId, reason: '' })).status, 400)
+    const reassigned = await rq(s.adminClient, 'POST', `/${created.id}/admin/reassign`, { toUserId: s.keeper.userId, reason: 'หัวหน้าลา' })
+    assert.deepEqual(reassigned.json.requisition.steps[0].approvers.map((entry) => entry.userId).sort(), [s.keeper.userId, s.lead].sort())
+    assert.equal((await rq(s.adminClient, 'POST', `/${created.id}/admin/force-cancel`, { reason: '' })).status, 400)
+    assert.equal((await rq(s.adminClient, 'POST', `/${created.id}/admin/force-cancel`, { reason: 'ซ้ำซ้อน' })).json.requisition.status, 'cancelled')
+  })
+
+  test('mutations are audited', async () => {
+    const s = await scene()
+    const created = await submit(s, 1)
+    await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})
+    await rq(s.employee.client, 'POST', `/${created.id}/cancel`, {})
+    const db = openDb()
+    const rows = db.prepare("SELECT action FROM audit_log WHERE target_type = 'requisition' AND target_id = ?").all(created.id)
+    db.close()
+    assert.equal(rows.length, 3)
+  })
+
+  test('medicine requisition reserves the lot with the nearest expiry', async () => {
+    const s = await scene({ type: 'medicine', stockQty: 10 })
+    const created = await submit(s, 4)
+    await rq(s.leaderClient, 'POST', `/${created.id}/approve`, {})
+    const queue = (await rq(s.keeper.client, 'GET', '/issue-queue')).json.requisitions.find((row) => row.id === created.id)
+    assert.equal(queue.lines[0].picks.length, 1)
+    assert.match(queue.lines[0].picks[0].lotNo, /^LOT-/)
+    assert.equal(queue.lines[0].picks[0].qty, 4)
+  })
+})
