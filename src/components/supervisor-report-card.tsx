@@ -70,7 +70,7 @@ export function SupervisorReportCard({ refreshKey = 0 }: Props) {
     <CardHeader className="flex flex-col gap-3 border-b border-border-subtle px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <CardTitle className="flex items-center gap-2"><UsersRound size={18} className="text-primary" />{t('สถานะการรายงานของหัวหน้างาน')}</CardTitle>
-        <CardDescription className="mt-1">{t('หัวหน้างานและผู้ดูแลระบบที่เปิดใช้งาน เทียบกับผู้ที่ส่งแบบตรวจแล้ว')}</CardDescription>
+        <CardDescription className="mt-1">{t('หัวหน้างานที่เปิดใช้งาน เทียบกับผู้ที่ส่งแบบตรวจแล้ว')}</CardDescription>
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-2">
         <DatePicker ariaLabel={t('เริ่มวันที่')} value={from} maxDate={to} onChange={(value) => value && setFrom(value)} className="h-8 w-[150px] border-0 bg-transparent px-1 text-xs shadow-none" placeholder={t('เริ่มวันที่')} />

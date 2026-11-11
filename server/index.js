@@ -1530,7 +1530,7 @@ app.get('/api/dashboard/supervisors', requireManager, (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
     return res.status(400).json({ error: 'ช่วงวันที่ไม่ถูกต้อง' })
   }
-  const users = db.prepare("SELECT id, display_name, employee_code, role FROM users WHERE is_active = 1 AND role IN ('leader', 'admin') ORDER BY role DESC, display_name COLLATE NOCASE").all()
+  const users = db.prepare("SELECT id, display_name, employee_code, role FROM users WHERE is_active = 1 AND role = 'leader' ORDER BY display_name COLLATE NOCASE").all()
   const byInspector = "FROM inspections i WHERE (i.inspector_id = ? OR (? != '' AND UPPER(TRIM(i.employee_code)) = UPPER(TRIM(?))))"
   const supervisors = users.map((user) => {
     const keys = [user.id, user.employee_code, user.employee_code]

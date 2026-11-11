@@ -121,7 +121,7 @@ Object.assign(english, {
   'กรอกคำถามและตัวเลือกอย่างน้อย 2 ข้อให้ครบ ในข้อที่ไฮไลต์': 'Fill in the question and at least 2 options in the highlighted questions',
   'มีงานแก้ไขค้าง': 'Has open follow-ups', 'มีงานเกินกำหนด': 'Has overdue follow-ups', 'กำลังกรอง': 'Filtering', 'ล้างตัวกรอง': 'Clear filter',
   'สถานะการรายงานของหัวหน้างาน': 'Supervisor reporting status',
-  'หัวหน้างานและผู้ดูแลระบบที่เปิดใช้งาน เทียบกับผู้ที่ส่งแบบตรวจแล้ว': 'Active supervisors and admins compared with those who have submitted inspections',
+  'หัวหน้างานที่เปิดใช้งาน เทียบกับผู้ที่ส่งแบบตรวจแล้ว': 'Active supervisors compared with those who have submitted inspections',
   'หัวหน้างานทั้งหมด': 'Total supervisors', 'รายงานวันนี้แล้ว': 'Reported today', 'วันนี้ยังไม่รายงาน': 'Not reported today',
   'งานแก้ไขค้าง / เกินกำหนด': 'Open / overdue follow-ups', 'อัตราการรายงานวันนี้': 'Reporting rate today', 'อัตราการรายงานในช่วง': 'Reporting rate for',
   'ยังไม่รายงาน': 'Not reported', 'ยังไม่รายงานในช่วงนี้': 'Not reported in this period', 'รายงานแล้วในช่วงนี้': 'Reported in this period', 'รายงานแล้ว': 'Reported', 'รายงานในช่วงนี้แล้ว': 'Reported in this period', 'หัวหน้างาน': 'Supervisor',
