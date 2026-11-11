@@ -253,6 +253,11 @@ export function createStockService(db, opts = {}) {
     })
   }
 
+  /** Quantity that could be reserved right now (non-expired, not already held). */
+  function availableToReserve({ variantId, warehouseId }) {
+    return reservableLots(variantId, warehouseId).reduce((sum, lot) => sum + (lot.on_hand - lot.reserved), 0)
+  }
+
   function reservedFor({ refType, refId, variantId }) {
     return db.prepare('SELECT COALESCE(SUM(qty), 0) AS n FROM stock_reservations WHERE ref_type = ? AND ref_id = ? AND variant_id = ?').get(refType, refId, variantId).n
   }
@@ -293,5 +298,5 @@ export function createStockService(db, opts = {}) {
     })
   }
 
-  return { transaction, receive, reserve, release, reservedFor, issueReserved, issueFefo, returnStock, adjust, writeOff, transfer, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
+  return { transaction, receive, reserve, release, reservedFor, availableToReserve, issueReserved, issueFefo, returnStock, adjust, writeOff, transfer, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
 }
