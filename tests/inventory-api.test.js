@@ -314,3 +314,71 @@ describe('stock operations API', () => {
     await inv(adminClient, 'PUT', '/settings', { expiryWarnDays: [30, 60, 90] })
   })
 })
+
+describe('stock count API', () => {
+  async function stocked(adminClient) {
+    const f = await stockFixture(adminClient)
+    const receipt = await inv(adminClient, 'POST', '/receipts', { warehouseId: f.warehouse.id, lines: [{ variantId: f.ppeVariant, qty: 10 }, { variantId: f.medVariant, qty: 6, lotNo: 'C-1', expiryDate: bangkokDate(120) }] })
+    return { ...f, lots: Object.fromEntries(receipt.json.movements.map((movement) => [movement.variantId, movement.lotId])) }
+  }
+
+  test('count create → set lines → post adjusts stock and writes audit', async () => {
+    const adminClient = await admin()
+    const f = await stocked(adminClient)
+    const created = await inv(adminClient, 'POST', '/counts', { warehouseId: f.warehouse.id })
+    assert.equal(created.status, 201)
+    const sheet = (await inv(adminClient, 'GET', `/counts/${created.json.id}`)).json.count
+    assert.equal(sheet.status, 'draft')
+    assert.deepEqual(sheet.lines.map((line) => line.systemQty).sort((a, b) => a - b), [6, 10])
+    assert.ok(sheet.lines.every((line) => line.itemName && line.countedQty === null))
+    const saved = await inv(adminClient, 'PUT', `/counts/${created.json.id}/lines`, { lines: [{ variantId: f.ppeVariant, lotId: f.lots[f.ppeVariant], countedQty: 9 }, { variantId: f.medVariant, lotId: f.lots[f.medVariant], countedQty: 6 }] })
+    assert.equal(saved.status, 200)
+    assert.equal((await inv(adminClient, 'GET', `/counts/${created.json.id}`)).json.count.status, 'counting')
+    const posted = await inv(adminClient, 'POST', `/counts/${created.json.id}/post`)
+    assert.equal(posted.status, 200)
+    assert.equal(posted.json.adjustments, 1)
+    const row = (await inv(adminClient, 'GET', `/stock?warehouseId=${f.warehouse.id}`)).json.rows.find((entry) => entry.variantId === f.ppeVariant)
+    assert.equal(row.onHand, 9)
+    const db = openDb()
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE target_type = 'inventory_count' AND target_id = ?").get(created.json.id).n, 2)
+    db.close()
+    const list = await inv(adminClient, 'GET', `/counts?warehouseId=${f.warehouse.id}`)
+    assert.deepEqual(list.json.counts.map((count) => count.status), ['posted'])
+  })
+
+  test('posting twice is 409 and invalid counts are 400', async () => {
+    const adminClient = await admin()
+    const f = await stocked(adminClient)
+    const { id } = (await inv(adminClient, 'POST', '/counts', { warehouseId: f.warehouse.id })).json
+    assert.equal((await inv(adminClient, 'PUT', `/counts/${id}/lines`, { lines: [{ variantId: f.ppeVariant, lotId: f.lots[f.ppeVariant], countedQty: -1 }] })).status, 400)
+    assert.equal((await inv(adminClient, 'PUT', `/counts/${id}/lines`, { lines: [{ variantId: f.ppeVariant, lotId: 'missing', countedQty: 1 }] })).status, 404)
+    assert.equal((await inv(adminClient, 'POST', `/counts/${id}/post`)).status, 200)
+    assert.equal((await inv(adminClient, 'POST', `/counts/${id}/post`)).status, 409)
+    assert.equal((await inv(adminClient, 'PUT', `/counts/${id}/lines`, { lines: [] })).status, 409)
+  })
+
+  test('storekeeper cannot open or read a count for an unassigned warehouse', async () => {
+    const adminClient = await admin()
+    const mine = await stocked(adminClient)
+    const other = await stocked(adminClient)
+    const { client, userId } = await makeStorekeeper(`SK5${fixtureCounter}`)
+    await assign(adminClient, mine.warehouse, userId)
+    assert.equal((await inv(client, 'POST', '/counts', { warehouseId: other.warehouse.id })).status, 403)
+    assert.equal((await inv(client, 'POST', '/counts', { warehouseId: mine.warehouse.id })).status, 201)
+    const foreign = (await inv(adminClient, 'POST', '/counts', { warehouseId: other.warehouse.id })).json.id
+    assert.equal((await inv(client, 'GET', `/counts/${foreign}`)).status, 403)
+    assert.equal((await inv(client, 'PUT', `/counts/${foreign}/lines`, { lines: [] })).status, 403)
+    assert.equal((await inv(client, 'POST', `/counts/${foreign}/post`)).status, 403)
+    assert.equal((await inv(client, 'GET', '/counts')).json.counts.every((count) => count.warehouseId === mine.warehouse.id), true)
+  })
+
+  test('count lines from another warehouse sheet are rejected', async () => {
+    const adminClient = await admin()
+    const a = await stocked(adminClient)
+    const b = await stocked(adminClient)
+    const { id } = (await inv(adminClient, 'POST', '/counts', { warehouseId: a.warehouse.id })).json
+    const result = await inv(adminClient, 'PUT', `/counts/${id}/lines`, { lines: [{ variantId: b.ppeVariant, lotId: b.lots[b.ppeVariant], countedQty: 1 }] })
+    assert.equal(result.status, 404)
+    assert.match(result.json.error, /ใบนับสต็อก/)
+  })
+})

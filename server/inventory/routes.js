@@ -524,6 +524,73 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     })
   })
 
+  // ---- stock counts ----
+  const countDto = (row) => ({
+    id: row.id, warehouseId: row.warehouse_id, warehouseName: row.warehouse_name || '', status: row.status,
+    createdAt: row.created_at, postedAt: row.posted_at, createdByName: row.created_by_name || '', lineCount: row.line_count ?? 0,
+  })
+  const countSelect = `SELECT c.*, w.name AS warehouse_name, COALESCE(u.display_name, '') AS created_by_name,
+      (SELECT COUNT(*) FROM stock_count_lines l WHERE l.count_id = c.id) AS line_count
+    FROM stock_counts c LEFT JOIN warehouses w ON w.id = c.warehouse_id LEFT JOIN users u ON u.id = c.created_by`
+
+  /** Loads a count the caller may touch (404 if missing, 403 if the warehouse is not theirs). */
+  function accessibleCount(req, res) {
+    const count = db.prepare(`${countSelect} WHERE c.id = ?`).get(req.params.id)
+    if (!count) { bad(res, 'ไม่พบใบนับสต็อก', 404); return null }
+    if (!canUseWarehouse(req.session.user, count.warehouse_id)) { bad(res, FORBIDDEN, 403); return null }
+    return count
+  }
+
+  router.get('/counts', (req, res) => {
+    const ids = scopeWarehouses(req, res)
+    if (!ids) return
+    const rows = db.prepare(`${countSelect} WHERE c.warehouse_id IN (${ids.map(() => '?').join(',') || "''"}) ORDER BY c.created_at DESC, c.rowid DESC LIMIT 200`).all(...ids)
+    res.json({ counts: rows.map(countDto) })
+  })
+
+  router.post('/counts', guarded((req, res) => {
+    const warehouse = writableWarehouse(req, res, req.body?.warehouseId)
+    if (!warehouse) return
+    const { id } = counts.create({ warehouseId: warehouse.id, userId: req.session.user.id })
+    addAudit(req.session.user.id, 'เริ่มนับสต็อก', 'inventory_count', id, { warehouse: warehouse.code })
+    res.status(201).json({ id })
+  }))
+
+  router.get('/counts/:id', (req, res) => {
+    const count = accessibleCount(req, res)
+    if (!count) return
+    const lines = db.prepare(`SELECT l.variant_id, l.lot_id, l.system_qty, l.counted_qty, i.sku, i.name AS item_name, v.label AS variant_label,
+                                     COALESCE(s.lot_no, '') AS lot_no, COALESCE(s.expiry_date, '') AS expiry_date
+                              FROM stock_count_lines l LEFT JOIN item_variants v ON v.id = l.variant_id LEFT JOIN items i ON i.id = v.item_id LEFT JOIN stock_lots s ON s.id = l.lot_id
+                              WHERE l.count_id = ? ORDER BY i.name COLLATE NOCASE, v.rowid, s.expiry_date`).all(count.id)
+    res.json({
+      count: {
+        ...countDto(count),
+        lines: lines.map((line) => ({
+          variantId: line.variant_id, lotId: line.lot_id, sku: line.sku || '', itemName: line.item_name || '', variantLabel: line.variant_label || '',
+          lotNo: line.lot_no, expiryDate: line.expiry_date, systemQty: line.system_qty, countedQty: line.counted_qty,
+        })),
+      },
+    })
+  })
+
+  router.put('/counts/:id/lines', guarded((req, res) => {
+    const count = accessibleCount(req, res)
+    if (!count) return
+    const lines = req.body?.lines
+    if (!Array.isArray(lines) || lines.length > 5000) return bad(res, 'รายการนับไม่ถูกต้อง')
+    counts.setLines(count.id, lines.map((line) => ({ variantId: String(line?.variantId || ''), lotId: String(line?.lotId ?? ''), countedQty: line?.countedQty })))
+    res.json({ ok: true })
+  }))
+
+  router.post('/counts/:id/post', guarded((req, res) => {
+    const count = accessibleCount(req, res)
+    if (!count) return
+    const result = counts.post(count.id, req.session.user.id)
+    addAudit(req.session.user.id, 'ปรับยอดจากการนับสต็อก', 'inventory_count', count.id, { warehouse: count.warehouse_name, adjustments: result.adjustments })
+    res.json(result)
+  }))
+
   app.use('/api/inventory', router)
   return { router, canUseWarehouse, requireStockStaff, stock, counts, guarded, scopeWarehouses, writableWarehouse }
 }
