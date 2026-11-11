@@ -71,6 +71,7 @@ Object.assign(english, {
   'เปลี่ยนรหัสผ่านแล้ว': 'Password changed',
   'ภาพรวมทีม': 'Team overview',
   'เมนู': 'Menu',
+  'มีงานแก้ไขค้าง': 'Has open follow-ups', 'มีงานเกินกำหนด': 'Has overdue follow-ups', 'กำลังกรอง': 'Filtering', 'ล้างตัวกรอง': 'Clear filter',
   'สถานะการรายงานของหัวหน้างาน': 'Supervisor reporting status',
   'หัวหน้างานและผู้ดูแลระบบที่เปิดใช้งาน เทียบกับผู้ที่ส่งแบบตรวจแล้ว': 'Active supervisors and admins compared with those who have submitted inspections',
   'หัวหน้างานทั้งหมด': 'Total supervisors', 'รายงานวันนี้แล้ว': 'Reported today', 'วันนี้ยังไม่รายงาน': 'Not reported today',
