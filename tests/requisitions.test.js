@@ -533,3 +533,23 @@ describe('checkout helpers', () => {
     rejects(() => svc.previewRoute({ userId: 'emp', type: 'ppe', warehouseId: 'nope' }), 'INVALID')
   })
 })
+
+describe('issue history', () => {
+  test('issueHistory lists issued requisitions with the lots stock came from, for the right warehouses', () => {
+    stock.receive({ variantId: 'v-med', warehouseId: 'w1', qty: 8, lotNo: 'L2', expiryDate: '2027-06-01', userId: 'admin1' })
+    const id = request('emp', [['v-med', 25]], { type: 'medicine' })
+    svc.approve({ id, userId: 'lead' })
+    const lineId = svc.get(id).lines[0].id
+    assert.equal(svc.issueHistory('keeper', 'storekeeper').length, 0)
+    svc.issue({ id, userId: 'keeper', lines: [{ lineId, qty: 25 }] })
+    const history = svc.issueHistory('keeper', 'storekeeper')
+    assert.equal(history.length, 1)
+    assert.deepEqual(history[0].lines[0].issuedLots.map((lot) => [lot.lotNo, lot.qty]), [['L1', 20], ['L2', 5]])
+    assert.equal(history[0].lines[0].qtyIssued, 25)
+    assert.equal(svc.issueHistory('keeper2', 'storekeeper').length, 0)
+    assert.equal(svc.issueHistory('admin1', 'admin').length, 1)
+    assert.equal(svc.issueHistory('emp', 'employee').length, 0)
+    svc.confirmReceipt({ id, userId: 'emp' })
+    assert.equal(svc.issueHistory('keeper', 'storekeeper')[0].status, 'received')
+  })
+})

@@ -1,7 +1,7 @@
 import { request } from './api'
 import type {
   ApproverUser, Badges, BulkResult, Cart, CatalogItem, Delegation, DepartmentRow, IssueQueueItem, PreviewStep, RequisitionDetail, RequisitionSummary,
-  RequisitionType, WorkflowTemplate, WorkflowTemplateInput,
+  RequisitionType, WorkflowTemplate, WorkflowTemplateInput, IssueHistoryItem,
 } from './requisition-types'
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
@@ -43,6 +43,7 @@ export const requisitionApi = {
   bulkApprove: (ids: string[], comment?: string) => request<{ results: BulkResult[] }>(`${rq}/bulk-approve`, json('POST', { ids, comment })),
 
   issueQueue: () => request<{ requisitions: IssueQueueItem[] }>(`${rq}/issue-queue`),
+  issueHistory: () => request<{ requisitions: IssueHistoryItem[] }>(`${rq}/issue-history`),
   issue: (id: string, lines: { lineId: string; qty: number }[]) => request<Detail>(`${rq}/${id}/issue`, json('POST', { lines })),
   closeRemainder: (id: string, reason: string) => request<Detail>(`${rq}/${id}/close`, json('POST', { reason })),
   recordReturn: (id: string, lines: { lineId: string; lotId: string; qty: number }[], reason?: string) => request<Detail>(`${rq}/${id}/returns`, json('POST', { lines, reason })),

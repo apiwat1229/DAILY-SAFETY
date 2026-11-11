@@ -38,6 +38,11 @@ export type IssueQueueLine = {
   qtyApproved: number; qtyIssued: number; remaining: number; picks: { lotId: string; lotNo: string; expiryDate: string; qty: number }[]
 }
 export type IssueQueueItem = RequisitionSummary & { lines: IssueQueueLine[] }
+export type IssueHistoryLine = {
+  id: string; variantId: string; itemId: string; sku: string; name: string; variantLabel: string; unit: string; imageUrl: string | null
+  qtyApproved: number; qtyIssued: number; qtyReturned: number; issuedLots: { lotId: string; lotNo: string; expiryDate: string; qty: number }[]
+}
+export type IssueHistoryItem = RequisitionSummary & { lines: IssueHistoryLine[] }
 export type Badges = { approvals: number; issue: number; cart: number }
 export type BulkResult = { id: string; ok: boolean; code?: string; error?: string }
 

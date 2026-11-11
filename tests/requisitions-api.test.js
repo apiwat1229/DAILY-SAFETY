@@ -507,3 +507,25 @@ describe('checkout helper endpoints', () => {
     assert.equal((await fetch(`${baseUrl}/api/requisitions/warehouses?type=ppe`)).status, 401)
   })
 })
+
+describe('issue history API', () => {
+  test('storekeeper sees issued requisitions of their warehouse only and can return stock using the listed lots', async () => {
+    const a = await scene()
+    const b = await scene()
+    const reqA = await submit(a, 4)
+    const reqB = await submit(b, 4)
+    await rq(a.leaderClient, 'POST', `/${reqA.id}/approve`, {})
+    await rq(b.leaderClient, 'POST', `/${reqB.id}/approve`, {})
+    const lineA = (await rq(a.keeper.client, 'GET', '/issue-queue')).json.requisitions.find((row) => row.id === reqA.id).lines[0].id
+    await rq(a.keeper.client, 'POST', `/${reqA.id}/issue`, { lines: [{ lineId: lineA, qty: 4 }] })
+    const history = (await rq(a.keeper.client, 'GET', '/issue-history')).json.requisitions
+    assert.deepEqual(history.filter((row) => [reqA.id, reqB.id].includes(row.id)).map((row) => row.id), [reqA.id])
+    const lot = history.find((row) => row.id === reqA.id).lines[0].issuedLots[0]
+    assert.equal(lot.qty, 4)
+    const returned = await rq(a.keeper.client, 'POST', `/${reqA.id}/returns`, { lines: [{ lineId: lineA, lotId: lot.lotId, qty: 1 }] })
+    assert.equal(returned.status, 200)
+    const employee = await makeUser('employee')
+    assert.equal((await rq(employee.client, 'GET', '/issue-history')).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/requisitions/issue-history`)).status, 401)
+  })
+})

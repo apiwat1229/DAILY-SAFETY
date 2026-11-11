@@ -144,6 +144,7 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
   reqRouter.get('/mine', handle((req, res) => res.json({ requisitions: service.listMine(actor(req).id, { status: req.query.status ? String(req.query.status) : undefined }) })))
   reqRouter.get('/inbox', requireManagerRole, handle((req, res) => res.json({ requisitions: service.inbox(actor(req).id) })))
   reqRouter.get('/issue-queue', requireManagerRole, handle((req, res) => res.json({ requisitions: service.issueQueue(actor(req).id, actor(req).role) })))
+  reqRouter.get('/issue-history', requireManagerRole, handle((req, res) => res.json({ requisitions: service.issueHistory(actor(req).id, actor(req).role) })))
   reqRouter.get('/badges', handle((req, res) => {
     const user = actor(req)
     const cart = ['ppe', 'medicine'].reduce((sum, type) => sum + service.getCart(user.id, type).lines.length, 0)

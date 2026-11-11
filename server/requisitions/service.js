@@ -604,6 +604,23 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
     }))
   }
 
+  /** Requisitions already issued (newest first) with the lots the stock came from, so returns can go back to the right lot. */
+  function issueHistory(userId, role) {
+    if (role !== 'admin' && role !== 'storekeeper') return []
+    const warehouseFilter = role === 'admin' ? '' : 'AND r.warehouse_id IN (SELECT warehouse_id FROM warehouse_staff WHERE user_id = ?)'
+    const rows = db.prepare(`SELECT r.* FROM requisitions r WHERE r.status IN ('issued', 'closed', 'received') ${warehouseFilter} ORDER BY r.created_at DESC, r.rowid DESC LIMIT 100`).all(...(role === 'admin' ? [] : [userId]))
+    return rows.map((row) => ({
+      ...summary(row),
+      lines: lineRows(row.id).map((line) => ({
+        id: line.id, variantId: line.variant_id, itemId: line.item_id, sku: line.sku, name: line.name, variantLabel: line.label, unit: line.unit, imageUrl: imageUrl(line.item_id, line.image),
+        qtyApproved: line.qty_approved, qtyIssued: line.qty_issued, qtyReturned: line.qty_returned,
+        issuedLots: db.prepare(`SELECT m.lot_id, l.lot_no, l.expiry_date, SUM(-m.qty) AS qty FROM stock_movements m JOIN stock_lots l ON l.id = m.lot_id
+                                WHERE m.ref_type = 'requisition' AND m.ref_id = ? AND m.variant_id = ? AND m.type = 'issue' GROUP BY m.lot_id ORDER BY l.expiry_date, l.rowid`)
+          .all(row.id, line.variant_id).map((lot) => ({ lotId: lot.lot_id, lotNo: lot.lot_no, expiryDate: lot.expiry_date, qty: lot.qty })),
+      })),
+    }))
+  }
+
   function listAll({ status, q, page = 1, pageSize = 25 } = {}) {
     const where = []
     const params = []
@@ -683,6 +700,6 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
 
   return {
     getCart, setCartLine, clearCart, catalog, warehouseOptions, previewRoute, checkout, get, approve, reject, requestChanges, cancel, resubmit, issue, closeRemainder, recordReturn, confirmReceipt,
-    reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, listAll, badges, canView, departmentOf, prepareUpload, addPhotos, removePhoto, getPhoto,
+    reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, issueHistory, listAll, badges, canView, departmentOf, prepareUpload, addPhotos, removePhoto, getPhoto,
   }
 }
