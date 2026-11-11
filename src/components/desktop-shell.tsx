@@ -28,7 +28,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
         <div className="flex items-center justify-between gap-1"><Brand /><LanguageSwitch compact className="shrink-0 text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
         <div className="mt-9 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
-        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
+        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 hide-scrollbar">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
         <ProfileBlock user={user} onLogout={handleLogout} />
       </aside>
 
@@ -51,7 +51,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
           <div className="flex items-center justify-between gap-1"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-white/10 hover:text-white" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
           <div className="mt-2 flex justify-end"><LanguageSwitch compact className="text-sidebar-muted hover:bg-white/10 hover:text-white" /></div>
           <div className="mt-8 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
-          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
+          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 hide-scrollbar">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
           <ProfileBlock user={user} onLogout={handleLogout} />
         </aside>
       </div>}
