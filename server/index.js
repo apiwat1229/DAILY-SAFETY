@@ -1491,6 +1491,55 @@ app.get('/api/dashboard', requireManager, (req, res) => {
   })
 })
 
+// Which supervisors (leader and above) have submitted inspections, who has not, and their open follow-up load.
+app.get('/api/dashboard/supervisors', requireManager, (req, res) => {
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
+  const [year, month, day] = todayKey.split('-').map(Number)
+  const from = String(req.query.from || new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10))
+  const to = String(req.query.to || todayKey)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    return res.status(400).json({ error: 'ช่วงวันที่ไม่ถูกต้อง' })
+  }
+  const users = db.prepare("SELECT id, display_name, employee_code, role FROM users WHERE is_active = 1 AND role IN ('leader', 'admin') ORDER BY role DESC, display_name COLLATE NOCASE").all()
+  const byInspector = "FROM inspections i WHERE (i.inspector_id = ? OR (? != '' AND UPPER(TRIM(i.employee_code)) = UPPER(TRIM(?))))"
+  const supervisors = users.map((user) => {
+    const keys = [user.id, user.employee_code, user.employee_code]
+    const period = db.prepare(`SELECT COUNT(*) AS n ${byInspector} AND i.inspection_date >= ? AND i.inspection_date <= ?`).get(...keys, from, to).n
+    const today = db.prepare(`SELECT COUNT(*) AS n ${byInspector} AND i.inspection_date = ?`).get(...keys, todayKey).n
+    const last = db.prepare(`SELECT i.inspection_date AS date, i.inspection_time AS time ${byInspector} ORDER BY i.inspection_date DESC, i.inspection_time DESC LIMIT 1`).get(...keys)
+    const ngFound = db.prepare(`SELECT COUNT(*) AS n FROM responses r JOIN inspections i ON i.id = r.inspection_id WHERE r.result = 'NG' AND (i.inspector_id = ? OR (? != '' AND UPPER(TRIM(i.employee_code)) = UPPER(TRIM(?)))) AND i.inspection_date >= ? AND i.inspection_date <= ?`).get(...keys, from, to).n
+    const open = db.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN due_date != '' AND due_date < ? THEN 1 ELSE 0 END) AS overdue FROM responses WHERE result = 'NG' AND follow_up_status != 'แก้ไขแล้ว' AND responsible_user_id = ?").get(todayKey, user.id)
+    return {
+      id: user.id,
+      name: user.display_name,
+      employeeCode: user.employee_code,
+      role: user.role,
+      inspectionsPeriod: period,
+      inspectionsToday: today,
+      lastReportDate: last?.date || '',
+      lastReportTime: last?.time || '',
+      ngFound,
+      openTasks: open.total || 0,
+      overdueTasks: open.overdue || 0,
+      status: today > 0 ? 'reported_today' : period > 0 ? 'reported_period' : 'not_reported',
+    }
+  })
+  const total = supervisors.length
+  const reportedToday = supervisors.filter((row) => row.inspectionsToday > 0).length
+  const reportedPeriod = supervisors.filter((row) => row.inspectionsPeriod > 0).length
+  const percent = (count) => (total ? Math.round((count / total) * 100) : 0)
+  res.json({
+    period: { from, to },
+    today: todayKey,
+    summary: {
+      total, reportedToday, notReportedToday: total - reportedToday, reportedPeriod, notReportedPeriod: total - reportedPeriod,
+      rateToday: percent(reportedToday), ratePeriod: percent(reportedPeriod),
+      openTasks: supervisors.reduce((sum, row) => sum + row.openTasks, 0), overdueTasks: supervisors.reduce((sum, row) => sum + row.overdueTasks, 0),
+    },
+    supervisors,
+  })
+})
+
 app.get('/api/dashboard/category', requireManager, (req, res) => {
   const category = String(req.query.category || '').trim()
   const from = String(req.query.from || '')

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api, formatDate, localDateString } from '@/lib/api'
 import type { DashboardCategorySummary, DashboardData, User } from '@/lib/types'
 import type { PageKey } from '@/components/app-shell'
+import { SupervisorReportCard } from '@/components/supervisor-report-card'
 import { InspectionDetailDialog } from '@/components/inspection-detail-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -127,6 +128,8 @@ export function DashboardPage({ user, onPage }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <SupervisorReportCard from={from} to={to} refreshKey={refreshKey} />
 
       <Card className="rounded-2xl border-border">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">

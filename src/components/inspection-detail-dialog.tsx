@@ -201,7 +201,7 @@ function PhotoPreviewDialog({ photo, onOpenChange, onDelete }: { photo: Inspecti
   function resetZoom() { setZoom(1); setOffset({ x: 0, y: 0 }) }
 
   return <Dialog open={Boolean(photo)} onOpenChange={onOpenChange}>
-    <DialogContent className="max-h-[94dvh] w-[calc(100vw-1rem)] max-w-[calc(100%-1rem)] gap-3 overflow-hidden p-3 sm:w-[calc(100vw-2rem)] sm:max-w-6xl sm:p-5">
+    <DialogContent layout="custom" className="max-h-[94dvh] w-[calc(100vw-1rem)] max-w-[calc(100%-1rem)] gap-3 overflow-hidden p-3 sm:w-[calc(100vw-2rem)] sm:max-w-6xl sm:p-5">
       <DialogHeader className="flex flex-row items-center justify-between gap-2 pr-10">
         <div className="min-w-0"><DialogTitle className="truncate text-base">{photo ? t(photo.type === 'before' ? 'ก่อนแก้ไข' : 'หลังแก้ไข') : t('รูปภาพ')}</DialogTitle><DialogDescription className="truncate text-sm">{photo?.name}</DialogDescription></div>
         <div className="flex shrink-0 items-center gap-1">{onDelete && <Button type="button" variant="destructive" size="icon" aria-label={t('ลบรูปภาพ')} title={t('ลบรูปภาพ')} onClick={onDelete}><Trash2 size={17} /></Button>}<Button iconOnly type="button" variant="outline" size="icon" aria-label={t('ย่อรูป')} onClick={() => changeZoom(-0.25)} disabled={zoom <= 1}><ZoomOut size={17} /></Button><span className="min-w-12 text-center text-xs font-medium tabular-nums">{Math.round(zoom * 100)}%</span><Button iconOnly type="button" variant="outline" size="icon" aria-label={t('ขยายรูป')} onClick={() => changeZoom(0.25)} disabled={zoom >= 5}><ZoomIn size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t('ขนาดพอดี')} onClick={resetZoom}><RotateCcw size={16} /></Button></div>

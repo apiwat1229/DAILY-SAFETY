@@ -268,3 +268,38 @@ describe('persistent rate limits', () => {
     } finally { db.close() }
   })
 })
+
+describe('supervisor reporting status', () => {
+  test('counts who reported today and who has not, for managers only', async () => {
+    const adminClient = await admin()
+    for (const [code, name] of [['S001', 'หัวหน้า รายงาน'], ['S002', 'หัวหน้า ไม่รายงาน']]) {
+      assert.equal((await adminClient.call('POST', '/api/admin/employees', employeeBody(code, name))).status, 201)
+      assert.equal((await adminClient.call('POST', '/api/admin/users', { name, employeeCode: code, password: 'Super-pass-1', role: 'leader' })).status, 201)
+    }
+    const { json: checklist } = await adminClient.call('GET', '/api/checklist')
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
+    const form = new FormData()
+    form.set('payload', JSON.stringify({ date: today, time: '08:00', area: 'โรงงาน', shift: 'เช้า', inspectorName: 'หัวหน้า รายงาน', employeeCode: 'S001', responses: checklist.items.map((item) => ({ key: item.key, result: 'OK' })) }))
+    form.set('photoMetadata', '[]')
+    assert.equal((await adminClient.call('POST', '/api/inspections', form)).status, 201)
+
+    const report = await adminClient.call('GET', `/api/dashboard/supervisors?from=${today}&to=${today}`)
+    assert.equal(report.status, 200, JSON.stringify(report.json))
+    const byCode = Object.fromEntries(report.json.supervisors.map((row) => [row.employeeCode, row]))
+    assert.equal(byCode.S001.status, 'reported_today')
+    assert.equal(byCode.S001.inspectionsToday, 1)
+    assert.equal(byCode.S002.status, 'not_reported')
+    const { summary } = report.json
+    assert.equal(summary.total, report.json.supervisors.length)
+    assert.equal(summary.reportedToday + summary.notReportedToday, summary.total)
+    assert.ok(summary.reportedToday >= 1 && summary.notReportedToday >= 1)
+
+    assert.equal((await adminClient.call('GET', '/api/dashboard/supervisors?from=2026-02-01&to=2026-01-01')).status, 400)
+    const leader = await loginAs(baseUrl, 'leader', 'Leader-test-1')
+    assert.equal((await leader.call('GET', '/api/dashboard/supervisors')).status, 200)
+    assert.equal((await adminClient.call('POST', '/api/admin/employees', employeeBody('E777', 'พนักงาน ธรรมดา'))).status, 201)
+    assert.equal((await adminClient.call('POST', '/api/admin/users', { name: 'พนักงาน ธรรมดา', employeeCode: 'E777', password: 'Emp-pass-77', role: 'employee' })).status, 201)
+    const employee = await loginAs(baseUrl, 'e777', 'Emp-pass-77')
+    assert.equal((await employee.call('GET', '/api/dashboard/supervisors')).status, 403)
+  })
+})

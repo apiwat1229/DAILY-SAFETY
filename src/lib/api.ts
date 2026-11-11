@@ -1,4 +1,4 @@
-import type { TrainingViewReport, HiyariStatus, AuditLogFilters, AuditLogResponse, Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
+import type { SupervisorReport, TrainingViewReport, HiyariStatus, AuditLogFilters, AuditLogResponse, Assignee, Assessment, AssessmentQuestion, AssessmentReportSubmission, AssessmentSubmission, ChecklistItem, DashboardCategorySummary, DashboardData, Employee, EmployeeActivityReport, Filters, HiyariForm, HiyariLanguage, HiyariSubmission, Inspection, InspectionSummary, InspectionSuggestions, MyTask, PublicEmployeeSuggestion, TrainingMaterial, User } from './types'
 
 type ApiOptions = RequestInit & { body?: BodyInit | null }
 
@@ -30,6 +30,7 @@ export const api = {
     const query = new URLSearchParams({ category, from, to, result })
     return request<DashboardCategorySummary>(`/api/dashboard/category?${query.toString()}`)
   },
+  supervisorReport: (from: string, to: string) => request<SupervisorReport>(`/api/dashboard/supervisors?${new URLSearchParams({ from, to })}`),
   myTasks: () => request<{ tasks: MyTask[]; counts: { total: number; notStarted: number; inProgress: number; overdue: number } }>('/api/my-tasks'),
   assignees: () => request<{ assignees: Assignee[] }>('/api/assignees'),
   checklist: () => request<{ items: ChecklistItem[] }>('/api/checklist'),

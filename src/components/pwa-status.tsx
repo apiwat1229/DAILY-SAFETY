@@ -71,7 +71,7 @@ export function PwaStatus() {
     </div>}
     {installEvent && !installDismissed && <div className="fixed inset-x-3 bottom-24 z-[55] flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:max-w-sm md:bottom-6">
       <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-primary"><Download size={18} /></div>
-      <p className="min-w-0 flex-1 text-sm">{t('ติดตั้งแอปลงหน้าจอหลักเพื่อเปิดเร็วและใช้งานตอนสัญญาณอ่อน')}</p>
+      <p className="min-w-0 flex-1 text-sm">{t('ติดตั้งแอปลงหน้าจอหลัก')}</p>
       <Button size="sm" onClick={() => void install()}>{t('ติดตั้ง')}</Button>
       <Button variant="ghost" size="icon" aria-label={t('ภายหลัง')} onClick={dismissInstall}><X size={16} /></Button>
     </div>}

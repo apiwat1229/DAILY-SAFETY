@@ -267,3 +267,18 @@ export type TrainingViewReport = {
   viewed: { employeeCode: string; employeeName: string; department: string; viewedAt: string }[]
   notViewed: { employeeCode: string; employeeName: string; department: string }[]
 }
+
+export type SupervisorStatus = 'reported_today' | 'reported_period' | 'not_reported'
+export type SupervisorReport = {
+  period: { from: string; to: string }
+  today: string
+  summary: {
+    total: number; reportedToday: number; notReportedToday: number; reportedPeriod: number; notReportedPeriod: number
+    rateToday: number; ratePeriod: number; openTasks: number; overdueTasks: number
+  }
+  supervisors: {
+    id: string; name: string; employeeCode: string; role: 'admin' | 'leader'
+    inspectionsPeriod: number; inspectionsToday: number; lastReportDate: string; lastReportTime: string
+    ngFound: number; openTasks: number; overdueTasks: number; status: SupervisorStatus
+  }[]
+}

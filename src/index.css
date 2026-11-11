@@ -376,3 +376,27 @@ label { line-height: var(--type-line-label); }
 .bottom-nav-item:active { background: var(--muted); }
 html { -webkit-text-size-adjust: 100%; }
 body { overscroll-behavior-y: none; }
+
+/* Structured dialogs (header / scrolling body / footer, see ui/dialog.tsx). */
+[data-slot="dialog-body"] form > div:last-child:has(button[type="submit"]) {
+  position: sticky; bottom: 0; z-index: 5;
+  margin: 0 -1.5rem -1.25rem; padding: .875rem 1.5rem calc(.875rem + env(safe-area-inset-bottom));
+  background: var(--popover); border-top: 1px solid var(--border-subtle);
+}
+[data-slot="dialog-bottom"] > [data-slot="dialog-footer"] { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+
+/* On phones dialogs become bottom sheets: easier to reach with a thumb and consistent with the bottom navigation. */
+@media (max-width: 639px) {
+  [data-slot="dialog-content"][data-layout="structured"] {
+    top: auto; bottom: 0; left: 0; translate: none; width: 100%; max-width: 100% !important;
+    max-height: 92dvh; border-radius: var(--modal-radius) var(--modal-radius) 0 0;
+  }
+  [data-slot="dialog-content"][data-layout="structured"] [data-slot="dialog-top"] { padding: 1.25rem 1rem .75rem; padding-right: 3.25rem; }
+  [data-slot="dialog-content"][data-layout="structured"] [data-slot="dialog-body"] { padding-inline: 1rem; }
+  [data-slot="dialog-content"][data-layout="structured"] [data-slot="dialog-body"] form > div:last-child:has(button[type="submit"]) { margin-inline: -1rem; padding-inline: 1rem; }
+  [data-slot="dialog-content"][data-layout="structured"] [data-slot="dialog-body"] form > div:last-child:has(button[type="submit"]) button { flex: 1; }
+}
+
+/* Keep implicit grids inside dialogs from growing past the dialog width (long select values, long words). */
+[data-slot="dialog-body"] .grid:not([class*="grid-cols"]):not([class*="grid-rows"]):not([class*="grid-flow"]) { grid-template-columns: minmax(0, 1fr); }
+[data-slot="dialog-body"] .grid > * { min-width: 0; }
