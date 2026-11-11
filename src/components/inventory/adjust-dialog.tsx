@@ -34,7 +34,7 @@ export function StockActionDialog({ mode, row, warehouses, onClose, onSaved }: P
   const [writeOffReason, setWriteOffReason] = useState<WriteOffReason>('expired')
   const [toWarehouseId, setToWarehouseId] = useState('')
   const [busy, setBusy] = useState(false)
-  const targets = warehouses.filter((warehouse) => warehouse.isActive && warehouse.id !== row?.warehouseId)
+  const targets = warehouses.filter((warehouse) => warehouse.isActive && warehouse.id !== row?.warehouseId && (warehouse.type === 'any' || warehouse.type === row?.type))
 
   useEffect(() => {
     if (!mode || !row) return

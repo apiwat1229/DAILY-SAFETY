@@ -71,9 +71,33 @@ const LEGACY_CATEGORIES = ['อุปกรณ์ป้องกัน (ตั�
 must(await call('POST', '/api/auth/login', { username: user, password, rememberMe: false }), 'login')
 
 const warehouses = must(await call('GET', '/api/inventory/warehouses'), 'warehouses').warehouses
-let warehouse = warehouses.find((row) => row.code === 'SAMPLE')
-if (!warehouse) warehouse = must(await call('POST', '/api/inventory/warehouses', { code: 'SAMPLE', name: 'คลังตัวอย่าง' }), 'create warehouse').warehouse
-console.log(`warehouse ${warehouse.code} (${warehouse.id})`)
+async function ensureWarehouse(code, name, type) {
+  const found = warehouses.find((row) => row.code === code)
+  const warehouse = found ?? must(await call('POST', '/api/inventory/warehouses', { code, name, type }), `create warehouse ${code}`).warehouse
+  console.log(`warehouse ${warehouse.code} (${type})`)
+  return warehouse
+}
+// PPE and medicine live in separate warehouses, so each can have its own storekeeper and approval route.
+const ppeWarehouse = await ensureWarehouse('PPE-SAMPLE', 'คลัง PPE (ตัวอย่าง)', 'ppe')
+const medWarehouse = await ensureWarehouse('MED-SAMPLE', 'คลังยา (ตัวอย่าง)', 'medicine')
+const warehouseFor = (type) => (type === 'medicine' ? medWarehouse : ppeWarehouse)
+
+// The first version of this script used one mixed warehouse (SAMPLE): move its free stock to the right warehouse.
+const legacy = warehouses.find((row) => row.code === 'SAMPLE')
+if (legacy) {
+  const rows = must(await call('GET', `/api/inventory/stock?warehouseId=${legacy.id}`), 'legacy stock').rows
+  let moved = 0
+  for (const row of rows) {
+    const lots = must(await call('GET', `/api/inventory/stock/lots?warehouseId=${legacy.id}&variantId=${row.variantId}`), 'lots').lots
+    const lines = lots.filter((lot) => lot.onHand - lot.reserved > 0).map((lot) => ({ variantId: row.variantId, lotId: lot.lotId, qty: lot.onHand - lot.reserved }))
+    if (lines.length === 0) continue
+    must(await call('POST', '/api/inventory/transfers', { fromWarehouseId: legacy.id, toWarehouseId: warehouseFor(row.type).id, lines }), `move ${row.sku}`)
+    moved += lines.length
+  }
+  if (moved) console.log(`moved ${moved} stock lines out of the old SAMPLE warehouse`)
+  const left = must(await call('GET', `/api/inventory/stock?warehouseId=${legacy.id}`), 'legacy stock').rows.reduce((sum, row) => sum + row.onHand, 0)
+  if (left === 0 && legacy.isActive) { must(await call('PATCH', `/api/inventory/warehouses/${legacy.id}`, { isActive: false }), 'retire SAMPLE'); console.log('old SAMPLE warehouse switched off (empty)') }
+}
 
 const categoryCache = new Map()
 async function category(name, type) {
@@ -94,7 +118,7 @@ async function uploadPhoto(item, sku) {
 }
 
 const existing = new Map(must(await call('GET', '/api/inventory/items'), 'items').items.map((row) => [row.sku, row]))
-const receipts = []
+const receipts = { ppe: [], medicine: [] }
 async function upsert({ sku, name, type, categoryName, unit, minStock, variants, qty, expiry }) {
   const cat = await category(categoryName, type)
   const found = existing.get(sku)
@@ -106,30 +130,31 @@ async function upsert({ sku, name, type, categoryName, unit, minStock, variants,
   }
   const item = must(await call('POST', '/api/inventory/items', { sku, name, type, categoryId: cat.id, unit, minStock, variants }), `create ${sku}`).item
   await uploadPhoto(item, sku)
-  for (const variant of item.variants) receipts.push({ variantId: variant.id, qty, ...(type === 'medicine' ? { lotNo: 'DEMO-LOT-1', expiryDate: expiry } : {}) })
+  for (const variant of item.variants) receipts[type].push({ variantId: variant.id, qty, ...(type === 'medicine' ? { lotNo: 'DEMO-LOT-1', expiryDate: expiry } : {}) })
   console.log(`created ${sku} ${name}`)
 }
 for (const [sku, name, unit, minStock, variants, categoryName, qty] of PPE) await upsert({ sku, name, type: 'ppe', categoryName, unit, minStock, variants, qty })
 for (const [sku, name, unit, minStock, categoryName, qty, expiry] of MEDICINE) await upsert({ sku, name, type: 'medicine', categoryName, unit, minStock, variants: [''], qty, expiry })
 
-if (receipts.length) {
-  must(await call('POST', '/api/inventory/receipts', { warehouseId: warehouse.id, lines: receipts, note: 'สต็อกตัวอย่าง' }), 'receipt')
-  console.log(`received ${receipts.length} stock lines into ${warehouse.code}`)
+for (const type of ['ppe', 'medicine']) {
+  if (receipts[type].length === 0) continue
+  must(await call('POST', '/api/inventory/receipts', { warehouseId: warehouseFor(type).id, lines: receipts[type], note: 'สต็อกตัวอย่าง' }), 'receipt')
+  console.log(`received ${receipts[type].length} stock lines into ${warehouseFor(type).code}`)
 }
 
 // The first version of this script used two catch-all categories; drop them once they are empty.
 const leftovers = must(await call('GET', '/api/inventory/categories'), 'categories').categories.filter((row) => LEGACY_CATEGORIES.includes(row.name) && row.itemCount === 0)
 for (const row of leftovers) { await call('DELETE', `/api/inventory/categories/${row.id}`); console.log(`removed empty category ${row.name}`) }
-// ---- sample stock counts: one posted (with a few differences) and one still open ----
-const existingCounts = must(await call('GET', `/api/inventory/counts?warehouseId=${warehouse.id}`), 'counts').counts
+// ---- sample stock counts: the PPE warehouse gets a posted count (with differences) and an open one ----
+const existingCounts = must(await call('GET', `/api/inventory/counts?warehouseId=${ppeWarehouse.id}`), 'counts').counts
 if (existingCounts.length === 0) {
-  const first = must(await call('POST', '/api/inventory/counts', { warehouseId: warehouse.id }), 'create count').id
+  const first = must(await call('POST', '/api/inventory/counts', { warehouseId: ppeWarehouse.id }), 'create count').id
   const sheet = must(await call('GET', `/api/inventory/counts/${first}`), 'count sheet').count
-  const diffs = new Map([[1, -2], [4, 1], [9, -1]])
+  const diffs = new Map([[1, -2], [4, 1], [7, -1]])
   must(await call('PUT', `/api/inventory/counts/${first}/lines`, { lines: sheet.lines.map((line, index) => ({ variantId: line.variantId, lotId: line.lotId, countedQty: Math.max(line.systemQty + (diffs.get(index) ?? 0), 0) })) }), 'save count')
   const posted = must(await call('POST', `/api/inventory/counts/${first}/post`), 'post count')
   console.log(`stock count posted (${posted.adjustments} adjustments)`)
-  const second = must(await call('POST', '/api/inventory/counts', { warehouseId: warehouse.id }), 'create second count').id
+  const second = must(await call('POST', '/api/inventory/counts', { warehouseId: ppeWarehouse.id }), 'create second count').id
   const open = must(await call('GET', `/api/inventory/counts/${second}`), 'count sheet').count
   must(await call('PUT', `/api/inventory/counts/${second}/lines`, { lines: open.lines.slice(0, 6).map((line) => ({ variantId: line.variantId, lotId: line.lotId, countedQty: line.systemQty })) }), 'save open count')
   console.log('stock count left open (6 lines counted)')
@@ -162,7 +187,7 @@ if (!known.some((row) => String(row.reason ?? '').startsWith(SAMPLE_REASON))) {
     const submit = async (lines, reason) => {
       for (const [sku, qty, label] of lines) { const v = variantOf(sku, label); must(await employee('PUT', '/api/requisitions/cart/lines', { type: v.type, variantId: v.variantId, qty }), `cart ${sku}`) }
       const type = variantOf(lines[0][0]).type
-      return must(await employee('POST', '/api/requisitions/checkout', { type, warehouseId: warehouse.id, reason: `${SAMPLE_REASON} ${reason}`, neededBy: '' }), 'checkout').requisition.id
+      return must(await employee('POST', '/api/requisitions/checkout', { type, warehouseId: warehouseFor(type).id, reason: `${SAMPLE_REASON} ${reason}`, neededBy: '' }), 'checkout').requisition.id
     }
     const approve = async (id) => must(await call('POST', `/api/requisitions/${id}/approve`, {}), 'approve')
     const issueAll = async (id) => {

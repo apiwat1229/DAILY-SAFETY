@@ -221,8 +221,9 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
   // ---- warehouses ----
   function warehouseDto(row) {
     const staff = db.prepare(`SELECT s.user_id, u.display_name FROM warehouse_staff s JOIN users u ON u.id = s.user_id WHERE s.warehouse_id = ? AND u.is_active = 1 AND u.role IN ('storekeeper', 'admin') ORDER BY u.display_name COLLATE NOCASE`).all(row.id)
-    return { id: row.id, code: row.code, name: row.name, isActive: Boolean(row.is_active), staff: staff.map((member) => ({ userId: member.user_id, name: member.display_name })) }
+    return { id: row.id, code: row.code, name: row.name, type: row.type || 'any', isActive: Boolean(row.is_active), staff: staff.map((member) => ({ userId: member.user_id, name: member.display_name })) }
   }
+  const WAREHOUSE_TYPES = ['any', ...TYPES]
   const loadWarehouse = (id) => db.prepare('SELECT * FROM warehouses WHERE id = ?').get(id)
   const codeTaken = (code, exceptId = '') => Boolean(db.prepare('SELECT 1 FROM warehouses WHERE UPPER(code) = UPPER(?) AND id != ?').get(code, exceptId))
 
@@ -238,10 +239,12 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     const code = text(req.body?.code, 20).toUpperCase()
     const name = text(req.body?.name)
     if (!code || !name) return bad(res, 'กรุณาระบุรหัสและชื่อคลัง')
+    const type = String(req.body?.type ?? 'any')
+    if (!WAREHOUSE_TYPES.includes(type)) return bad(res, 'ประเภทคลังไม่ถูกต้อง')
     if (codeTaken(code)) return bad(res, 'รหัสคลังนี้มีอยู่แล้ว', 409)
     const id = randomUUID()
-    db.prepare('INSERT INTO warehouses (id, code, name, is_active) VALUES (?, ?, ?, 1)').run(id, code, name)
-    addAudit(req.session.user.id, 'เพิ่มคลัง', 'inventory_warehouse', id, { code, name })
+    db.prepare('INSERT INTO warehouses (id, code, name, is_active, type) VALUES (?, ?, ?, 1, ?)').run(id, code, name, type)
+    addAudit(req.session.user.id, 'เพิ่มคลัง', 'inventory_warehouse', id, { code, name, type })
     res.status(201).json({ warehouse: warehouseDto(loadWarehouse(id)) })
   })
 
@@ -253,8 +256,15 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     if (!code || !name) return bad(res, 'กรุณาระบุรหัสและชื่อคลัง')
     if (codeTaken(code, existing.id)) return bad(res, 'รหัสคลังนี้มีอยู่แล้ว', 409)
     const isActive = flag(req.body?.isActive, Boolean(existing.is_active))
-    db.prepare('UPDATE warehouses SET code = ?, name = ?, is_active = ? WHERE id = ?').run(code, name, isActive ? 1 : 0, existing.id)
-    addAudit(req.session.user.id, 'แก้ไขคลัง', 'inventory_warehouse', existing.id, { code, name })
+    const type = String(req.body?.type ?? existing.type ?? 'any')
+    if (!WAREHOUSE_TYPES.includes(type)) return bad(res, 'ประเภทคลังไม่ถูกต้อง')
+    if (type !== 'any' && type !== existing.type) {
+      const other = db.prepare(`SELECT 1 FROM stock_balances b JOIN item_variants v ON v.id = b.variant_id JOIN items i ON i.id = v.item_id
+                                WHERE b.warehouse_id = ? AND b.on_hand > 0 AND i.type != ? LIMIT 1`).get(existing.id, type)
+      if (other) return bad(res, 'คลังนี้ยังมีสต็อกของสินค้าอีกประเภท เปลี่ยนประเภทไม่ได้', 409)
+    }
+    db.prepare('UPDATE warehouses SET code = ?, name = ?, is_active = ?, type = ? WHERE id = ?').run(code, name, isActive ? 1 : 0, type, existing.id)
+    addAudit(req.session.user.id, 'แก้ไขคลัง', 'inventory_warehouse', existing.id, { code, name, type })
     res.json({ warehouse: warehouseDto(loadWarehouse(existing.id)) })
   })
 

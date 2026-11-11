@@ -6,7 +6,8 @@ export type Item = {
   id: string; sku: string; name: string; type: InventoryType; categoryId: string; categoryName: string; unit: string; image: string
   minStock: number; trackLot: boolean; trackExpiry: boolean; isActive: boolean; variants: Variant[]; imageUrl: string | null
 }
-export type Warehouse = { id: string; code: string; name: string; isActive: boolean; staff: { userId: string; name: string }[] }
+export type WarehouseType = 'any' | InventoryType
+export type Warehouse = { id: string; code: string; name: string; type: WarehouseType; isActive: boolean; staff: { userId: string; name: string }[] }
 
 export type StockRow = {
   variantId: string; itemId: string; sku: string; name: string; variantLabel: string; type: InventoryType; unit: string

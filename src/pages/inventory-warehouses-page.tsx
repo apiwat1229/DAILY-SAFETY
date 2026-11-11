@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { useConfirm } from '@/components/confirm-provider'
-import { WarehouseDialog, WarehouseStaffDialog } from '@/components/inventory/warehouse-dialog'
+import { WarehouseDialog, WarehouseStaffDialog, warehouseTypeLabel } from '@/components/inventory/warehouse-dialog'
 
 export function InventoryWarehousesPage() {
   const { t } = useI18n()
@@ -66,10 +66,11 @@ export function InventoryWarehousesPage() {
     <Card className="overflow-hidden rounded-2xl border-border">
       {warehouses.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('รหัสคลัง')}</TableHead><TableHead>{t('ชื่อคลัง')}</TableHead><TableHead>{t('เจ้าหน้าที่')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>{t('รหัสคลัง')}</TableHead><TableHead>{t('ชื่อคลัง')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('เจ้าหน้าที่')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
           <TableBody>{pagination.visibleItems.map((warehouse) => <TableRow key={warehouse.id} data-inactive={!warehouse.isActive || undefined}>
             <TableCell><Badge variant="outline" className="font-mono">{warehouse.code}</Badge></TableCell>
             <TableCell className="font-medium">{warehouse.name}</TableCell>
+            <TableCell><Badge variant="outline" className={warehouse.type === 'ppe' ? 'border-primary/25 bg-secondary text-primary' : warehouse.type === 'medicine' ? 'border-destructive/25 bg-destructive/10 text-destructive' : ''}>{t(warehouseTypeLabel[warehouse.type])}</Badge></TableCell>
             <TableCell className="whitespace-normal"><div className="flex flex-wrap gap-1">{warehouse.staff.length ? warehouse.staff.map((member) => <Badge key={member.userId} variant="outline">{member.name}</Badge>) : <span className="text-muted-foreground">{t('ยังไม่กำหนด')}</span>}</div></TableCell>
             <TableCell><Badge variant="outline" className={warehouse.isActive ? 'border-success/25 bg-success/10 text-success' : 'text-muted-foreground'}>{warehouse.isActive ? t('ใช้งาน') : t('ปิดใช้งาน')}</Badge></TableCell>
             <TableCell><div className="flex justify-end gap-1">

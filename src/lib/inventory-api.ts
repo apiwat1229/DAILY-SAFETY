@@ -36,8 +36,8 @@ export const inventoryApi = {
   deleteVariant: (id: string) => request<{ ok: boolean }>(`${base}/variants/${id}`, json('DELETE')),
 
   warehouses: () => request<{ warehouses: Warehouse[] }>(`${base}/warehouses`),
-  createWarehouse: (input: { code: string; name: string }) => request<{ warehouse: Warehouse }>(`${base}/warehouses`, json('POST', input)),
-  updateWarehouse: (id: string, input: { code?: string; name?: string; isActive?: boolean }) => request<{ warehouse: Warehouse }>(`${base}/warehouses/${id}`, json('PATCH', input)),
+  createWarehouse: (input: { code: string; name: string; type?: string }) => request<{ warehouse: Warehouse }>(`${base}/warehouses`, json('POST', input)),
+  updateWarehouse: (id: string, input: { code?: string; name?: string; type?: string; isActive?: boolean }) => request<{ warehouse: Warehouse }>(`${base}/warehouses/${id}`, json('PATCH', input)),
   deleteWarehouse: (id: string) => request<{ ok: boolean }>(`${base}/warehouses/${id}`, json('DELETE')),
   setWarehouseStaff: (id: string, userIds: string[]) => request<{ warehouse: Warehouse }>(`${base}/warehouses/${id}/staff`, json('PUT', { userIds })),
 

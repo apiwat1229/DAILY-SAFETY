@@ -32,7 +32,8 @@ export function migrateInventory(db) {
       id TEXT PRIMARY KEY,
       code TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))
+      is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+      type TEXT NOT NULL DEFAULT 'any' CHECK(type IN ('any', 'ppe', 'medicine'))
     );
     CREATE TABLE IF NOT EXISTS warehouse_staff (
       warehouse_id TEXT NOT NULL,
@@ -103,4 +104,8 @@ export function migrateInventory(db) {
       PRIMARY KEY (count_id, variant_id, lot_id)
     );
   `)
+  // Warehouses created before types existed hold anything.
+  if (!db.prepare('PRAGMA table_info(warehouses)').all().some((column) => column.name === 'type')) {
+    db.exec("ALTER TABLE warehouses ADD COLUMN type TEXT NOT NULL DEFAULT 'any' CHECK(type IN ('any', 'ppe', 'medicine'))")
+  }
 }

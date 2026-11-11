@@ -128,6 +128,26 @@ describe('catalog and warehouse API', () => {
     assert.equal((await inv(client, 'POST', '/warehouses', { code: 'NOPE', name: 'x' })).status, 403)
   })
 
+  test('warehouses have a type: validated, shown, enforced on receipts and locked while other-type stock exists', async () => {
+    const adminClient = await admin()
+    const ppe = await inv(adminClient, 'POST', '/warehouses', { code: 'WH-TYPE-PPE', name: 'คลัง PPE ทดสอบ', type: 'ppe' })
+    assert.equal(ppe.status, 201)
+    assert.equal(ppe.json.warehouse.type, 'ppe')
+    assert.equal((await inv(adminClient, 'POST', '/warehouses', { code: 'WH-TYPE-BAD', name: 'x', type: 'food' })).status, 400)
+    const plain = await inv(adminClient, 'POST', '/warehouses', { code: 'WH-TYPE-ANY', name: 'คลังรวมทดสอบ' })
+    assert.equal(plain.json.warehouse.type, 'any')
+    const med = (await inv(adminClient, 'POST', '/items', { sku: 'WHT-MED', name: 'ยาทดสอบคลัง', type: 'medicine', unit: 'แผง', minStock: 0 })).json.item
+    const wrong = await inv(adminClient, 'POST', '/receipts', { warehouseId: ppe.json.warehouse.id, lines: [{ variantId: med.variants[0].id, qty: 3, lotNo: 'L1', expiryDate: '2030-01-01' }] })
+    assert.equal(wrong.status, 400)
+    assert.match(wrong.json.error, /PPE/)
+    const ok = await inv(adminClient, 'POST', '/receipts', { warehouseId: plain.json.warehouse.id, lines: [{ variantId: med.variants[0].id, qty: 3, lotNo: 'L1', expiryDate: '2030-01-01' }] })
+    assert.equal(ok.status, 201)
+    // A warehouse already holding medicine cannot be turned into a PPE-only one.
+    assert.equal((await inv(adminClient, 'PATCH', `/warehouses/${plain.json.warehouse.id}`, { type: 'ppe' })).status, 409)
+    assert.equal((await inv(adminClient, 'PATCH', `/warehouses/${plain.json.warehouse.id}`, { type: 'medicine' })).json.warehouse.type, 'medicine')
+    assert.equal((await inv(adminClient, 'PATCH', `/warehouses/${ppe.json.warehouse.id}`, { type: 'medicine' })).json.warehouse.type, 'medicine')
+  })
+
   test('warehouse staff list drops users who were demoted or deactivated', async () => {
     const adminClient = await admin()
     const demoted = await makeStorekeeper('SK-DEMOTE')

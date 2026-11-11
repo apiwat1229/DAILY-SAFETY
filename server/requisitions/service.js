@@ -247,7 +247,7 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
   function warehouseOptions(userId, type) {
     assertType(type)
     const lines = getCart(userId, type).lines
-    const rows = db.prepare('SELECT id, code, name FROM warehouses WHERE is_active = 1 ORDER BY code COLLATE NOCASE').all()
+    const rows = db.prepare("SELECT id, code, name FROM warehouses WHERE is_active = 1 AND type IN ('any', ?) ORDER BY code COLLATE NOCASE").all(type)
     return rows
       .map((row) => ({ id: row.id, code: row.code, name: row.name, total: lines.length, covered: lines.filter((line) => stock.availableToReserve({ variantId: line.variantId, warehouseId: row.id }) >= line.qty).length }))
       .sort((a, b) => b.covered - a.covered)
@@ -256,8 +256,9 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
   /** The approval route this cart would take (read-only version of what checkout snapshots). */
   function previewRoute({ userId, type, warehouseId }) {
     assertType(type)
-    const warehouse = db.prepare('SELECT id, is_active FROM warehouses WHERE id = ?').get(String(warehouseId ?? ''))
+    const warehouse = db.prepare('SELECT id, is_active, type FROM warehouses WHERE id = ?').get(String(warehouseId ?? ''))
     if (!warehouse || !warehouse.is_active) throw invalid('กรุณาเลือกคลังที่เปิดใช้งาน')
+    if (warehouse.type !== 'any' && warehouse.type !== type) throw invalid('คลังนี้ไม่ได้เก็บสินค้าประเภทนี้')
     const template = workflow.pickTemplate({ type, warehouseId: warehouse.id })
     const lines = getCart(userId, type).lines
     if (!template || !lines.length) return { templateName: template?.name ?? '', steps: [] }
@@ -281,8 +282,9 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
     assertType(type)
     const text = String(reason ?? '').trim().slice(0, 500)
     if (!text) throw invalid('กรุณาระบุเหตุผลการเบิก')
-    const warehouse = db.prepare('SELECT id, is_active FROM warehouses WHERE id = ?').get(String(warehouseId ?? ''))
+    const warehouse = db.prepare('SELECT id, is_active, type FROM warehouses WHERE id = ?').get(String(warehouseId ?? ''))
     if (!warehouse || !warehouse.is_active) throw invalid('กรุณาเลือกคลังที่เปิดใช้งาน')
+    if (warehouse.type !== 'any' && warehouse.type !== type) throw invalid('คลังนี้ไม่ได้เก็บสินค้าประเภทนี้')
     const needed = String(neededBy ?? '')
     if (needed && (!isCalendarDate(needed) || needed < today())) throw invalid('วันที่ต้องการต้องไม่ใช่วันที่ผ่านมาแล้ว')
     return run(() => {

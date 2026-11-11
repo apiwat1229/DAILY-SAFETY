@@ -52,8 +52,11 @@ export function createStockService(db, opts = {}) {
     return row
   }
 
-  function assertWarehouse(warehouseId) {
-    if (!db.prepare('SELECT id FROM warehouses WHERE id = ?').get(warehouseId)) throw new StockError('NOT_FOUND', 'ไม่พบคลัง')
+  /** Throws when the warehouse is missing, or (when an item type is given) is reserved for the other type. */
+  function assertWarehouse(warehouseId, itemType = '') {
+    const row = db.prepare('SELECT id, type FROM warehouses WHERE id = ?').get(warehouseId)
+    if (!row) throw new StockError('NOT_FOUND', 'ไม่พบคลัง')
+    if (itemType && row.type !== 'any' && row.type !== itemType) throw new StockError('WRONG_WAREHOUSE', row.type === 'ppe' ? 'คลังนี้เก็บเฉพาะอุปกรณ์ PPE' : 'คลังนี้เก็บเฉพาะยา')
   }
 
   /** Writes one signed ledger row and moves the balance. Refuses to take on_hand below zero. */
@@ -72,7 +75,7 @@ export function createStockService(db, opts = {}) {
     assertQty(qty)
     return transaction(() => {
       const variant = loadVariant(variantId)
-      assertWarehouse(warehouseId)
+      assertWarehouse(warehouseId, variant.type)
       if (!variant.variant_active || !variant.item_active) throw new StockError('INACTIVE', 'สินค้านี้ถูกปิดใช้งาน')
       const lot = variant.track_lot ? String(lotNo || '').trim() : ''
       const expiry = variant.track_expiry ? String(expiryDate || '').trim() : ''
@@ -185,9 +188,9 @@ export function createStockService(db, opts = {}) {
     assertQty(qty)
     if (fromWarehouseId === toWarehouseId) throw new StockError('SAME_WAREHOUSE', 'คลังต้นทางและปลายทางต้องไม่ใช่คลังเดียวกัน')
     return transaction(() => {
-      loadVariant(variantId)
+      const variant = loadVariant(variantId)
       assertWarehouse(fromWarehouseId)
-      assertWarehouse(toWarehouseId)
+      assertWarehouse(toWarehouseId, variant.type)
       const lot = findLot(variantId, fromWarehouseId, lotId)
       if (balance({ variantId, warehouseId: fromWarehouseId, lotId }).available < qty) throw new StockError('INSUFFICIENT_STOCK', 'สต็อกที่ใช้ได้ไม่เพียงพอ')
       let target = db.prepare('SELECT id, expiry_date FROM stock_lots WHERE variant_id = ? AND warehouse_id = ? AND lot_no = ?').get(variantId, toWarehouseId, lot.lot_no)

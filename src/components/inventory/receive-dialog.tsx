@@ -33,9 +33,10 @@ export function ReceiveDialog({ open, warehouses, defaultWarehouseId, onClose, o
       .catch((error) => toast.error(t(error instanceof Error ? error.message : 'โหลดรายการสินค้าไม่สำเร็จ')))
   }, [open, t])
 
-  const options = useMemo(() => items.flatMap((item) => item.variants.filter((variant) => variant.isActive).map((variant) => ({
+  const warehouseType = warehouses.find((warehouse) => warehouse.id === warehouseId)?.type ?? 'any'
+  const options = useMemo(() => items.filter((item) => warehouseType === 'any' || item.type === warehouseType).flatMap((item) => item.variants.filter((variant) => variant.isActive).map((variant) => ({
     variantId: variant.id, item, label: `${item.name}${variant.label ? ` · ${variant.label}` : ''} (${item.sku})`,
-  }))), [items])
+  }))), [items, warehouseType])
   const optionOf = (variantId: string) => options.find((option) => option.variantId === variantId)
 
   const update = (key: number, patch: Partial<Line>) => setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))

@@ -3,7 +3,7 @@ import { LoaderCircle, Save, UsersRound, Warehouse as WarehouseIcon } from 'luci
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { inventoryApi } from '@/lib/inventory-api'
-import type { Warehouse } from '@/lib/inventory-types'
+import type { Warehouse, WarehouseType } from '@/lib/inventory-types'
 import type { User } from '@/lib/types'
 import { useI18n } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
@@ -11,8 +11,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useConfirm } from '@/components/confirm-provider'
+
+export const warehouseTypeLabel: Record<WarehouseType, string> = { any: 'ทุกประเภท', ppe: 'เฉพาะ PPE', medicine: 'เฉพาะยา' }
 
 type EditorProps = { open: boolean; warehouse: Warehouse | null; onClose: () => void; onSaved: () => void }
 
@@ -23,6 +26,7 @@ export function WarehouseDialog({ open, warehouse, onClose, onSaved }: EditorPro
   const [code, setCode] = useState(warehouse?.code ?? '')
   const [name, setName] = useState(warehouse?.name ?? '')
   const [isActive, setIsActive] = useState(warehouse?.isActive ?? true)
+  const [type, setType] = useState<WarehouseType>(warehouse?.type ?? 'ppe')
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -30,8 +34,8 @@ export function WarehouseDialog({ open, warehouse, onClose, onSaved }: EditorPro
     setBusy(true)
     try {
       if (!(await confirm(warehouse ? 'update' : 'create'))) return
-      if (warehouse) { await inventoryApi.updateWarehouse(warehouse.id, { code: code.trim(), name: name.trim(), isActive }); toast.success(t('แก้ไขคลังแล้ว')) }
-      else { await inventoryApi.createWarehouse({ code: code.trim(), name: name.trim() }); toast.success(t('เพิ่มคลังแล้ว')) }
+      if (warehouse) { await inventoryApi.updateWarehouse(warehouse.id, { code: code.trim(), name: name.trim(), type, isActive }); toast.success(t('แก้ไขคลังแล้ว')) }
+      else { await inventoryApi.createWarehouse({ code: code.trim(), name: name.trim(), type }); toast.success(t('เพิ่มคลังแล้ว')) }
       onSaved()
     } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกคลังไม่สำเร็จ')) }
     finally { setBusy(false) }
@@ -43,6 +47,10 @@ export function WarehouseDialog({ open, warehouse, onClose, onSaved }: EditorPro
     <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5"><Label htmlFor="wh-code">{t('รหัสคลัง')} <span className="text-destructive">*</span></Label><Input id="wh-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="WH-01" /></div>
       <div className="grid gap-1.5"><Label htmlFor="wh-name">{t('ชื่อคลัง')} <span className="text-destructive">*</span></Label><Input id="wh-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('เช่น คลัง PPE')} /></div>
+      <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="wh-type">{t('ประเภทของที่เก็บ')}</Label>
+        <Select value={type} onValueChange={(value) => value && setType(value as WarehouseType)}><SelectTrigger id="wh-type" className="h-10 w-full"><SelectValue>{t(warehouseTypeLabel[type])}</SelectValue></SelectTrigger>
+          <SelectContent>{(Object.keys(warehouseTypeLabel) as WarehouseType[]).map((key) => <SelectItem key={key} value={key}>{t(warehouseTypeLabel[key])}</SelectItem>)}</SelectContent></Select>
+        <p className="text-xs text-muted-foreground">{t('แยกคลัง PPE กับคลังยาออกจากกัน คลังเฉพาะประเภทจะรับเข้าได้เฉพาะสินค้าประเภทนั้น')}</p></div>
       {warehouse && <label className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-sm sm:col-span-2"><span>{t('เปิดใช้งาน')}</span><Switch checked={isActive} onCheckedChange={setIsActive} /></label>}
       <div className="flex justify-end gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />}{t('บันทึก')}</Button></div>
     </form>
