@@ -485,3 +485,20 @@ describe('item images', () => {
     assert.ok(rows.length >= 3)
   })
 })
+
+describe('stock rows and images', () => {
+  test('stock rows carry the item image url (null without an image)', async () => {
+    const adminClient = await admin()
+    const warehouse = (await inv(adminClient, 'POST', '/warehouses', { code: 'IMGW', name: 'คลังรูป' })).json.warehouse
+    const withImage = (await inv(adminClient, 'POST', '/items', { sku: 'IMG-STK-1', name: 'มีรูป', type: 'ppe', unit: 'ชิ้น' })).json.item
+    const without = (await inv(adminClient, 'POST', '/items', { sku: 'IMG-STK-2', name: 'ไม่มีรูป', type: 'ppe', unit: 'ชิ้น' })).json.item
+    const form = new FormData()
+    form.append('image', await imageBlob(), 'x.png')
+    const uploaded = await adminClient.call('POST', `/api/inventory/items/${withImage.id}/image`, form)
+    assert.equal(uploaded.status, 200)
+    await inv(adminClient, 'POST', '/receipts', { warehouseId: warehouse.id, lines: [{ variantId: withImage.variants[0].id, qty: 2 }, { variantId: without.variants[0].id, qty: 2 }] })
+    const rows = (await inv(adminClient, 'GET', `/stock?warehouseId=${warehouse.id}`)).json.rows
+    assert.equal(rows.find((row) => row.itemId === withImage.id).imageUrl, uploaded.json.item.imageUrl)
+    assert.equal(rows.find((row) => row.itemId === without.id).imageUrl, null)
+  })
+})

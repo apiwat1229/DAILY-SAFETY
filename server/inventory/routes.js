@@ -405,7 +405,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     if (categoryId) { where.push('i.category_id = ?'); params.push(categoryId) }
     const q = text(req.query.q, 60)
     if (q) { where.push("(i.name LIKE ? ESCAPE '!' OR i.sku LIKE ? ESCAPE '!')"); params.push(`%${escapeLike(q)}%`, `%${escapeLike(q)}%`) }
-    const variants = db.prepare(`SELECT v.id AS variant_id, v.label, i.id AS item_id, i.sku, i.name, i.type, i.unit, i.min_stock
+    const variants = db.prepare(`SELECT v.id AS variant_id, v.label, i.id AS item_id, i.sku, i.name, i.type, i.unit, i.min_stock, i.image
                                  FROM item_variants v JOIN items i ON i.id = v.item_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
                                  ORDER BY i.name COLLATE NOCASE, v.rowid`).all(...params)
     const balanceRows = db.prepare(`SELECT b.variant_id, b.warehouse_id, SUM(b.on_hand) AS on_hand, SUM(b.reserved) AS reserved,
@@ -431,6 +431,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
           variantId: variant.variant_id, itemId: variant.item_id, sku: variant.sku, name: variant.name, variantLabel: variant.label, type: variant.type, unit: variant.unit,
           warehouseId: warehouse.id, warehouseName: warehouse.name, onHand: balance.on_hand, reserved: balance.reserved, available: balance.on_hand - balance.reserved,
           minStock: variant.min_stock, nearestExpiry, isLow, isExpiring,
+          imageUrl: variant.image ? `/api/inventory/items/${variant.item_id}/image?v=${variant.image.slice(0, 8)}` : null,
         })
       }
     }
