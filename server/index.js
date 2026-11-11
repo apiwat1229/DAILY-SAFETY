@@ -22,6 +22,7 @@ import { importRosters, readRoster } from './employee-roster.js'
 import compression from 'compression'
 import { createBackup } from './backup.js'
 import { migrateInventory } from './inventory/schema.js'
+import { registerInventoryRoutes } from './inventory/routes.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
@@ -3247,6 +3248,8 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
   addAudit(req.session.user.id, 'เปลี่ยนรหัสผ่านผู้ใช้', 'user', user.id, { username: user.username })
   res.json({ ok: true })
 })
+
+registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso })
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' }))
 
