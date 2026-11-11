@@ -55,6 +55,6 @@ export function renderPage({ user, page, onPage, onUserChange }: PageArgs): Reac
     {page === 'approvals' && user.role !== 'employee' ? <ApprovalsPage user={user} /> : null}
     {page === 'issue-queue' && isStockStaff(user) ? <IssueQueuePage user={user} /> : null}
     {page === 'workflow-admin' && admin ? <WorkflowAdminPage /> : null}
-    {page === 'requisitions-admin' && admin ? <RequisitionsAdminPage /> : null}
+    {page === 'requisitions-admin' && admin ? <RequisitionsAdminPage user={user} /> : null}
   </>
 }
