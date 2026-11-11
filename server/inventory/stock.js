@@ -56,8 +56,8 @@ export function createStockService(db, opts = {}) {
     const movementId = randomUUID()
     db.prepare(`INSERT INTO stock_movements (id, type, variant_id, warehouse_id, lot_id, qty, ref_type, ref_id, reason, user_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(movementId, type, variantId, warehouseId, lotId, qty, refType, refId, reason, userId, now())
-    db.prepare(`INSERT INTO stock_balances (variant_id, warehouse_id, lot_id, on_hand) VALUES (?, ?, ?, ?)
-                ON CONFLICT(variant_id, warehouse_id, lot_id) DO UPDATE SET on_hand = on_hand + excluded.on_hand`).run(variantId, warehouseId, lotId, qty)
+    db.prepare('INSERT OR IGNORE INTO stock_balances (variant_id, warehouse_id, lot_id, on_hand) VALUES (?, ?, ?, 0)').run(variantId, warehouseId, lotId)
+    db.prepare('UPDATE stock_balances SET on_hand = on_hand + ? WHERE variant_id = ? AND warehouse_id = ? AND lot_id = ?').run(qty, variantId, warehouseId, lotId)
     return movementId
   }
 
@@ -105,5 +105,40 @@ export function createStockService(db, opts = {}) {
     return { ok: mismatches.length === 0, mismatches }
   }
 
-  return { transaction, receive, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
+  /** Takes stock first-expiry-first-out. Expired lots are skipped; all-or-nothing across lots. */
+  function issueFefo({ variantId, warehouseId, qty, userId = '', refType = '', refId = '' }) {
+    assertQty(qty)
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(warehouseId)
+      const lots = db.prepare(`SELECT l.id AS lot_id, b.on_hand, b.reserved FROM stock_lots l
+                               JOIN stock_balances b ON b.variant_id = l.variant_id AND b.warehouse_id = l.warehouse_id AND b.lot_id = l.id
+                               WHERE l.variant_id = ? AND l.warehouse_id = ? AND b.on_hand - b.reserved > 0 AND (l.expiry_date = '' OR l.expiry_date >= ?)
+                               ORDER BY (l.expiry_date = '') ASC, l.expiry_date ASC, l.received_at ASC, l.rowid ASC`).all(variantId, warehouseId, today())
+      let remaining = qty
+      const picks = []
+      for (const lot of lots) {
+        if (remaining === 0) break
+        const take = Math.min(remaining, lot.on_hand - lot.reserved)
+        const movementId = applyMovement({ type: 'issue', variantId, warehouseId, lotId: lot.lot_id, qty: -take, refType, refId, userId })
+        picks.push({ lotId: lot.lot_id, qty: take, movementId })
+        remaining -= take
+      }
+      if (remaining > 0) throw new StockError('INSUFFICIENT_STOCK', 'สต็อกที่ใช้ได้ไม่เพียงพอ')
+      return { picks }
+    })
+  }
+
+  /** Puts issued stock back into the lot it came from. */
+  function returnStock({ variantId, warehouseId, lotId, qty, userId = '', refType = '', refId = '', reason = '' }) {
+    assertQty(qty)
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(warehouseId)
+      if (!db.prepare('SELECT id FROM stock_lots WHERE id = ? AND variant_id = ? AND warehouse_id = ?').get(lotId, variantId, warehouseId)) throw new StockError('NOT_FOUND', 'ไม่พบล็อตสินค้า')
+      return { movementId: applyMovement({ type: 'return', variantId, warehouseId, lotId, qty, refType, refId, reason, userId }) }
+    })
+  }
+
+  return { transaction, receive, issueFefo, returnStock, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
 }

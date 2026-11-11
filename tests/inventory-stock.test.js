@@ -16,12 +16,13 @@ function seed() {
   db.exec(`
     INSERT INTO items (id, sku, name, type, unit, min_stock, track_lot, track_expiry, is_active, created_at) VALUES
       ('i-ppe', 'PPE-1', 'ถุงมือ', 'ppe', 'คู่', 5, 0, 0, 1, '${now}'),
-      ('i-med', 'MED-1', 'พาราเซตามอล', 'medicine', 'แผง', 5, 1, 1, 1, '${now}');
-    INSERT INTO item_variants (id, item_id, label, is_active) VALUES ('v-ppe', 'i-ppe', 'M', 1), ('v-med', 'i-med', '', 1), ('v-off', 'i-ppe', 'XL', 0);
+      ('i-med', 'MED-1', 'พาราเซตามอล', 'medicine', 'แผง', 5, 1, 1, 1, '${now}'),
+      ('i-lot', 'LOT-1', 'น้ำยาล้างตา', 'medicine', 'ขวด', 5, 1, 0, 1, '${now}');
+    INSERT INTO item_variants (id, item_id, label, is_active) VALUES ('v-ppe', 'i-ppe', 'M', 1), ('v-med', 'i-med', '', 1), ('v-off', 'i-ppe', 'XL', 0), ('v-lot', 'i-lot', '', 1);
     INSERT INTO warehouses (id, code, name, is_active) VALUES ('w1', 'W1', 'คลัง 1', 1), ('w2', 'W2', 'คลัง 2', 1);
   `)
   stock = createStockService(db, { today: () => TODAY })
-  ids = { ppe: 'v-ppe', med: 'v-med', w1: 'w1', w2: 'w2' }
+  ids = { ppe: 'v-ppe', med: 'v-med', lot: 'v-lot', w1: 'w1', w2: 'w2' }
 }
 beforeEach(seed)
 
@@ -93,5 +94,75 @@ describe('receive and balances', () => {
     }), 'INVALID_QTY')
     assert.equal(ledger().length, 0)
     assert.equal(stock.balance({ variantId: ids.ppe, warehouseId: ids.w1 }).onHand, 0)
+  })
+})
+
+describe('FEFO issue and returns', () => {
+  const receiveMed = (lotNo, expiryDate, qty) => stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty, lotNo, expiryDate, userId: 'u1' })
+
+  test('issue takes the earliest expiry first across lots', () => {
+    const late = receiveMed('L-LATE', '2027-01-01', 5)
+    const early = receiveMed('L-EARLY', '2026-12-01', 5)
+    const { picks } = stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 7, userId: 'u2', refType: 'requisition', refId: 'r1' })
+    assert.deepEqual(picks.map((pick) => [pick.lotId, pick.qty]), [[early.lotId, 5], [late.lotId, 2]])
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 3)
+    const issued = ledger().filter((row) => row.type === 'issue')
+    assert.deepEqual(issued.map((row) => [row.qty, row.ref_type, row.ref_id]), [[-5, 'requisition', 'r1'], [-2, 'requisition', 'r1']])
+  })
+
+  test('lots without expiry come after expiring lots, oldest received first', () => {
+    let tick = 0
+    const timed = createStockService(db, { today: () => TODAY, now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString() })
+    const noExpiryOld = timed.receive({ variantId: ids.lot, warehouseId: ids.w1, qty: 2, lotNo: 'A', userId: 'u1' })
+    const noExpiryNew = timed.receive({ variantId: ids.lot, warehouseId: ids.w1, qty: 2, lotNo: 'B', userId: 'u1' })
+    const { picks } = timed.issueFefo({ variantId: ids.lot, warehouseId: ids.w1, qty: 3, userId: 'u2' })
+    assert.deepEqual(picks.map((pick) => [pick.lotId, pick.qty]), [[noExpiryOld.lotId, 2], [noExpiryNew.lotId, 1]])
+  })
+
+  test('expired lot is skipped', () => {
+    receiveMed('L-OLD', '2026-11-10', 9)
+    const fresh = receiveMed('L-OK', '2026-12-01', 4)
+    const { picks } = stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 4, userId: 'u2' })
+    assert.deepEqual(picks.map((pick) => pick.lotId), [fresh.lotId])
+    rejects(() => stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 1, userId: 'u2' }), 'INSUFFICIENT_STOCK')
+  })
+
+  test('a lot expiring today is still issuable', () => {
+    const today = receiveMed('L-TODAY', TODAY, 2)
+    assert.deepEqual(stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 2, userId: 'u2' }).picks.map((pick) => pick.lotId), [today.lotId])
+  })
+
+  test('issue beyond non-expired stock throws and changes nothing', () => {
+    receiveMed('L1', '2026-12-01', 3)
+    receiveMed('L2', '2027-01-01', 3)
+    const before = { ledger: ledger().length, balance: stock.balance({ variantId: ids.med, warehouseId: ids.w1 }) }
+    rejects(() => stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 7, userId: 'u2' }), 'INSUFFICIENT_STOCK')
+    assert.equal(ledger().length, before.ledger)
+    assert.deepEqual(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }), before.balance)
+    assert.deepEqual(stock.verifyIntegrity(), { ok: true, mismatches: [] })
+  })
+
+  test('issue respects reserved stock', () => {
+    receiveMed('L1', '2026-12-01', 5)
+    db.exec("UPDATE stock_balances SET reserved = 3 WHERE variant_id = 'v-med'")
+    rejects(() => stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 3, userId: 'u2' }), 'INSUFFICIENT_STOCK')
+    assert.equal(stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 2, userId: 'u2' }).picks[0].qty, 2)
+  })
+
+  test('issue validates qty', () => {
+    receiveMed('L1', '2026-12-01', 5)
+    for (const qty of [0, -2, 1.5]) rejects(() => stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty, userId: 'u2' }), 'INVALID_QTY')
+  })
+
+  test('returnStock adds back to the same lot', () => {
+    const lot = receiveMed('L1', '2026-12-01', 5)
+    stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 5, userId: 'u2' })
+    stock.returnStock({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, qty: 2, userId: 'u2', refType: 'requisition', refId: 'r1' })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId }).onHand, 2)
+    assert.equal(ledger().at(-1).type, 'return')
+  })
+
+  test('returnStock to an unknown lot throws NOT_FOUND', () => {
+    rejects(() => stock.returnStock({ variantId: ids.med, warehouseId: ids.w1, lotId: 'missing', qty: 1, userId: 'u2' }), 'NOT_FOUND')
   })
 })
