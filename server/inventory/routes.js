@@ -1,5 +1,8 @@
 import express from 'express'
+import multer from 'multer'
+import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { ImageError, removeImage, saveImage, thumbName } from './images.js'
 import ExcelJS from 'exceljs'
 import { StockError, createStockService } from './stock.js'
 import { createCountService } from './counts.js'
@@ -8,8 +11,9 @@ const TYPES = ['ppe', 'medicine']
 const FORBIDDEN = 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้'
 
 /** All /api/inventory endpoints. Reads need admin or storekeeper; catalog and warehouse writes need admin. */
-export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso }) {
+export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir }) {
   const router = express.Router()
+  const imageDir = path.join(uploadDir, 'inventory')
 
   const requireStockStaff = (req, res, next) => requireAuth(req, res, () => {
     const { role } = req.session.user
@@ -87,6 +91,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
       id: row.id, sku: row.sku, name: row.name, type: row.type, categoryId: row.category_id, categoryName: row.category_name || '',
       unit: row.unit, image: row.image, minStock: row.min_stock, trackLot: Boolean(row.track_lot), trackExpiry: Boolean(row.track_expiry),
       isActive: Boolean(row.is_active), variants,
+      imageUrl: row.image ? `/api/inventory/items/${row.id}/image?v=${row.image.slice(0, 8)}` : null,
     }
   }
   const loadItem = (id) => db.prepare('SELECT i.*, c.name AS category_name FROM items i LEFT JOIN item_categories c ON c.id = i.category_id WHERE i.id = ?').get(id)
@@ -164,7 +169,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     res.json({ item: itemDto(loadItem(existing.id)) })
   })
 
-  router.delete('/items/:id', requireAdmin, (req, res) => {
+  router.delete('/items/:id', requireAdmin, async (req, res) => {
     const existing = loadItem(req.params.id)
     if (!existing) return bad(res, 'ไม่พบสินค้า', 404)
     if (hasMovements.item(existing.id)) return bad(res, 'สินค้านี้มีประวัติสต็อกแล้ว ลบไม่ได้ กรุณาปิดใช้งานแทน', 409)
@@ -172,6 +177,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
       db.prepare('DELETE FROM item_variants WHERE item_id = ?').run(existing.id)
       db.prepare('DELETE FROM items WHERE id = ?').run(existing.id)
     })
+    await removeImage(imageDir, existing.image)
     addAudit(req.session.user.id, 'ลบสินค้า', 'inventory_item', existing.id, { sku: existing.sku, name: existing.name })
     res.json({ ok: true })
   })
@@ -590,6 +596,53 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     addAudit(req.session.user.id, 'ปรับยอดจากการนับสต็อก', 'inventory_count', count.id, { warehouse: count.warehouse_name, adjustments: result.adjustments })
     res.json(result)
   }))
+
+  // ---- item images ----
+  const imageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, callback) => {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) return callback(new ImageError('รองรับไฟล์ JPG, PNG หรือ WebP เท่านั้น'))
+      callback(null, true)
+    },
+  })
+  const singleImage = (req, res, next) => imageUpload.single('image')(req, res, (error) => {
+    if (!error) return next()
+    bad(res, error.code === 'LIMIT_FILE_SIZE' ? 'ไฟล์รูปใหญ่เกิน 8 MB' : error.message || 'อัปโหลดรูปไม่สำเร็จ')
+  })
+
+  // Any signed-in user may view item photos (employees browse the catalog); registered on app so the staff-only router guard does not apply.
+  app.get('/api/inventory/items/:id/image', requireAuth, (req, res, next) => {
+    const item = db.prepare('SELECT image FROM items WHERE id = ?').get(req.params.id)
+    if (!item || !item.image) return res.status(404).json({ error: 'ไม่พบรูปสินค้า' })
+    const name = req.query.size === 'thumb' ? thumbName(path.basename(item.image)) : path.basename(item.image)
+    res.type('image/jpeg').set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=86400' })
+      .sendFile(path.join(imageDir, name), (error) => error && next(error))
+  })
+
+  router.post('/items/:id/image', requireAdmin, singleImage, async (req, res) => {
+    const item = loadItem(req.params.id)
+    if (!item) return bad(res, 'ไม่พบสินค้า', 404)
+    if (!req.file) return bad(res, 'กรุณาเลือกรูปภาพ')
+    let saved
+    try { saved = await saveImage(req.file.buffer, imageDir) } catch (error) {
+      if (error instanceof ImageError) return bad(res, error.message)
+      throw error
+    }
+    db.prepare('UPDATE items SET image = ? WHERE id = ?').run(saved.stored, item.id)
+    await removeImage(imageDir, item.image)
+    addAudit(req.session.user.id, 'อัปโหลดรูปสินค้า', 'inventory_item', item.id, { sku: item.sku })
+    res.json({ item: itemDto(loadItem(item.id)) })
+  })
+
+  router.delete('/items/:id/image', requireAdmin, async (req, res) => {
+    const item = loadItem(req.params.id)
+    if (!item) return bad(res, 'ไม่พบสินค้า', 404)
+    db.prepare("UPDATE items SET image = '' WHERE id = ?").run(item.id)
+    await removeImage(imageDir, item.image)
+    addAudit(req.session.user.id, 'ลบรูปสินค้า', 'inventory_item', item.id, { sku: item.sku })
+    res.json({ item: itemDto(loadItem(item.id)) })
+  })
 
   app.use('/api/inventory', router)
   return { router, canUseWarehouse, requireStockStaff, stock, counts, guarded, scopeWarehouses, writableWarehouse }

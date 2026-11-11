@@ -31,6 +31,8 @@ const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path
 const uploadDir = path.join(dataDir, 'uploads')
 const trainingUploadDir = path.join(uploadDir, 'training')
 const hiyariUploadDir = path.join(uploadDir, 'hiyari')
+const inventoryUploadDir = path.join(uploadDir, 'inventory')
+const requisitionUploadDir = path.join(uploadDir, 'requisitions')
 const dbPath = path.join(dataDir, 'daily-safety.sqlite')
 const port = Number(process.env.PORT || 4000)
 const host = process.env.HOST || '127.0.0.1'
@@ -42,7 +44,7 @@ if (isProduction && (!process.env.SESSION_SECRET || !process.env.ADMIN_PASSWORD 
   throw new Error('Production requires SESSION_SECRET, ADMIN_PASSWORD, and LEADER_PASSWORD environment variables.')
 }
 
-await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true })])
+await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true }), mkdir(inventoryUploadDir, { recursive: true }), mkdir(requisitionUploadDir, { recursive: true })])
 
 const db = new DatabaseSync(dbPath)
 db.exec(`
@@ -3249,7 +3251,7 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
   res.json({ ok: true })
 })
 
-registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso })
+registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir })
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' }))
 
