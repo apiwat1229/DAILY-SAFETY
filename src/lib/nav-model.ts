@@ -5,7 +5,7 @@ export type Role = 'admin' | 'leader' | 'employee' | 'storekeeper'
 export type IconName =
   | 'Activity' | 'FileBarChart2' | 'Plus' | 'UserRoundCog' | 'ContactRound' | 'ListChecks' | 'ClipboardCheck' | 'FileSpreadsheet'
   | 'BookOpenText' | 'ClipboardPenLine' | 'History' | 'Boxes' | 'Package' | 'Warehouse' | 'ClipboardList' | 'ArrowLeftRight' | 'PackagePlus' | 'Menu'
-  | 'ShoppingCart' | 'ReceiptText' | 'BadgeCheck' | 'PackageCheck' | 'ListOrdered' | 'Workflow'
+  | 'ShoppingCart' | 'ReceiptText' | 'BadgeCheck' | 'PackageCheck' | 'ListOrdered' | 'Workflow' | 'BarChart3'
 
 /** `label` is the sidebar text (Thai, passed through t()); `short` is the bottom-bar text when the label is too long. */
 export type BadgeSource = 'cart' | 'approvals' | 'issue'
@@ -22,6 +22,7 @@ const REQUISITION_NEW = item('requisition-new', 'เบิกของ', 'Shoppi
 const REQUISITIONS = item('requisitions', 'ใบเบิกของฉัน', 'ReceiptText', 'ใบเบิก')
 const APPROVALS = item('approvals', 'รออนุมัติ', 'BadgeCheck', undefined, 'approvals')
 const ISSUE_QUEUE = item('issue-queue', 'จ่ายของ', 'PackageCheck', undefined, 'issue')
+const REPORTS = item('reports', 'รายงานการเบิก', 'BarChart3', 'รายงาน')
 
 const ITEMS: Record<Role, NavItem[]> = {
   admin: [
@@ -43,6 +44,7 @@ const ITEMS: Record<Role, NavItem[]> = {
     item('inventory-counts', 'นับสต็อก', 'ClipboardList'),
     item('inventory-movements', 'ประวัติสต็อก', 'ArrowLeftRight'),
     item('requisitions-admin', 'ใบเบิกทั้งหมด', 'ListOrdered'),
+    REPORTS,
     item('workflow-admin', 'ตั้งค่าขั้นอนุมัติ', 'Workflow', 'ขั้นอนุมัติ'),
     item('audit-log', 'บันทึกการใช้งาน', 'History'),
   ],
@@ -50,7 +52,7 @@ const ITEMS: Record<Role, NavItem[]> = {
     item('dashboard', 'ภาพรวมทีม', 'Activity'),
     item('inspections', 'ติดตามงานทีม', 'FileBarChart2', 'ติดตามงาน'),
     item('new', 'บันทึกการตรวจ', 'Plus'),
-    REQUISITION_NEW, REQUISITIONS, APPROVALS,
+    REQUISITION_NEW, REQUISITIONS, APPROVALS, REPORTS,
   ],
   employee: [
     item('new', 'บันทึกการตรวจ', 'Plus'),
@@ -64,7 +66,7 @@ const ITEMS: Record<Role, NavItem[]> = {
     ISSUE_QUEUE,
     item('new', 'บันทึกการตรวจ', 'Plus'),
     item('inspections', 'ประวัติของฉัน', 'FileBarChart2', 'ประวัติ'),
-    REQUISITION_NEW, REQUISITIONS, APPROVALS,
+    REQUISITION_NEW, REQUISITIONS, APPROVALS, REPORTS,
   ],
 }
 
@@ -82,7 +84,7 @@ const BAR: Record<Role, { tabs: PageKey[]; center: TabSlot }> = {
 
 const GROUP_OF = (key: PageKey): string => {
   if (key.startsWith('inventory-')) return 'คลังสินค้า'
-  if (key === 'requisition-new' || key === 'requisitions' || key === 'approvals' || key === 'issue-queue' || key === 'requisitions-admin') return 'การเบิกของ'
+  if (key === 'requisition-new' || key === 'requisitions' || key === 'approvals' || key === 'issue-queue' || key === 'requisitions-admin' || key === 'reports') return 'การเบิกของ'
   if (key === 'users' || key === 'employees' || key === 'checklist' || key === 'audit-log' || key === 'workflow-admin') return 'ข้อมูลระบบ'
   if (key === 'assessments' || key === 'assessment-reports' || key === 'training-materials' || key === 'hiyari' || key === 'hiyari-reports') return 'การตรวจและอบรม'
   return 'การตรวจ'

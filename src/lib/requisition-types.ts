@@ -64,3 +64,11 @@ export type PreviewStep = {
   position: number; name: string; approverType: string; mode: 'any' | 'all'; slaHours: number; applies: boolean
   note: '' | 'skipped_self' | 'fallback_admin' | 'skipped_no_approver'; approvers: { userId: string; name: string }[]
 }
+
+// ---- reports ----
+export type ReportGroup = 'department' | 'person' | 'item'
+export type UsageRow = { key: string; label: string; issued: number; returned: number; net: number; requisitions: number }
+export type UsageReport = { from: string; to: string; groupBy: ReportGroup; rows: UsageRow[]; totals: { issued: number; returned: number; net: number } }
+export type CycleReport = { from: string; to: string; total: number; byStatus: Record<string, number>; avgApprovalHours: number; avgIssueHours: number; slaBreaches: number }
+export type ReportOptions = { warehouses: { id: string; code: string; name: string }[]; departments: string[]; scope: string }
+export type IntegritySummary = { at: string; ok: boolean; mismatchCount: number }

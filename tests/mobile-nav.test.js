@@ -55,7 +55,7 @@ describe('navFor', () => {
 
   test('sidebar order and labels keep today\'s wording', () => {
     assert.deepEqual(navFor('admin').all.slice(0, 3).map((item) => item.label), ['ภาพรวม', 'รายการตรวจ', 'บันทึกการตรวจ'])
-    assert.deepEqual(navFor('leader').all.map((item) => item.label), ['ภาพรวมทีม', 'ติดตามงานทีม', 'บันทึกการตรวจ', 'เบิกของ', 'ใบเบิกของฉัน', 'รออนุมัติ'])
+    assert.deepEqual(navFor('leader').all.map((item) => item.label), ['ภาพรวมทีม', 'ติดตามงานทีม', 'บันทึกการตรวจ', 'เบิกของ', 'ใบเบิกของฉัน', 'รออนุมัติ', 'รายงานการเบิก'])
     assert.deepEqual(navFor('employee').all.map((item) => item.label), ['บันทึกการตรวจ', 'ประวัติของฉัน', 'เบิกของ', 'ใบเบิกของฉัน'])
   })
 })

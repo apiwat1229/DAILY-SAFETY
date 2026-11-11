@@ -25,6 +25,7 @@ import { ApprovalsPage } from '@/pages/approvals-page'
 import { IssueQueuePage } from '@/pages/issue-queue-page'
 import { WorkflowAdminPage } from '@/pages/workflow-admin-page'
 import { RequisitionsAdminPage } from '@/pages/requisitions-admin-page'
+import { ReportsPage } from '@/pages/reports-page'
 
 export type NavigateFn = (page: PageKey, query?: string) => void
 type PageArgs = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -55,6 +56,7 @@ export function renderPage({ user, page, onPage, onUserChange }: PageArgs): Reac
     {page === 'approvals' && user.role !== 'employee' ? <ApprovalsPage user={user} /> : null}
     {page === 'issue-queue' && isStockStaff(user) ? <IssueQueuePage user={user} /> : null}
     {page === 'workflow-admin' && admin ? <WorkflowAdminPage /> : null}
+    {page === 'reports' && user.role !== 'employee' ? <ReportsPage user={user} /> : null}
     {page === 'requisitions-admin' && admin ? <RequisitionsAdminPage user={user} /> : null}
   </>
 }

@@ -69,3 +69,15 @@ export const workflowApi = {
   settings: () => request<{ expireDays: number }>(`${wf}/settings`),
   saveSettings: (expireDays: number) => request<{ expireDays: number }>(`${wf}/settings`, json('PUT', { expireDays })),
 }
+
+export type ReportFilters = { from?: string; to?: string; groupBy?: string; type?: string; department?: string; warehouseId?: string }
+const rp = '/api/reports'
+/** Reports (server/requisitions/report-routes.js); the server narrows every query to what the signed-in role may see. */
+export const reportApi = {
+  options: () => request<import('./requisition-types').ReportOptions>(`${rp}/options`),
+  usage: (filters: ReportFilters) => request<import('./requisition-types').UsageReport>(`${rp}/usage${qs(filters)}`),
+  cycleTime: (filters: ReportFilters) => request<import('./requisition-types').CycleReport>(`${rp}/cycle-time${qs(filters)}`),
+  exportUrl: (filters: ReportFilters) => `${rp}/usage.xlsx${qs(filters)}`,
+  integrity: () => request<{ last: import('./requisition-types').IntegritySummary | null }>(`${rp}/integrity`),
+  runIntegrity: () => request<{ last: import('./requisition-types').IntegritySummary }>(`${rp}/integrity/run`, json('POST')),
+}
