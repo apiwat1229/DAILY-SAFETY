@@ -138,6 +138,9 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
     res.status(201).json(detailBody(id))
   }))
 
+  reqRouter.get('/warehouses', handle((req, res) => res.json({ warehouses: service.warehouseOptions(actor(req).id, String(req.query.type ?? '')) })))
+  reqRouter.get('/route-preview', handle((req, res) => res.json({ route: service.previewRoute({ userId: actor(req).id, type: String(req.query.type ?? ''), warehouseId: req.query.warehouseId }) })))
+
   reqRouter.get('/mine', handle((req, res) => res.json({ requisitions: service.listMine(actor(req).id, { status: req.query.status ? String(req.query.status) : undefined }) })))
   reqRouter.get('/inbox', requireManagerRole, handle((req, res) => res.json({ requisitions: service.inbox(actor(req).id) })))
   reqRouter.get('/issue-queue', requireManagerRole, handle((req, res) => res.json({ requisitions: service.issueQueue(actor(req).id, actor(req).role) })))

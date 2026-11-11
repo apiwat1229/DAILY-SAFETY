@@ -242,6 +242,40 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
     finalApprove(req)
   }
 
+  // ---- checkout helpers ----
+  /** Active warehouses with how many cart lines each could cover right now, best coverage first. */
+  function warehouseOptions(userId, type) {
+    assertType(type)
+    const lines = getCart(userId, type).lines
+    const rows = db.prepare('SELECT id, code, name FROM warehouses WHERE is_active = 1 ORDER BY code COLLATE NOCASE').all()
+    return rows
+      .map((row) => ({ id: row.id, code: row.code, name: row.name, total: lines.length, covered: lines.filter((line) => stock.availableToReserve({ variantId: line.variantId, warehouseId: row.id }) >= line.qty).length }))
+      .sort((a, b) => b.covered - a.covered)
+  }
+
+  /** The approval route this cart would take (read-only version of what checkout snapshots). */
+  function previewRoute({ userId, type, warehouseId }) {
+    assertType(type)
+    const warehouse = db.prepare('SELECT id, is_active FROM warehouses WHERE id = ?').get(String(warehouseId ?? ''))
+    if (!warehouse || !warehouse.is_active) throw invalid('กรุณาเลือกคลังที่เปิดใช้งาน')
+    const template = workflow.pickTemplate({ type, warehouseId: warehouse.id })
+    const lines = getCart(userId, type).lines
+    if (!template || !lines.length) return { templateName: template?.name ?? '', steps: [] }
+    const categoryIds = [...new Set(lines.map((line) => variantInfo(line.variantId).category_id))]
+    const totalQty = lines.reduce((sum, line) => sum + line.qty, 0)
+    const department = departmentOf(userId)
+    return {
+      templateName: template.name,
+      steps: template.steps.map((step) => {
+        const resolved = workflow.resolveApprovers(step, { requesterId: userId, department, warehouseId: warehouse.id })
+        return {
+          position: step.position, name: step.name, approverType: step.approverType, mode: step.mode, applies: workflow.stepApplies(step.condition, { totalQty, categoryIds }),
+          note: resolved.note, approvers: resolved.approvers.map((id) => ({ userId: id, name: userName(id) })),
+        }
+      }),
+    }
+  }
+
   // ---- checkout ----
   function checkout({ userId, type, warehouseId, reason, neededBy = '' }) {
     assertType(type)
@@ -648,7 +682,7 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
   }
 
   return {
-    getCart, setCartLine, clearCart, catalog, checkout, get, approve, reject, requestChanges, cancel, resubmit, issue, closeRemainder, recordReturn, confirmReceipt,
+    getCart, setCartLine, clearCart, catalog, warehouseOptions, previewRoute, checkout, get, approve, reject, requestChanges, cancel, resubmit, issue, closeRemainder, recordReturn, confirmReceipt,
     reassign, expireStale, escalateOverdue, listMine, inbox, issueQueue, listAll, badges, canView, departmentOf, prepareUpload, addPhotos, removePhoto, getPhoto,
   }
 }

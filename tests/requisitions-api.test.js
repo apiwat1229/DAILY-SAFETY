@@ -491,3 +491,19 @@ describe('requisition photos', () => {
     assert.equal((await rq(s.employee.client, 'POST', `/${created.id}/resubmit`, { lines: [] })).json.requisition.photos.length, 1)
   })
 })
+
+describe('checkout helper endpoints', () => {
+  test('warehouses and route preview work for any signed-in user and validate input', async () => {
+    const s = await scene()
+    await rq(s.employee.client, 'PUT', '/cart/lines', { type: 'ppe', variantId: s.variantId, qty: 4 })
+    const options = (await rq(s.employee.client, 'GET', '/warehouses?type=ppe')).json.warehouses
+    const mine = options.find((option) => option.id === s.warehouse.id)
+    assert.deepEqual([mine.covered, mine.total], [1, 1])
+    assert.equal((await rq(s.employee.client, 'GET', '/warehouses?type=food')).status, 400)
+    const route = await rq(s.employee.client, 'GET', `/route-preview?type=ppe&warehouseId=${s.warehouse.id}`)
+    assert.equal(route.status, 200, JSON.stringify(route.json))
+    assert.deepEqual(route.json.route.steps[0].approvers.map((approver) => approver.userId), [s.lead])
+    assert.equal((await rq(s.employee.client, 'GET', '/route-preview?type=ppe&warehouseId=nope')).status, 400)
+    assert.equal((await fetch(`${baseUrl}/api/requisitions/warehouses?type=ppe`)).status, 401)
+  })
+})
