@@ -22,6 +22,7 @@ import { importRosters, readRoster } from './employee-roster.js'
 import compression from 'compression'
 import { createBackup } from './backup.js'
 import { migrateInventory } from './inventory/schema.js'
+import { migrateRequisitions } from './requisitions/schema.js'
 import { registerInventoryRoutes } from './inventory/routes.js'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -357,6 +358,7 @@ if (!usersSchema.includes("'storekeeper'")) {
 }
 
 migrateInventory(db)
+migrateRequisitions(db)
 
 const checklistCount = db.prepare('SELECT COUNT(*) AS count FROM checklist_items').get().count
 if (!checklistCount) {
