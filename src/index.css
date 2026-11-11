@@ -390,3 +390,8 @@ body { overscroll-behavior-y: none; }
 /* Keep implicit grids inside dialogs from growing past the dialog width (long select values, long words). */
 [data-slot="dialog-body"] .grid:not([class*="grid-cols"]):not([class*="grid-rows"]):not([class*="grid-flow"]) { grid-template-columns: minmax(0, 1fr); }
 [data-slot="dialog-body"] .grid > * { min-width: 0; }
+
+/* Form fields: never stretch a field's own rows when a neighbour in the same grid row is taller (e.g. has a hint),
+   so labels and inputs line up across columns. */
+[data-slot="dialog-body"] .grid, form .grid { align-content: start; }
+form.grid[class*="grid-cols"], form .grid[class*="grid-cols"] { align-items: start; }
