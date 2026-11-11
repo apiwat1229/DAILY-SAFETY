@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { migrateInventory } from '../server/inventory/schema.js'
 import { StockError, createStockService } from '../server/inventory/stock.js'
+import { createCountService } from '../server/inventory/counts.js'
 
 const TODAY = '2026-11-11'
 let db
@@ -243,5 +244,74 @@ describe('adjust, write-off and transfer', () => {
     const lot = receive(ids.w1, 5)
     db.exec("UPDATE stock_balances SET reserved = 4 WHERE variant_id = 'v-med'")
     rejects(() => stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w2, lotId: lot.lotId, qty: 2, userId: 'u1' }), 'INSUFFICIENT_STOCK')
+  })
+})
+
+describe('stock counts', () => {
+  let counts
+  let lotA
+  let lotB
+  beforeEach(() => {
+    counts = createCountService(db, stock)
+    lotA = stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty: 10, lotNo: 'A', expiryDate: '2026-12-31', userId: 'u1' })
+    lotB = stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty: 5, lotNo: 'B', expiryDate: '2027-03-31', userId: 'u1' })
+  })
+  const adjustments = () => ledger().filter((row) => row.type === 'count_adjust')
+
+  test('count sheet snapshots balances', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    const lines = db.prepare('SELECT lot_id, system_qty, counted_qty FROM stock_count_lines WHERE count_id = ? ORDER BY system_qty').all(id)
+    assert.deepEqual(lines.map((line) => [line.lot_id, line.system_qty, line.counted_qty]), [[lotB.lotId, 5, null], [lotA.lotId, 10, null]])
+    assert.equal(db.prepare('SELECT status FROM stock_counts WHERE id = ?').get(id).status, 'draft')
+  })
+
+  test('posting writes only non-zero differences', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    counts.setLines(id, [{ variantId: ids.med, lotId: lotA.lotId, countedQty: 8 }, { variantId: ids.med, lotId: lotB.lotId, countedQty: 5 }])
+    assert.equal(db.prepare('SELECT status FROM stock_counts WHERE id = ?').get(id).status, 'counting')
+    assert.deepEqual(counts.post(id, 'u2'), { adjustments: 1 })
+    assert.deepEqual(adjustments().map((row) => [row.lot_id, row.qty, row.ref_type, row.ref_id]), [[lotA.lotId, -2, 'stock_count', id]])
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 13)
+    assert.equal(db.prepare('SELECT status FROM stock_counts WHERE id = ?').get(id).status, 'posted')
+  })
+
+  test('difference uses on_hand at post time', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty: 3, lotNo: 'A', expiryDate: '2026-12-31', userId: 'u1' })
+    counts.setLines(id, [{ variantId: ids.med, lotId: lotA.lotId, countedQty: 13 }])
+    assert.deepEqual(counts.post(id, 'u2'), { adjustments: 0 })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1, lotId: lotA.lotId }).onHand, 13)
+  })
+
+  test('posting twice throws ALREADY_POSTED', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    counts.setLines(id, [{ variantId: ids.med, lotId: lotA.lotId, countedQty: 9 }])
+    counts.post(id, 'u2')
+    rejects(() => counts.post(id, 'u2'), 'ALREADY_POSTED')
+    assert.equal(adjustments().length, 1)
+  })
+
+  test('lines cannot be edited after posting', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    counts.post(id, 'u2')
+    rejects(() => counts.setLines(id, [{ variantId: ids.med, lotId: lotA.lotId, countedQty: 1 }]), 'ALREADY_POSTED')
+  })
+
+  test('uncounted lines are left alone', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    assert.deepEqual(counts.post(id, 'u2'), { adjustments: 0 })
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 15)
+  })
+
+  test('invalid counted quantity or foreign line is rejected and nothing is saved', () => {
+    const { id } = counts.create({ warehouseId: ids.w1, userId: 'u1' })
+    for (const countedQty of [-1, 1.5, '4']) rejects(() => counts.setLines(id, [{ variantId: ids.med, lotId: lotA.lotId, countedQty }]), 'INVALID_QTY')
+    rejects(() => counts.setLines(id, [{ variantId: ids.med, lotId: 'not-on-sheet', countedQty: 1 }]), 'NOT_FOUND')
+    rejects(() => counts.setLines(id, [{ variantId: ids.med, lotId: lotA.lotId, countedQty: 4 }, { variantId: ids.med, lotId: 'not-on-sheet', countedQty: 1 }]), 'NOT_FOUND')
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM stock_count_lines WHERE counted_qty IS NOT NULL').get().n, 0)
+  })
+
+  test('count for an unknown warehouse is refused', () => {
+    rejects(() => counts.create({ warehouseId: 'nope', userId: 'u1' }), 'NOT_FOUND')
   })
 })
