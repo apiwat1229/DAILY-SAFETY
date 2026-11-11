@@ -6,8 +6,26 @@ import sharp from 'sharp'
 
 const base = (process.env.SEED_URL || 'http://localhost:4000').replace(/\/$/, '')
 const user = process.env.SEED_USER || 'admin'
-const password = process.env.SEED_PASSWORD
-if (!password) { console.error('Set SEED_PASSWORD (and optionally SEED_URL, SEED_USER).'); process.exit(1) }
+/** Reads the admin password from SEED_PASSWORD, or asks for it in the terminal without echoing it. */
+async function askPassword() {
+  if (process.env.SEED_PASSWORD) return process.env.SEED_PASSWORD
+  if (!process.stdin.isTTY) { console.error('Set SEED_PASSWORD, or run this in a terminal to be asked for it.'); process.exit(1) }
+  process.stdout.write(`Password for ${user} on ${base}: `)
+  process.stdin.setRawMode(true); process.stdin.resume(); process.stdin.setEncoding('utf8')
+  return new Promise((resolve) => {
+    let text = ''
+    process.stdin.on('data', (chunk) => {
+      for (const char of chunk) {
+        if (char === '' || char === '
+') { process.stdin.setRawMode(false); process.stdin.pause(); process.stdout.write('
+'); return resolve(text) }
+        if (char === '') process.exit(1)
+        if (char === '' || char === '') text = text.slice(0, -1); else text += char
+      }
+    })
+  })
+}
+const password = await askPassword()
 
 let cookie = ''
 async function call(method, path, body, form) {
