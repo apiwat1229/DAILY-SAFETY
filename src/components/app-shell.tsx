@@ -52,8 +52,10 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           { key: 'new' as const, label: t('บันทึกการตรวจ'), icon: Plus },
           { key: 'inspections' as const, label: t('ประวัติของฉัน'), icon: FileBarChart2 },
         ]
+  const primaryItems = navItems.filter((item) => ['dashboard', 'inspections', 'new'].includes(item.key))
   async function handleLogout() {
     try { await api.logout() } catch { /* session may already have expired */ }
+    navigator.serviceWorker?.controller?.postMessage('clear-data')
     onUserChange(null)
     toast.success(t('ออกจากระบบแล้ว'))
   }
@@ -71,7 +73,7 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
         <div className="app-content-frame flex h-10 items-center md:hidden">
           <Button variant="ghost" size="icon" aria-label={t('เปิดเมนู')} onClick={() => setMobileMenu(true)}><Menu size={18} /></Button>
         </div>
-        <main className="app-content-frame app-main-frame">
+        <main className="app-content-frame app-main-frame max-md:pb-28">
           {page === 'dashboard' && isManager(user) ? <DashboardPage user={user} onPage={onPage} /> : null}
           {page === 'inspections' ? <InspectionsPage user={user} initialFilter={null} onInitialFilterApplied={() => undefined} /> : null}
           {page === 'new' ? <InspectionFormPage user={user} onCreated={() => onPage('inspections')} /> : null}
@@ -86,6 +88,11 @@ export function AppShell({ user, page, onPage, onUserChange }: Props) {
           {page === 'audit-log' && user.role === 'admin' ? <AuditLogPage /> : null}
         </main>
       </div>
+
+      <nav aria-label={t('เมนูหลัก')} className="bottom-nav fixed inset-x-0 bottom-0 z-40 grid border-t border-border bg-card/95 backdrop-blur md:hidden" style={{ gridTemplateColumns: `repeat(${primaryItems.length + 1}, minmax(0, 1fr))` }}>
+        {primaryItems.map((item) => <button key={item.key} type="button" data-active={page === item.key} onClick={() => onPage(item.key)} className="bottom-nav-item"><item.icon size={21} strokeWidth={1.9} /><span>{item.label}</span></button>)}
+        <button type="button" onClick={() => setMobileMenu(true)} className="bottom-nav-item"><Menu size={21} strokeWidth={1.9} /><span>{t('เมนู')}</span></button>
+      </nav>
 
       {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>

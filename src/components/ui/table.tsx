@@ -3,14 +3,46 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * Responsive table. On phones (below 768px) rows become stacked cards: each cell is labelled with its column
+ * heading and action cells sit at the bottom of the card. Pass `stack={false}` to keep a horizontally scrolling table.
+ */
+function Table({ className, stack = true, ...props }: React.ComponentProps<"table"> & { stack?: boolean }) {
+  const ref = React.useRef<HTMLTableElement>(null)
+
+  React.useLayoutEffect(() => {
+    const table = ref.current
+    if (!stack || !table) return
+    const label = () => {
+      const heads = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent?.trim() ?? "")
+      table.querySelectorAll("tbody tr").forEach((row) => {
+        Array.from(row.children).forEach((cell, index) => {
+          if (!(cell instanceof HTMLElement)) return
+          const text = heads[index] ?? ""
+          if (cell.dataset.label !== text) cell.dataset.label = text
+          const isActions = Boolean(cell.querySelector("button, a[download]")) && !cell.textContent?.trim().replace(/\s+/g, "")
+          if (isActions !== ("actions" in cell.dataset)) {
+            if (isActions) cell.dataset.actions = ""
+            else delete cell.dataset.actions
+          }
+        })
+      })
+    }
+    label()
+    const observer = new MutationObserver(label)
+    observer.observe(table, { childList: true, subtree: true, characterData: true })
+    return () => observer.disconnect()
+  }, [stack])
+
   return (
     <div
       data-slot="table-container"
       className="relative w-full overflow-x-auto"
     >
       <table
+        ref={ref}
         data-slot="table"
+        data-stack={stack ? "" : undefined}
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />

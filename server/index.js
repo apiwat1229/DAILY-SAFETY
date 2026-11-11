@@ -599,7 +599,7 @@ app.use((req, res, next) => {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(), payment=()',
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
   })
   if (isProduction) res.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
   next()
@@ -3212,7 +3212,17 @@ app.get('/daily-inspection', async (req, res, next) => {
   })
 })
 
-app.use(express.static(distDir))
+app.get('/sw.js', (_req, res, next) => {
+  // The service worker file itself must never be served from a stale HTTP cache.
+  res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' })
+  next()
+})
+app.use(express.static(distDir, {
+  setHeaders(res, filePath) {
+    if (filePath.includes(`${path.sep}assets${path.sep}`)) res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    else if (filePath.endsWith('.webmanifest')) res.type('application/manifest+json')
+  },
+}))
 app.get(/.*/, (req, res, next) => {
   if (req.path.startsWith('/api/')) return next()
   res.sendFile(path.join(distDir, 'index.html'), (error) => error && next(error))

@@ -15,6 +15,7 @@ import { EmployeeCombobox } from '@/components/employee-combobox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/lib/i18n'
 import { useConfirm } from '@/components/confirm-provider'
+import { enqueueInspection, isNetworkError } from '@/lib/offline-queue'
 
 type Result = ChecklistItem['choices'][number] | ''
 type DraftResponse = { result: Result; issueDetails: string; responsible: string; responsibleUserId: string; responsibleEmployeeCode: string; beforeFiles: File[] }
@@ -234,8 +235,20 @@ export function InspectionFormPage({ user, publicMode = false, onCreated }: Prop
     setBusy(true)
     try {
       if (!(await confirm('submit'))) return
-      if (publicMode) await api.createPublicInspection(body)
-      else await api.createInspection(body)
+      const saveOffline = async () => {
+        await enqueueInspection(body, publicMode)
+        toast.info(t('บันทึกในเครื่องแล้ว ระบบจะส่งให้อัตโนมัติเมื่อมีสัญญาณ'))
+        if (publicMode) setSubmittedPublicly(true)
+        onCreated()
+      }
+      if (!navigator.onLine) return await saveOffline()
+      try {
+        if (publicMode) await api.createPublicInspection(body)
+        else await api.createInspection(body)
+      } catch (error) {
+        if (isNetworkError(error)) return await saveOffline()
+        throw error
+      }
       toast.success(t('บันทึกแบบตรวจเรียบร้อยแล้ว'))
       if (publicMode) setSubmittedPublicly(true)
       onCreated()
