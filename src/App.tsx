@@ -64,8 +64,8 @@ function AppContent() {
     if (!page || publicRoute || dailyInspectionRoute) return
     if (window.location.pathname.replace(/\/+$/, '') !== pagePath(page)) window.history.replaceState(null, '', pagePath(page))
   }, [page, publicRoute, dailyInspectionRoute])
-  const navigate = useCallback((next: PageKey) => {
-    window.history.pushState(null, '', pagePath(next))
+  const navigate = useCallback((next: PageKey, query = '') => {
+    window.history.pushState(null, '', `${pagePath(next)}${query}`)
     setRequestedPage(next)
     window.scrollTo({ top: 0 })
   }, [])
