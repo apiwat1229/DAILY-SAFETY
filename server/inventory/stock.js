@@ -202,5 +202,96 @@ export function createStockService(db, opts = {}) {
     })
   }
 
-  return { transaction, receive, issueFefo, returnStock, adjust, writeOff, transfer, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
+  /** FEFO candidates for reserving: non-expired lots with unreserved stock. */
+  function reservableLots(variantId, warehouseId) {
+    return db.prepare(`SELECT l.id AS lot_id, b.on_hand, b.reserved FROM stock_lots l
+                       JOIN stock_balances b ON b.variant_id = l.variant_id AND b.warehouse_id = l.warehouse_id AND b.lot_id = l.id
+                       WHERE l.variant_id = ? AND l.warehouse_id = ? AND b.on_hand - b.reserved > 0 AND (l.expiry_date = '' OR l.expiry_date >= ?)
+                       ORDER BY (l.expiry_date = '') ASC, l.expiry_date ASC, l.received_at ASC, l.rowid ASC`).all(variantId, warehouseId, today())
+  }
+
+  /** Reserves as much as is available (up to qty) and returns the lots used; callers decide whether a shortfall is an error. */
+  function reserveUpTo({ variantId, warehouseId, qty, refType, refId }) {
+    let remaining = qty
+    const reserved = []
+    for (const lot of reservableLots(variantId, warehouseId)) {
+      if (remaining === 0) break
+      const take = Math.min(remaining, lot.on_hand - lot.reserved)
+      db.prepare('INSERT INTO stock_reservations (id, ref_type, ref_id, variant_id, warehouse_id, lot_id, qty, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(randomUUID(), refType, refId, variantId, warehouseId, lot.lot_id, take, now())
+      db.prepare('UPDATE stock_balances SET reserved = reserved + ? WHERE variant_id = ? AND warehouse_id = ? AND lot_id = ?').run(take, variantId, warehouseId, lot.lot_id)
+      reserved.push({ lotId: lot.lot_id, qty: take })
+      remaining -= take
+    }
+    return { reserved, short: remaining }
+  }
+
+  function dropReservationRow(row) {
+    db.prepare('UPDATE stock_balances SET reserved = reserved - ? WHERE variant_id = ? AND warehouse_id = ? AND lot_id = ?').run(row.qty, row.variant_id, row.warehouse_id, row.lot_id)
+    db.prepare('DELETE FROM stock_reservations WHERE id = ?').run(row.id)
+  }
+
+  /** Holds stock for a reference (e.g. a requisition), first-expiry-first-out, all-or-nothing. */
+  function reserve({ variantId, warehouseId, qty, refType, refId }) {
+    assertQty(qty)
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(warehouseId)
+      const { reserved, short } = reserveUpTo({ variantId, warehouseId, qty, refType, refId })
+      if (short > 0) throw new StockError('INSUFFICIENT_STOCK', 'สต็อกที่ใช้ได้ไม่เพียงพอ')
+      return { reserved }
+    })
+  }
+
+  /** Frees the holds of a reference (optionally one variant). Returns the quantity released. */
+  function release({ refType, refId, variantId }) {
+    return transaction(() => {
+      const rows = db.prepare(`SELECT * FROM stock_reservations WHERE ref_type = ? AND ref_id = ? ${variantId ? 'AND variant_id = ?' : ''}`).all(...[refType, refId, ...(variantId ? [variantId] : [])])
+      let total = 0
+      for (const row of rows) { dropReservationRow(row); total += row.qty }
+      return total
+    })
+  }
+
+  function reservedFor({ refType, refId, variantId }) {
+    return db.prepare('SELECT COALESCE(SUM(qty), 0) AS n FROM stock_reservations WHERE ref_type = ? AND ref_id = ? AND variant_id = ?').get(refType, refId, variantId).n
+  }
+
+  /**
+   * Issues stock that was reserved for a reference. Holds sitting on lots that expired since are first moved to other lots
+   * (as far as stock allows); if the reserved quantity still falls short nothing is written.
+   */
+  function issueReserved({ refType, refId, variantId, warehouseId, qty, userId = '' }) {
+    assertQty(qty)
+    return transaction(() => {
+      loadVariant(variantId)
+      assertWarehouse(warehouseId)
+      const select = () => db.prepare(`SELECT r.*, l.expiry_date FROM stock_reservations r JOIN stock_lots l ON l.id = r.lot_id
+                                       WHERE r.ref_type = ? AND r.ref_id = ? AND r.variant_id = ?
+                                       ORDER BY (l.expiry_date = '') ASC, l.expiry_date ASC, l.received_at ASC, l.rowid ASC`).all(refType, refId, variantId)
+      const expired = select().filter((row) => row.expiry_date !== '' && row.expiry_date < today())
+      if (expired.length) {
+        const total = expired.reduce((sum, row) => sum + row.qty, 0)
+        for (const row of expired) dropReservationRow(row)
+        reserveUpTo({ variantId, warehouseId, qty: total, refType, refId })
+      }
+      const rows = select()
+      if (rows.reduce((sum, row) => sum + row.qty, 0) < qty) throw new StockError('INSUFFICIENT_STOCK', 'สต็อกที่จองไว้ไม่เพียงพอ (ล็อตที่จองหมดอายุหรือสต็อกถูกปรับลด)')
+      let remaining = qty
+      const picks = []
+      for (const row of rows) {
+        if (remaining === 0) break
+        const take = Math.min(remaining, row.qty)
+        const movementId = applyMovement({ type: 'issue', variantId, warehouseId, lotId: row.lot_id, qty: -take, refType, refId, userId })
+        db.prepare('UPDATE stock_balances SET reserved = reserved - ? WHERE variant_id = ? AND warehouse_id = ? AND lot_id = ?').run(take, variantId, warehouseId, row.lot_id)
+        if (take === row.qty) db.prepare('DELETE FROM stock_reservations WHERE id = ?').run(row.id)
+        else db.prepare('UPDATE stock_reservations SET qty = qty - ? WHERE id = ?').run(take, row.id)
+        picks.push({ lotId: row.lot_id, qty: take, movementId })
+        remaining -= take
+      }
+      return { picks }
+    })
+  }
+
+  return { transaction, receive, reserve, release, reservedFor, issueReserved, issueFefo, returnStock, adjust, writeOff, transfer, balance, verifyIntegrity, _internal: { applyMovement, loadVariant, assertWarehouse, assertQty, today, now } }
 }

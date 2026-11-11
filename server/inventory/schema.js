@@ -75,6 +75,17 @@ export function migrateInventory(db) {
       reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved >= 0),
       PRIMARY KEY (variant_id, warehouse_id, lot_id)
     );
+    CREATE TABLE IF NOT EXISTS stock_reservations (
+      id TEXT PRIMARY KEY,
+      ref_type TEXT NOT NULL,
+      ref_id TEXT NOT NULL,
+      variant_id TEXT NOT NULL,
+      warehouse_id TEXT NOT NULL,
+      lot_id TEXT NOT NULL,
+      qty INTEGER NOT NULL CHECK(qty > 0),
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_reservations_ref ON stock_reservations(ref_type, ref_id);
     CREATE TABLE IF NOT EXISTS stock_counts (
       id TEXT PRIMARY KEY,
       warehouse_id TEXT NOT NULL,

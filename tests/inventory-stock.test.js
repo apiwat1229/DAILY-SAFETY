@@ -334,3 +334,105 @@ describe('input hardening', () => {
     assert.equal(ledger().length, 1)
   })
 })
+
+describe('reservations', () => {
+  const receiveMed = (lotNo, expiryDate, qty) => stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty, lotNo, expiryDate, userId: 'u1' })
+  const reservedRows = () => db.prepare('SELECT lot_id, qty FROM stock_reservations ORDER BY rowid').all().map((row) => ({ ...row }))
+  const balanceOf = (lotId) => ({ ...db.prepare('SELECT on_hand, reserved FROM stock_balances WHERE lot_id = ?').get(lotId) })
+
+  test('reserve picks FEFO lots and raises reserved', () => {
+    const late = receiveMed('L-LATE', '2027-01-01', 5)
+    const early = receiveMed('L-EARLY', '2026-12-01', 5)
+    const result = stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 7, refType: 'requisition', refId: 'r1' })
+    assert.deepEqual(result.reserved, [{ lotId: early.lotId, qty: 5 }, { lotId: late.lotId, qty: 2 }])
+    assert.deepEqual(balanceOf(early.lotId), { on_hand: 5, reserved: 5 })
+    assert.deepEqual(balanceOf(late.lotId), { on_hand: 5, reserved: 2 })
+    assert.equal(stock.reservedFor({ refType: 'requisition', refId: 'r1', variantId: ids.med }), 7)
+    assert.deepEqual(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }), { onHand: 10, reserved: 7, available: 3 })
+  })
+
+  test('reserve is all-or-nothing when short', () => {
+    const lot = receiveMed('L1', '2026-12-01', 3)
+    rejects(() => stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 4, refType: 'requisition', refId: 'r1' }), 'INSUFFICIENT_STOCK')
+    assert.equal(reservedRows().length, 0)
+    assert.deepEqual(balanceOf(lot.lotId), { on_hand: 3, reserved: 0 })
+  })
+
+  test('reserve ignores already reserved quantity and expired lots', () => {
+    receiveMed('L-OLD', '2026-11-10', 9)
+    const fresh = receiveMed('L-OK', '2026-12-01', 4)
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 3, refType: 'requisition', refId: 'r1' })
+    rejects(() => stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 2, refType: 'requisition', refId: 'r2' }), 'INSUFFICIENT_STOCK')
+    assert.equal(stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 1, refType: 'requisition', refId: 'r2' }).reserved[0].lotId, fresh.lotId)
+  })
+
+  test('reserve validates qty', () => {
+    receiveMed('L1', '2026-12-01', 3)
+    for (const qty of [0, -1, 1.5, 2e9]) rejects(() => stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty, refType: 'requisition', refId: 'r1' }), 'INVALID_QTY')
+  })
+
+  test('release frees everything for a ref, or only one variant', () => {
+    receiveMed('L1', '2026-12-01', 10)
+    stock.receive({ variantId: ids.ppe, warehouseId: ids.w1, qty: 5, userId: 'u1' })
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 4, refType: 'requisition', refId: 'r1' })
+    stock.reserve({ variantId: ids.ppe, warehouseId: ids.w1, qty: 2, refType: 'requisition', refId: 'r1' })
+    assert.equal(stock.release({ refType: 'requisition', refId: 'r1', variantId: ids.ppe }), 2)
+    assert.equal(stock.balance({ variantId: ids.ppe, warehouseId: ids.w1 }).reserved, 0)
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).reserved, 4)
+    assert.equal(stock.release({ refType: 'requisition', refId: 'r1' }), 4)
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).reserved, 0)
+    assert.equal(reservedRows().length, 0)
+    assert.equal(stock.release({ refType: 'requisition', refId: 'nope' }), 0)
+  })
+
+  test('issueReserved consumes reservations and writes issue rows with the ref', () => {
+    const early = receiveMed('L-EARLY', '2026-12-01', 5)
+    const late = receiveMed('L-LATE', '2027-01-01', 5)
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 7, refType: 'requisition', refId: 'r1' })
+    const { picks } = stock.issueReserved({ refType: 'requisition', refId: 'r1', variantId: ids.med, warehouseId: ids.w1, qty: 6, userId: 'u2' })
+    assert.deepEqual(picks.map((pick) => [pick.lotId, pick.qty]), [[early.lotId, 5], [late.lotId, 1]])
+    assert.deepEqual(balanceOf(early.lotId), { on_hand: 0, reserved: 0 })
+    assert.deepEqual(balanceOf(late.lotId), { on_hand: 4, reserved: 1 })
+    assert.deepEqual(ledger().filter((row) => row.type === 'issue').map((row) => [row.qty, row.ref_type, row.ref_id]), [[-5, 'requisition', 'r1'], [-1, 'requisition', 'r1']])
+    assert.equal(stock.reservedFor({ refType: 'requisition', refId: 'r1', variantId: ids.med }), 1)
+    assert.deepEqual(stock.verifyIntegrity(), { ok: true, mismatches: [] })
+  })
+
+  test('issueReserved cannot exceed the reserved qty and changes nothing when it fails', () => {
+    receiveMed('L1', '2026-12-01', 10)
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 3, refType: 'requisition', refId: 'r1' })
+    const before = ledger().length
+    rejects(() => stock.issueReserved({ refType: 'requisition', refId: 'r1', variantId: ids.med, warehouseId: ids.w1, qty: 4, userId: 'u2' }), 'INSUFFICIENT_STOCK')
+    assert.equal(ledger().length, before)
+    assert.equal(stock.reservedFor({ refType: 'requisition', refId: 'r1', variantId: ids.med }), 3)
+  })
+
+  test('issueReserved moves a reservation off a lot that expired after reserving', () => {
+    const old = receiveMed('L-OLD', '2026-12-01', 5)
+    const next = receiveMed('L-NEXT', '2027-06-01', 8)
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 4, refType: 'requisition', refId: 'r1' })
+    assert.equal(reservedRows()[0].lot_id, old.lotId)
+    const later = createStockService(db, { today: () => '2026-12-15' })
+    const { picks } = later.issueReserved({ refType: 'requisition', refId: 'r1', variantId: ids.med, warehouseId: ids.w1, qty: 4, userId: 'u2' })
+    assert.deepEqual(picks.map((pick) => [pick.lotId, pick.qty]), [[next.lotId, 4]])
+    assert.deepEqual(balanceOf(old.lotId), { on_hand: 5, reserved: 0 })
+    assert.equal(later.reservedFor({ refType: 'requisition', refId: 'r1', variantId: ids.med }), 0)
+  })
+
+  test('issueReserved fails without partial writes when the expired lot cannot be replaced', () => {
+    const old = receiveMed('L-OLD', '2026-12-01', 5)
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 4, refType: 'requisition', refId: 'r1' })
+    const later = createStockService(db, { today: () => '2026-12-15' })
+    rejects(() => later.issueReserved({ refType: 'requisition', refId: 'r1', variantId: ids.med, warehouseId: ids.w1, qty: 4, userId: 'u2' }), 'INSUFFICIENT_STOCK')
+    assert.deepEqual(balanceOf(old.lotId), { on_hand: 5, reserved: 4 })
+    assert.deepEqual(reservedRows(), [{ lot_id: old.lotId, qty: 4 }])
+    assert.equal(ledger().filter((row) => row.type === 'issue').length, 0)
+  })
+
+  test('transfer and issueFefo respect reserved stock', () => {
+    const lot = receiveMed('L1', '2026-12-01', 5)
+    stock.reserve({ variantId: ids.med, warehouseId: ids.w1, qty: 4, refType: 'requisition', refId: 'r1' })
+    rejects(() => stock.transfer({ variantId: ids.med, fromWarehouseId: ids.w1, toWarehouseId: ids.w2, lotId: lot.lotId, qty: 2, userId: 'u1' }), 'INSUFFICIENT_STOCK')
+    rejects(() => stock.issueFefo({ variantId: ids.med, warehouseId: ids.w1, qty: 2, userId: 'u1' }), 'INSUFFICIENT_STOCK')
+  })
+})
