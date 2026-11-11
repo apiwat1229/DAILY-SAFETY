@@ -38,16 +38,16 @@ export function EmployeeImportDialog({ open, onOpenChange, onImported }: Props) 
   }
 
   return <Dialog open={open} onOpenChange={(value) => { if (!value && !busy) close() }}>
-    <DialogContent className="sm:max-w-lg">
+    <DialogContent className="sm:max-w-2xl">
       <DialogHeader>
         <div className="mb-1 grid size-10 place-items-center rounded-xl bg-secondary text-primary"><FileSpreadsheet size={18} /></div>
         <DialogTitle>{t('นำเข้ารายชื่อพนักงานจาก Excel')}</DialogTitle>
         <DialogDescription>{t('ไฟล์ต้องมีหัวคอลัมน์ Code, Name, Position, Department ถ้าเลือกทั้งสองภาษา รหัสพนักงานต้องตรงกัน ข้อมูลที่ว่างจะไม่ทับข้อมูลเดิม')}</DialogDescription>
       </DialogHeader>
-      <form onSubmit={submit} className="space-y-4 pt-1">
+      <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5"><Label htmlFor="roster-th">{t('ไฟล์ภาษาไทย (.xlsx)')}</Label><Input id="roster-th" type="file" accept=".xlsx" className="h-auto py-1.5" onChange={(event) => setThai(event.target.files?.[0] ?? null)} /></div>
         <div className="grid gap-1.5"><Label htmlFor="roster-en">{t('ไฟล์ภาษาอังกฤษ (.xlsx)')}</Label><Input id="roster-en" type="file" accept=".xlsx" className="h-auto py-1.5" onChange={(event) => setEnglish(event.target.files?.[0] ?? null)} /></div>
-        <div className="flex justify-end gap-2 border-t pt-3">
+        <div className="flex justify-end gap-2 border-t pt-3 sm:col-span-2">
           <Button type="button" variant="outline" onClick={close} disabled={busy}>{t('ยกเลิก')}</Button>
           <Button type="submit" disabled={busy || (!thai && !english)} className="gap-2">{busy && <LoaderCircle size={15} className="animate-spin" />}{t('นำเข้า')}</Button>
         </div>

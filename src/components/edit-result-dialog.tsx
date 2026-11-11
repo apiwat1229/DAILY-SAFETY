@@ -64,27 +64,27 @@ export function EditResultDialog({ item, onOpenChange, onSaved }: Props) {
 
   const leavingNg = item?.result === 'NG' && !isNg
   return <Dialog open={Boolean(item)} onOpenChange={onOpenChange}>
-    <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+    <DialogContent className="sm:max-w-2xl">
       <DialogHeader><DialogTitle>{t('แก้ไขผลตรวจ')}</DialogTitle><DialogDescription>{item && t(item.title)}</DialogDescription></DialogHeader>
-      <form onSubmit={save} className="space-y-4 pt-1">
-        <div className="grid gap-2"><Label htmlFor="edit-result">{t('ผลตรวจ')}</Label>
+      <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+        <div className={`grid gap-2 ${isNg ? '' : 'sm:col-span-2'}`}><Label htmlFor="edit-result">{t('ผลตรวจ')}</Label>
           <Select value={result} onValueChange={setResult}><SelectTrigger id="edit-result" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{(item?.choices ?? ['OK', 'NG', 'N/A']).map((choice) => <SelectItem key={choice} value={choice}>{choice}</SelectItem>)}</SelectContent></Select>
         </div>
-        {leavingNg && <p className="rounded-lg border border-warning/25 bg-warning/10 p-3 text-sm text-warning">{t('การเปลี่ยนจาก NG จะล้างรายละเอียดปัญหา ผู้รับผิดชอบ และรูปที่แนบของหัวข้อนี้')}</p>}
-        {isNg && <>
-          <div className="grid gap-2"><Label htmlFor="edit-issue">{t('รายละเอียดปัญหา')}</Label><Textarea id="edit-issue" value={issueDetails} onChange={(event) => setIssueDetails(event.target.value)} rows={3} maxLength={4000} required /></div>
-          <div className="grid gap-2"><Label htmlFor="edit-assignee">{t('ผู้รับผิดชอบ')}</Label>
+        {leavingNg && <p className="sm:col-span-2 rounded-lg border border-warning/25 bg-warning/10 p-3 text-sm text-warning">{t('การเปลี่ยนจาก NG จะล้างรายละเอียดปัญหา ผู้รับผิดชอบ และรูปที่แนบของหัวข้อนี้')}</p>}
+        {isNg && <><div className="grid gap-2"><Label htmlFor="edit-due">{t('กำหนดเสร็จ')}</Label><DatePicker id="edit-due" ariaLabel={t('กำหนดเสร็จ')} value={dueDate} onChange={setDueDate} clearable placeholder={t('เลือกวัน')} /></div>
+          <div className="grid gap-2 sm:col-span-2"><Label htmlFor="edit-issue">{t('รายละเอียดปัญหา')}</Label><Textarea id="edit-issue" value={issueDetails} onChange={(event) => setIssueDetails(event.target.value)} rows={3} maxLength={4000} required /></div>
+          <div className="grid gap-2 sm:col-span-2"><Label htmlFor="edit-assignee">{t('ผู้รับผิดชอบ')}</Label>
             <Select value={responsibleUserId} onValueChange={setResponsibleUserId}><SelectTrigger id="edit-assignee" className="w-full"><SelectValue placeholder={t('เลือกบัญชีผู้รับผิดชอบ')} /></SelectTrigger>
               <SelectContent>{assignees.map((assignee) => <SelectItem key={assignee.id} value={assignee.id}>{assignee.name} ({assignee.employeeCode})</SelectItem>)}</SelectContent></Select></div>
-          <div className="grid gap-2"><Label htmlFor="edit-due">{t('กำหนดเสร็จ')}</Label><DatePicker id="edit-due" ariaLabel={t('กำหนดเสร็จ')} value={dueDate} onChange={setDueDate} clearable placeholder={t('เลือกวัน')} /></div>
-          <div className="grid gap-2"><Label htmlFor="edit-before-photos">{t('เพิ่มรูปก่อนแก้ไข')}</Label>
+          
+          <div className="grid gap-2 sm:col-span-2"><Label htmlFor="edit-before-photos">{t('เพิ่มรูปก่อนแก้ไข')}</Label>
             <label htmlFor="edit-before-photos" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-surface-subtle p-3 text-sm text-muted-foreground hover:border-primary/50"><ImagePlus size={18} />{files.length ? `${files.length} ${t('ไฟล์')}` : t('เลือกรูปภาพ')}</label>
             <input id="edit-before-photos" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="sr-only" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
             {needsBeforePhoto && <p className="text-sm text-destructive">{t('หัวข้อ NG ต้องมีรูปก่อนแก้ไขอย่างน้อย 1 รูป')}</p>}
           </div>
         </>}
-        <div className="flex justify-end gap-2 border-t pt-3">
+        <div className="flex justify-end gap-2 border-t pt-3 sm:col-span-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>{t('ยกเลิก')}</Button>
           <Button type="submit" disabled={busy || (isNg && (!responsibleUserId || !issueDetails.trim() || needsBeforePhoto))} className="gap-2">{busy && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button>
         </div>

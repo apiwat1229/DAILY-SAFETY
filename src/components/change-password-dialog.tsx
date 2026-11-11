@@ -37,15 +37,15 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
   }
 
   return <Dialog open={open} onOpenChange={(value) => { if (!value) close() }}>
-    <DialogContent className="max-w-sm">
+    <DialogContent className="sm:max-w-lg">
       <DialogHeader>
         <div className="mb-1 grid size-10 place-items-center rounded-xl bg-secondary text-primary"><KeyRound size={17} /></div>
         <DialogTitle>{t('เปลี่ยนรหัสผ่าน')}</DialogTitle>
         <DialogDescription>{t('ใช้รหัสผ่านใหม่ที่คาดเดายากสำหรับบัญชีของคุณ')}</DialogDescription>
       </DialogHeader>
       <form onSubmit={save} className="space-y-4 pt-1">
-        <div className="grid gap-3">
-          <div className="grid gap-1.5"><Label htmlFor="current-password">{t('รหัสผ่านปัจจุบัน')}</Label><Input id="current-password" type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="current-password">{t('รหัสผ่านปัจจุบัน')}</Label><Input id="current-password" type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></div>
           <div className="grid gap-1.5"><Label htmlFor="new-password">{t('รหัสผ่านใหม่')}</Label><Input id="new-password" type="password" autoComplete="new-password" minLength={6} maxLength={32} value={next} onChange={(event) => setNext(event.target.value)} required /></div>
           <div className="grid gap-1.5"><Label htmlFor="confirm-password">{t('ยืนยันรหัสผ่านใหม่')}</Label><Input id="confirm-password" type="password" autoComplete="new-password" minLength={6} maxLength={32} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></div>
         </div>

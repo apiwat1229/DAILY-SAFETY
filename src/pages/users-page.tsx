@@ -169,17 +169,17 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     setRole('leader')
     onOpenChange(false)
   }
-  return <Dialog open={open} onOpenChange={(next) => { if (!next) close(); else onOpenChange(true) }}><DialogContent className="max-w-md">
+  return <Dialog open={open} onOpenChange={(next) => { if (!next) close(); else onOpenChange(true) }}><DialogContent className="sm:max-w-2xl">
     <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><UserPlus size={17} /></div><DialogTitle className="text-base">{t('เพิ่มผู้ใช้งาน')}</DialogTitle><DialogDescription className="text-xs">{t('สร้างบัญชีเพื่อให้หัวหน้างานกรอกแบบตรวจหรือให้ Admin จัดการรายงาน')}</DialogDescription></DialogHeader>
-    <form onSubmit={create} className="space-y-3.5 pt-1">
+    <form onSubmit={create} className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5"><Label htmlFor="new-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="new-name" name="name" required placeholder={t('ชื่อและนามสกุล')} value={newName} onValueChange={changeEmployeeName} suggestions={nameOptions} /></div>
       <div className="grid gap-1.5"><Label htmlFor="new-code">{t('รหัสพนักงาน')}</Label><AutocompleteInput id="new-code" name="employeeCode" required placeholder={t('เช่น YT-0123')} value={newEmployeeCode} onValueChange={changeEmployeeCode} suggestions={employees.map((employee) => employee.employeeCode)} /></div>
-      <p className="-mt-1 text-xs text-muted-foreground">{t('ค้นหาด้วยชื่อหรือรหัสพนักงาน แล้วเลือกจากรายการเพื่อเติมข้อมูลอีกช่องอัตโนมัติ')}</p>
+      <p className="-mt-2 text-xs text-muted-foreground sm:col-span-2">{t('ค้นหาด้วยชื่อหรือรหัสพนักงาน แล้วเลือกจากรายการเพื่อเติมข้อมูลอีกช่องอัตโนมัติ')}</p>
       <div className="grid gap-1.5"><Label htmlFor="new-username">{t('ชื่อบัญชี')}</Label><Input id="new-username" name="username" value={newEmployeeCode.toLocaleLowerCase()} readOnly placeholder={t('เลือกรหัสพนักงานก่อน')} /><p className="text-xs text-muted-foreground">{t('ใช้รหัสพนักงานเป็นชื่อบัญชีอัตโนมัติ')}</p></div>
+      <div className="grid gap-1.5"><Label htmlFor="new-role">{t('สิทธิ์การใช้งาน')}</Label><Select value={role} onValueChange={(value) => setRole(value as User['role'])}><SelectTrigger id="new-role" className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="employee">{t('พนักงาน')}</SelectItem><SelectItem value="leader">{t('หัวหน้างาน')}</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
       <PasswordInput id="new-password" label={t('รหัสผ่านเริ่มต้น')} value={password} onChange={setPassword} placeholder={t('6–32 ตัวอักษร จำง่ายได้')} />
       <div className="grid gap-1.5"><PasswordInput id="new-password-confirm" label={t('ยืนยันรหัสผ่าน')} value={confirmPassword} onChange={setConfirmPassword} placeholder={t('กรอกรหัสผ่านอีกครั้ง')} invalid={Boolean(confirmPassword) && password !== confirmPassword} />{Boolean(confirmPassword) && password !== confirmPassword && <p className="text-xs text-destructive" role="alert">{t('รหัสผ่านไม่ตรงกัน')}</p>}</div>
-      <div className="grid gap-1.5"><Label htmlFor="new-role">{t('สิทธิ์การใช้งาน')}</Label><Select value={role} onValueChange={(value) => setRole(value as User['role'])}><SelectTrigger id="new-role" className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="employee">{t('พนักงาน')}</SelectItem><SelectItem value="leader">{t('หัวหน้างาน')}</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
-      <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('เพิ่มบัญชี')}</Button></div>
+      <div className="flex justify-end gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('เพิ่มบัญชี')}</Button></div>
     </form>
   </DialogContent></Dialog>
 }
@@ -217,14 +217,14 @@ function EditUserDialog({ user, onOpenChange, onUpdated }: { user: User | null; 
     finally { setBusy(false) }
   }
 
-  return <Dialog open={Boolean(user)} onOpenChange={onOpenChange}><DialogContent className="max-w-md">
+  return <Dialog open={Boolean(user)} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-xl">
     <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><Pencil size={17} /></div><DialogTitle className="text-base">{t('แก้ไขบัญชีผู้ใช้')}</DialogTitle><DialogDescription className="text-xs">{t('แก้ไขชื่อบัญชี ข้อมูลพนักงาน และสิทธิ์การใช้งาน')}</DialogDescription></DialogHeader>
-    <form onSubmit={save} className="space-y-3.5 pt-1">
-      <div className="grid gap-1.5"><Label htmlFor="edit-username">{t('ชื่อบัญชี')}</Label><Input id="edit-username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={1} maxLength={40} autoComplete="off" placeholder={t('ชื่อบัญชี')} /></div>
+    <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5"><Label htmlFor="edit-name">{t('ชื่อผู้ใช้งาน')}</Label><AutocompleteInput id="edit-name" value={name} onValueChange={setName} suggestions={suggestions.inspectors} required placeholder={t('ชื่อและนามสกุล')} /></div>
       <div className="grid gap-1.5"><Label htmlFor="edit-code">{t('รหัสพนักงาน')}</Label><AutocompleteInput id="edit-code" value={employeeCode} onValueChange={setEmployeeCode} suggestions={suggestions.employeeCodes} required placeholder={t('เช่น YT-0123')} /></div>
+      <div className="grid gap-1.5"><Label htmlFor="edit-username">{t('ชื่อบัญชี')}</Label><Input id="edit-username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={1} maxLength={40} autoComplete="off" placeholder={t('ชื่อบัญชี')} /></div>
       <div className="grid gap-1.5"><Label htmlFor="edit-role">{t('สิทธิ์การใช้งาน')}</Label><Select value={role} onValueChange={(value) => setRole(value as User['role'])}><SelectTrigger id="edit-role" className="h-10 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="employee">{t('พนักงาน')}</SelectItem><SelectItem value="leader">{t('หัวหน้างาน')}</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
-      <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึก')}</Button></div>
+      <div className="flex justify-end gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึก')}</Button></div>
     </form>
   </DialogContent></Dialog>
 }
@@ -278,9 +278,9 @@ function ResetPasswordDialog({ user, onOpenChange }: { user: User | null; onOpen
     } catch (error) { toast.error(t(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ')) }
     finally { setBusy(false) }
   }
-  return <Dialog open={Boolean(user)} onOpenChange={(open) => { if (!open) close() }}><DialogContent className="max-w-sm">
+  return <Dialog open={Boolean(user)} onOpenChange={(open) => { if (!open) close() }}><DialogContent className="sm:max-w-lg">
     <DialogHeader><div className="mb-1 grid size-9 place-items-center rounded-xl bg-secondary text-primary"><KeyRound size={17} /></div><DialogTitle className="text-base">{t('ตั้งรหัสผ่านใหม่')}</DialogTitle><DialogDescription className="text-xs">{t('บัญชี')} {user?.username} · {user?.name}</DialogDescription></DialogHeader>
-    <form onSubmit={save} className="space-y-4 pt-1"><div className="grid gap-3"><PasswordInput id="reset-password" label={t('รหัสผ่านใหม่')} value={password} onChange={setPassword} placeholder={t('อย่างน้อย 6 ตัวอักษร')} /><div className="grid gap-1.5"><PasswordInput id="reset-password-confirm" label={t('ยืนยันรหัสผ่าน')} value={confirmPassword} onChange={setConfirmPassword} placeholder={t('กรอกรหัสผ่านอีกครั้ง')} invalid={Boolean(confirmPassword) && password !== confirmPassword} />{Boolean(confirmPassword) && password !== confirmPassword && <p className="text-xs text-destructive" role="alert">{t('รหัสผ่านไม่ตรงกัน')}</p>}</div></div><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึกรหัสผ่าน')}</Button></div></form>
+    <form onSubmit={save} className="space-y-4 pt-1"><div className="grid gap-4 sm:grid-cols-2"><PasswordInput id="reset-password" label={t('รหัสผ่านใหม่')} value={password} onChange={setPassword} placeholder={t('อย่างน้อย 6 ตัวอักษร')} /><div className="grid gap-1.5"><PasswordInput id="reset-password-confirm" label={t('ยืนยันรหัสผ่าน')} value={confirmPassword} onChange={setConfirmPassword} placeholder={t('กรอกรหัสผ่านอีกครั้ง')} invalid={Boolean(confirmPassword) && password !== confirmPassword} />{Boolean(confirmPassword) && password !== confirmPassword && <p className="text-xs text-destructive" role="alert">{t('รหัสผ่านไม่ตรงกัน')}</p>}</div></div><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={close}>{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="gap-2">{busy && <LoaderCircle size={14} className="animate-spin" />} {t('บันทึกรหัสผ่าน')}</Button></div></form>
   </DialogContent></Dialog>
 }
 

@@ -137,12 +137,13 @@ function ChecklistDialog({ open, onOpenChange, item, nextOrder, onSaved }: { ope
     finally { setBusy(false) }
   }
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-2xl">
     <DialogHeader><div className="flex items-start gap-3 pr-8"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-primary"><ClipboardCheck size={18} /></div><div className="min-w-0"><DialogTitle>{item ? t('แก้ไขหัวข้อตรวจ') : t('เพิ่มหัวข้อตรวจ')}</DialogTitle><DialogDescription className="mt-1">{t('ชื่อและรายละเอียดจะแสดงให้หัวหน้างานเห็นตอนบันทึกแบบตรวจ')}</DialogDescription></div></div></DialogHeader>
-    <form onSubmit={save} className="space-y-4 pt-1">
+    <form onSubmit={save} className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_9rem]">
       <div className="grid gap-1.5"><Label htmlFor="checklist-title">{t('ชื่อหัวข้อ')}</Label><Input id="checklist-title" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} maxLength={160} required placeholder={t('กรอกชื่อหัวข้อ')} /></div>
-      <div className="grid gap-1.5"><Label htmlFor="checklist-description">{t('รายละเอียด')}</Label><Textarea id="checklist-description" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={1000} rows={4} placeholder={t('อธิบายสิ่งที่ต้องตรวจ')} /></div>
-      <fieldset className="grid gap-2 rounded-xl border border-border bg-surface-subtle p-3">
+      <div className="grid gap-1.5"><Label htmlFor="checklist-order">{t('ลำดับการแสดง')}</Label><Input id="checklist-order" type="number" min={1} step={1} value={draft.order} onChange={(event) => setDraft((current) => ({ ...current, order: event.target.value }))} required /></div>
+      <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="checklist-description">{t('รายละเอียด')}</Label><Textarea id="checklist-description" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={1000} rows={4} placeholder={t('อธิบายสิ่งที่ต้องตรวจ')} /></div>
+      <fieldset className="grid gap-2 sm:col-span-2 rounded-xl border border-border bg-surface-subtle p-3">
         <legend className="px-1 text-sm font-medium">{t('ตัวเลือกคำตอบ')}</legend>
         <p className="text-xs text-muted-foreground">{t('เลือกคำตอบที่ให้แสดงในหัวข้อนี้')}</p>
         <div className="grid grid-cols-3 gap-2">
@@ -152,8 +153,7 @@ function ChecklistDialog({ open, onOpenChange, item, nextOrder, onSaved }: { ope
           </Label>)}
         </div>
       </fieldset>
-      <div className="grid gap-1.5"><Label htmlFor="checklist-order">{t('ลำดับการแสดง')}</Label><Input id="checklist-order" type="number" min={1} step={1} value={draft.order} onChange={(event) => setDraft((current) => ({ ...current, order: event.target.value }))} required /></div>
-      <div className="grid grid-cols-1 gap-2 pt-1 sm:flex sm:justify-end"><Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-11 w-full sm:w-auto">{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="h-11 w-full gap-2 sm:w-auto">{busy && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button></div>
+      <div className="grid grid-cols-1 gap-2 pt-1 sm:col-span-2 sm:flex sm:justify-end"><Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-11 w-full sm:w-auto">{t('ยกเลิก')}</Button><Button type="submit" disabled={busy} className="h-11 w-full gap-2 sm:w-auto">{busy && <LoaderCircle size={15} className="animate-spin" />}{t('บันทึก')}</Button></div>
     </form>
   </DialogContent></Dialog>
 }
