@@ -52,7 +52,7 @@ export function ItemDialog({ open, item, categories, defaultType, onClose, onSav
     event.preventDefault()
     const min = Number(minStock)
     if (!sku.trim() || !name.trim() || !unit.trim()) return toast.error(t('กรุณาระบุรหัสสินค้า ชื่อ และหน่วยนับ'))
-    if (!Number.isInteger(min) || min < 0) return toast.error(t('จุดสั่งซื้อซ้ำต้องเป็นจำนวนเต็มตั้งแต่ 0'))
+    if (!Number.isInteger(min) || min < 0) return toast.error(t('สต็อกขั้นต่ำต้องเป็นจำนวนเต็มตั้งแต่ 0'))
     setBusy(true)
     try {
       if (!(await confirm(item ? 'update' : 'create'))) return
@@ -114,7 +114,7 @@ export function ItemDialog({ open, item, categories, defaultType, onClose, onSav
       <div className="grid gap-1.5"><Label htmlFor="item-sku">{t('รหัสสินค้า')} <span className="text-destructive">*</span></Label><Input id="item-sku" value={sku} onChange={(event) => setSku(event.target.value)} readOnly={Boolean(item)} placeholder="PPE-001" /></div>
       <div className="grid gap-1.5"><Label htmlFor="item-name">{t('ชื่อสินค้า')} <span className="text-destructive">*</span></Label><Input id="item-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
       <div className="grid gap-1.5"><Label htmlFor="item-unit">{t('หน่วยนับ')} <span className="text-destructive">*</span></Label><Input id="item-unit" value={unit} onChange={(event) => setUnit(event.target.value)} placeholder={t('เช่น ชิ้น คู่ แผง')} /></div>
-      <div className="grid gap-1.5"><Label htmlFor="item-min">{t('จุดสั่งซื้อซ้ำ (ต่ำสุดที่ควรมี)')}</Label><Input id="item-min" type="number" min={0} step={1} inputMode="numeric" value={minStock} onChange={(event) => setMinStock(event.target.value)} /></div>
+      <div className="grid gap-1.5"><Label htmlFor="item-min">{t('สต็อกขั้นต่ำ (ต่ำสุดที่ควรมี)')}</Label><Input id="item-min" type="number" min={0} step={1} inputMode="numeric" value={minStock} onChange={(event) => setMinStock(event.target.value)} /></div>
       <label className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-sm"><span>{t('ติดตามเลขล็อต')}</span><Switch checked={isMedicine || trackLot} disabled={isMedicine} onCheckedChange={setTrackLot} /></label>
       <label className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-sm"><span>{t('ติดตามวันหมดอายุ')}</span><Switch checked={isMedicine || trackExpiry} disabled={isMedicine} onCheckedChange={setTrackExpiry} /></label>
       {item

@@ -17,7 +17,7 @@ import { DatePicker } from '@/components/date-picker'
 
 const ALL = '__all__'
 const typeLabel: Record<MovementType, string> = {
-  receive: 'รับเข้า', issue: 'จ่ายออก', return: 'รับคืน', transfer_out: 'โอนออก', transfer_in: 'โอนเข้า', adjust: 'ปรับยอด', count_adjust: 'ปรับจากการนับ', write_off: 'ตัดทิ้ง',
+  receive: 'รับเข้า', issue: 'จ่ายออก', return: 'รับคืน', transfer_out: 'โอนออก', transfer_in: 'โอนเข้า', adjust: 'ปรับยอด', count_adjust: 'ปรับจากการนับ', write_off: 'ตัดจำหน่าย',
 }
 const typeTone: Record<MovementType, string> = {
   receive: 'border-success/25 bg-success/10 text-success', return: 'border-success/25 bg-success/10 text-success', transfer_in: 'border-info/20 bg-info/10 text-info',

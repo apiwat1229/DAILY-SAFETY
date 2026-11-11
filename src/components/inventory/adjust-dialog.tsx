@@ -19,7 +19,7 @@ const reasons: WriteOffReason[] = ['expired', 'damaged', 'lost', 'other']
 const reasonLabel: Record<WriteOffReason, string> = { expired: 'หมดอายุ', damaged: 'ชำรุด/เสียหาย', lost: 'สูญหาย', other: 'อื่น ๆ' }
 const titles: Record<Mode, { title: string; icon: ReactNode }> = {
   adjust: { title: 'ปรับยอดสต็อก', icon: <SlidersHorizontal size={19} /> },
-  writeoff: { title: 'ตัดสินค้าทิ้ง', icon: <Minus size={19} /> },
+  writeoff: { title: 'ตัดจำหน่ายสินค้า', icon: <Minus size={19} /> },
   transfer: { title: 'โอนสินค้าไปคลังอื่น', icon: <ArrowLeftRight size={19} /> },
 }
 
@@ -56,7 +56,7 @@ export function StockActionDialog({ mode, row, warehouses, onClose, onSaved }: P
     if (mode === 'transfer' && !toWarehouseId) return toast.error(t('กรุณาเลือกคลังปลายทาง'))
     setBusy(true)
     try {
-      if (!(await confirm(mode === 'writeoff' ? { kind: 'danger', title: t('ยืนยันการตัดสินค้าทิ้ง'), description: t('รายการนี้ย้อนกลับไม่ได้ ต้องบันทึกรายการแก้ไขเท่านั้น'), confirmLabel: t('ตัดทิ้ง') } : 'update'))) return
+      if (!(await confirm(mode === 'writeoff' ? { kind: 'danger', title: t('ยืนยันการตัดจำหน่ายสินค้า'), description: t('รายการนี้ย้อนกลับไม่ได้ ต้องบันทึกรายการแก้ไขเท่านั้น'), confirmLabel: t('ตัดจำหน่าย') } : 'update'))) return
       if (mode === 'adjust') await inventoryApi.adjust({ warehouseId: row.warehouseId, variantId: row.variantId, lotId, delta: value, reason: reason.trim() })
       else if (mode === 'writeoff') await inventoryApi.writeOff({ warehouseId: row.warehouseId, variantId: row.variantId, lotId, qty: value, reason: writeOffReason, note: reason.trim() })
       else await inventoryApi.transfer({ fromWarehouseId: row.warehouseId, toWarehouseId, lines: [{ variantId: row.variantId, lotId, qty: value }] })

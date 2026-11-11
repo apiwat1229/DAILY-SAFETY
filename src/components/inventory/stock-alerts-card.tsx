@@ -22,7 +22,7 @@ export function StockAlertsCard({ alerts, onSelect }: Props) {
       <div className={`grid size-9 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={17} /></div></button>
   }
   return <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
-    {tile(PackageMinus, t('ใกล้หมด (ต่ำกว่าจุดสั่งซื้อซ้ำ)'), alerts.lowStock.length, 'bg-warning/10 text-warning', 'low')}
+    {tile(PackageMinus, t('ใกล้หมด (ต่ำกว่าสต็อกขั้นต่ำ)'), alerts.lowStock.length, 'bg-warning/10 text-warning', 'low')}
     {tile(CalendarX2, t('หมดอายุแล้ว'), expired, 'bg-destructive/10 text-destructive', 'expiring')}
     {buckets.map((bucket) => tile(TriangleAlert, `${t('หมดอายุใน')} ${bucket.days} ${t('วัน')}`, bucket.count, 'bg-info/10 text-info', 'expiring', bucket.days))}
   </div>

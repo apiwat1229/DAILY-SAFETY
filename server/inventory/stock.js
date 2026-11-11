@@ -170,7 +170,7 @@ export function createStockService(db, opts = {}) {
 
   function writeOff({ variantId, warehouseId, lotId, qty, reason, note = '', userId = '' }) {
     assertQty(qty)
-    if (!WRITE_OFF_REASONS.includes(reason)) throw new StockError('REASON_REQUIRED', 'กรุณาเลือกเหตุผลการตัดทิ้ง')
+    if (!WRITE_OFF_REASONS.includes(reason)) throw new StockError('REASON_REQUIRED', 'กรุณาเลือกเหตุผลการตัดจำหน่าย')
     const detail = String(note || '').trim()
     return transaction(() => {
       loadVariant(variantId)

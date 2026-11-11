@@ -126,7 +126,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     const categoryId = String(body.categoryId || '')
     if (!sku || !name || !unit) return bad(res, 'กรุณาระบุรหัสสินค้า ชื่อ และหน่วยนับ')
     if (!TYPES.includes(type)) return bad(res, 'ประเภทสินค้าไม่ถูกต้อง')
-    if (!Number.isInteger(minStock) || minStock < 0) return bad(res, 'จุดสั่งซื้อซ้ำต้องเป็นจำนวนเต็มตั้งแต่ 0')
+    if (!Number.isInteger(minStock) || minStock < 0) return bad(res, 'สต็อกขั้นต่ำต้องเป็นจำนวนเต็มตั้งแต่ 0')
     const categoryError = checkCategory(categoryId, type)
     if (categoryError) return bad(res, categoryError)
     const labels = Array.isArray(body.variants) && body.variants.length ? body.variants.map((label) => text(label, 40)) : ['']
@@ -154,7 +154,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     const minStock = wholeNumber(body.minStock, existing.min_stock)
     const categoryId = body.categoryId === undefined ? existing.category_id : String(body.categoryId || '')
     if (!name || !unit) return bad(res, 'กรุณาระบุชื่อและหน่วยนับ')
-    if (!Number.isInteger(minStock) || minStock < 0) return bad(res, 'จุดสั่งซื้อซ้ำต้องเป็นจำนวนเต็มตั้งแต่ 0')
+    if (!Number.isInteger(minStock) || minStock < 0) return bad(res, 'สต็อกขั้นต่ำต้องเป็นจำนวนเต็มตั้งแต่ 0')
     const categoryError = checkCategory(categoryId, existing.type)
     if (categoryError) return bad(res, categoryError)
     const trackLot = existing.type === 'medicine' ? true : flag(body.trackLot, Boolean(existing.track_lot))
@@ -376,7 +376,7 @@ export function registerInventoryRoutes(app, { db, requireAuth, requireAdmin, ad
     if (!warehouse) return
     const { variantId, lotId, qty, reason, note } = req.body || {}
     const result = stock.writeOff({ variantId: String(variantId || ''), warehouseId: warehouse.id, lotId: String(lotId || ''), qty, reason, note, userId: req.session.user.id })
-    addAudit(req.session.user.id, 'ตัดสินค้าทิ้ง', 'inventory_stock', result.movementId, { warehouse: warehouse.code, variantId, qty, reason })
+    addAudit(req.session.user.id, 'ตัดจำหน่ายสินค้า', 'inventory_stock', result.movementId, { warehouse: warehouse.code, variantId, qty, reason })
     res.status(201).json(result)
   }))
 

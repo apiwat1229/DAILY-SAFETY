@@ -5,17 +5,18 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 /** Item image urls from the API are the full-size image; the thumbnail is the same url with size=thumb. */
 export const thumbUrl = (url: string | null) => (url ? `${url}${url.includes('?') ? '&' : '?'}size=thumb` : null)
 
-type Props = { url: string | null; name: string; size?: number; className?: string; zoomable?: boolean }
+type Props = { url: string | null; name: string; size?: number; className?: string; zoomable?: boolean; fill?: boolean }
 
 /** Square thumbnail with a placeholder; clicking opens the full image. */
-export function ItemThumb({ url, name, size = 56, className = '', zoomable = true }: Props) {
+export function ItemThumb({ url, name, size = 56, className = '', zoomable = true, fill = false }: Props) {
   const [open, setOpen] = useState(false)
-  const box = { width: size, height: size }
+  // `fill` stretches to the parent's width as a square (tile layouts); otherwise a fixed square of `size` px.
+  const box = fill ? { width: '100%', aspectRatio: '1 / 1' } : { width: size, height: size }
   if (!url) return <div style={box} className={`grid shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground ${className}`} aria-hidden="true"><Package size={Math.round(size * 0.42)} /></div>
   const image = <img src={thumbUrl(url) ?? url} alt={name} loading="lazy" style={box} className={`shrink-0 rounded-lg border border-border bg-secondary object-cover ${className}`} />
   if (!zoomable) return image
   return <>
-    <button type="button" onClick={(event) => { event.stopPropagation(); setOpen(true) }} className="shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-primary" aria-label={name}>{image}</button>
+    <button type="button" onClick={(event) => { event.stopPropagation(); setOpen(true) }} className={`${fill ? 'block w-full ' : ''}shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-primary`} aria-label={name}>{image}</button>
     <ImageViewer open={open} onOpenChange={setOpen} url={url} title={name} />
   </>
 }

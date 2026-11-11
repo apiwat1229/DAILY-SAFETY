@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Package, Pencil, Plus, Search, Tags, Trash2 } from 'lucide-react'
+import { LayoutGrid, Package, Pencil, Plus, Search, Table2, Tags, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { inventoryApi } from '@/lib/inventory-api'
 import type { Category, InventoryType, Item } from '@/lib/inventory-types'
@@ -14,15 +14,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DataTablePagination, useDataPagination } from '@/components/data-table-pagination'
 import { useConfirm } from '@/components/confirm-provider'
 import { ItemThumb } from '@/components/item-thumb'
+import { ViewToggle, type ViewOption } from '@/components/view-toggle'
 import { ItemDialog } from '@/components/inventory/item-dialog'
 import { CategoryDialog } from '@/components/inventory/category-dialog'
 
+type ItemsView = 'table' | 'tiles'
+const VIEWS: ViewOption<ItemsView>[] = [{ value: 'table', label: 'แบบตาราง', icon: Table2 }, { value: 'tiles', label: 'แบบรูปใหญ่', icon: LayoutGrid }]
 type Editor = { item: Item | null; key: string } | null
 
 export function InventoryItemsPage() {
   const { t } = useI18n()
   const confirm = useConfirm()
   const [items, setItems] = useState<Item[]>([])
+  const [view, setView] = usePersistentState<ItemsView>('inventory.items.view', 'table', 'local')
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [type, setType] = usePersistentState<InventoryType>('inventory.items.type', 'ppe')
@@ -55,17 +59,25 @@ export function InventoryItemsPage() {
 
   return <div className="page-stack">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div><p className="text-sm font-medium text-primary">{t('คลังสินค้า')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('สินค้าและหมวด')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('จัดการรายการอุปกรณ์ PPE และยา พร้อมไซซ์และจุดสั่งซื้อซ้ำ')}</p></div>
+      <div><p className="text-sm font-medium text-primary">{t('คลังสินค้า')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('สินค้าและหมวด')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('จัดการรายการอุปกรณ์ PPE และยา พร้อมไซซ์และสต็อกขั้นต่ำ')}</p></div>
       <div className="flex gap-2"><Button iconOnly variant="outline" onClick={() => setCategoriesOpen(true)}><Tags size={16} />{t('จัดการหมวด')}</Button><Button iconOnly onClick={() => setEditor({ item: null, key: `new-${Date.now()}` })}><Plus size={16} />{t('เพิ่มสินค้า')}</Button></div>
     </div>
     <Card className="overflow-hidden rounded-2xl border-border">
       <CardContent className="flex flex-col gap-3 border-b border-border-subtle p-4 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={type} onValueChange={(value) => setType(value as InventoryType)}><TabsList><TabsTrigger value="ppe">PPE ({items.filter((item) => item.type === 'ppe').length})</TabsTrigger><TabsTrigger value="medicine">{t('ยารักษาโรค')} ({items.filter((item) => item.type === 'medicine').length})</TabsTrigger></TabsList></Tabs>
-        <div className="relative sm:w-72"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหารหัส ชื่อ หรือหมวด')} aria-label={t('ค้นหา')} className="pl-9" /></div>
+        <div className="flex gap-2 sm:w-96"><div className="relative min-w-0 flex-1"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหารหัส ชื่อ หรือหมวด')} aria-label={t('ค้นหา')} className="pl-9" /></div><ViewToggle value={view} onChange={setView} options={VIEWS} /></div>
       </CardContent>
       {filtered.length ? <>
-        <Table>
-          <TableHeader><TableRow><TableHead className="w-14"><span className="sr-only">{t('รูปสินค้า')}</span></TableHead><TableHead>{t('รหัสสินค้า')}</TableHead><TableHead>{t('ชื่อสินค้า')}</TableHead><TableHead>{t('หมวด')}</TableHead><TableHead>{t('ตัวเลือก')}</TableHead><TableHead>{t('จุดสั่งซื้อซ้ำ')}</TableHead><TableHead>{t('การติดตาม')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+        {view === 'tiles' ? <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 xl:grid-cols-4">{pagination.visibleItems.map((item) => <div key={item.id} data-inactive={!item.isActive || undefined} className="flex flex-col overflow-hidden rounded-2xl border border-border data-[inactive]:opacity-60">
+          <ItemThumb url={item.imageUrl} name={item.name} fill className="!rounded-none !border-0" />
+          <div className="flex flex-1 flex-col gap-2 p-3">
+            <div><p className="font-medium leading-tight">{item.name}</p><p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{item.sku} · {item.unit}</p>{item.categoryName && <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.categoryName}</p>}</div>
+            <div className="flex flex-wrap gap-1">{item.variants.filter((variant) => variant.label).map((variant) => <Badge key={variant.id} variant="outline" className={variant.isActive ? '' : 'opacity-50'}>{variant.label}</Badge>)}</div>
+            <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground"><Badge variant="outline" className={item.isActive ? 'border-success/25 bg-success/10 text-success' : 'text-muted-foreground'}>{item.isActive ? t('ใช้งาน') : t('ปิดใช้งาน')}</Badge><span>{t('สต็อกขั้นต่ำ')} {item.minStock}</span></div>
+            <div className="mt-auto flex justify-end gap-1 border-t border-border-subtle pt-2"><Button iconOnly variant="ghost" size="sm" onClick={() => setEditor({ item, key: item.id })}><Pencil size={15} />{t('แก้ไข')}</Button><Button iconOnly variant="ghost" size="sm" className="text-destructive" onClick={() => remove(item)}><Trash2 size={15} />{t('ลบ')}</Button></div>
+          </div>
+        </div>)}</div> : <Table>
+          <TableHeader><TableRow><TableHead className="w-14"><span className="sr-only">{t('รูปสินค้า')}</span></TableHead><TableHead>{t('รหัสสินค้า')}</TableHead><TableHead>{t('ชื่อสินค้า')}</TableHead><TableHead>{t('หมวด')}</TableHead><TableHead>{t('ตัวเลือก')}</TableHead><TableHead>{t('สต็อกขั้นต่ำ')}</TableHead><TableHead>{t('การติดตาม')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
           <TableBody>{pagination.visibleItems.map((item) => <TableRow key={item.id} data-inactive={!item.isActive || undefined}>
             <TableCell data-label=""><ItemThumb url={item.imageUrl} name={item.name} size={44} /></TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{item.sku}</Badge></TableCell>
@@ -77,7 +89,7 @@ export function InventoryItemsPage() {
             <TableCell><Badge variant="outline" className={item.isActive ? 'border-success/25 bg-success/10 text-success' : 'text-muted-foreground'}>{item.isActive ? t('ใช้งาน') : t('ปิดใช้งาน')}</Badge></TableCell>
             <TableCell><div className="flex justify-end gap-1"><Button iconOnly variant="ghost" size="sm" onClick={() => setEditor({ item, key: item.id })}><Pencil size={15} />{t('แก้ไข')}</Button><Button iconOnly variant="ghost" size="sm" className="text-destructive" onClick={() => remove(item)}><Trash2 size={15} />{t('ลบ')}</Button></div></TableCell>
           </TableRow>)}</TableBody>
-        </Table>
+        </Table>}
         <DataTablePagination total={filtered.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />
       </> : <div className="grid min-h-48 place-items-center p-8 text-center text-sm text-muted-foreground"><div><Package className="mx-auto mb-2" size={22} />{loading ? t('กำลังโหลด…') : query ? t('ไม่พบสินค้าที่ตรงกับคำค้น') : t('ยังไม่มีสินค้า กด "เพิ่มสินค้า" เพื่อเริ่มต้น')}</div></div>}
     </Card>
