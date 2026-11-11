@@ -40,6 +40,7 @@ export function InventoryCountsPage({ user }: { user: User }) {
   }, [t])
   useEffect(reload, [reload])
   const pagination = useDataPagination(counts)
+  const closeSheet = useCallback(() => setOpenId(null), [])
 
   async function start() {
     if (!startWarehouse || busy) return toast.error(t('กรุณาเลือกคลัง'))
@@ -81,6 +82,6 @@ export function InventoryCountsPage({ user }: { user: User }) {
         <SelectContent>{warehouses.map((warehouse) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</SelectItem>)}</SelectContent></Select>
       <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setStartOpen(false)} disabled={busy}>{t('ยกเลิก')}</Button><Button onClick={start} disabled={busy || !startWarehouse}>{t('เริ่มนับ')}</Button></div>
     </DialogContent></Dialog>
-    <CountSheetDialog countId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
+    <CountSheetDialog countId={openId} onClose={closeSheet} onChanged={reload} />
   </div>
 }

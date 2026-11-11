@@ -8,6 +8,13 @@ export class StockError extends Error {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const MAX_QTY = 1_000_000_000
+/** True only for real calendar dates in YYYY-MM-DD form (rejects 2026-02-30). */
+function isCalendarDate(value) {
+  if (!DATE_RE.test(value)) return false
+  const date = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
 const bangkokToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
 
 /**
@@ -35,7 +42,7 @@ export function createStockService(db, opts = {}) {
   }
 
   function assertQty(qty) {
-    if (typeof qty !== 'number' || !Number.isInteger(qty) || qty <= 0) throw new StockError('INVALID_QTY', 'จำนวนต้องเป็นจำนวนเต็มมากกว่า 0')
+    if (typeof qty !== 'number' || !Number.isInteger(qty) || qty <= 0 || qty > MAX_QTY) throw new StockError('INVALID_QTY', 'จำนวนต้องเป็นจำนวนเต็มมากกว่า 0 และไม่เกิน 1,000,000,000')
   }
 
   function loadVariant(variantId) {
@@ -70,7 +77,7 @@ export function createStockService(db, opts = {}) {
       const lot = variant.track_lot ? String(lotNo || '').trim() : ''
       const expiry = variant.track_expiry ? String(expiryDate || '').trim() : ''
       if (variant.track_lot && !lot) throw new StockError('LOT_REQUIRED', 'กรุณาระบุเลขล็อต')
-      if (variant.track_expiry && !DATE_RE.test(expiry)) throw new StockError('EXPIRY_REQUIRED', 'กรุณาระบุวันหมดอายุ (YYYY-MM-DD)')
+      if (variant.track_expiry && !isCalendarDate(expiry)) throw new StockError('EXPIRY_REQUIRED', 'กรุณาระบุวันหมดอายุ (YYYY-MM-DD)')
       let lotRow = db.prepare('SELECT id, expiry_date FROM stock_lots WHERE variant_id = ? AND warehouse_id = ? AND lot_no = ?').get(variantId, warehouseId, lot)
       if (lotRow && variant.track_expiry && lotRow.expiry_date !== expiry) throw new StockError('EXPIRY_MISMATCH', 'เลขล็อตนี้มีวันหมดอายุไม่ตรงกับที่รับเข้าไว้ก่อนหน้า')
       if (!lotRow) {
@@ -150,7 +157,7 @@ export function createStockService(db, opts = {}) {
 
   /** Manual correction (positive or negative). Works on inactive items; a reason is mandatory. */
   function adjust({ variantId, warehouseId, lotId, delta, reason, userId = '' }) {
-    if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0) throw new StockError('INVALID_QTY', 'จำนวนที่ปรับต้องเป็นจำนวนเต็มและไม่เป็นศูนย์')
+    if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > MAX_QTY) throw new StockError('INVALID_QTY', 'จำนวนที่ปรับต้องเป็นจำนวนเต็ม ไม่เป็นศูนย์ และไม่เกิน 1,000,000,000')
     const text = String(reason ?? '').trim()
     if (!text) throw new StockError('REASON_REQUIRED', 'กรุณาระบุเหตุผล')
     return transaction(() => {

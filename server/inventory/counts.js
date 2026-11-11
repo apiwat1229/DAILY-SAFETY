@@ -29,7 +29,7 @@ export function createCountService(db, stock) {
       loadCount(id)
       const update = db.prepare('UPDATE stock_count_lines SET counted_qty = ? WHERE count_id = ? AND variant_id = ? AND lot_id = ?')
       for (const line of lines) {
-        if (typeof line.countedQty !== 'number' || !Number.isInteger(line.countedQty) || line.countedQty < 0) throw new StockError('INVALID_QTY', 'จำนวนที่นับต้องเป็นจำนวนเต็มตั้งแต่ 0')
+        if (typeof line.countedQty !== 'number' || !Number.isInteger(line.countedQty) || line.countedQty < 0 || line.countedQty > 1_000_000_000) throw new StockError('INVALID_QTY', 'จำนวนที่นับต้องเป็นจำนวนเต็มตั้งแต่ 0')
         if (update.run(line.countedQty, id, line.variantId, line.lotId).changes === 0) throw new StockError('NOT_FOUND', 'ไม่พบรายการนี้ในใบนับสต็อก')
       }
       db.prepare("UPDATE stock_counts SET status = 'counting' WHERE id = ?").run(id)

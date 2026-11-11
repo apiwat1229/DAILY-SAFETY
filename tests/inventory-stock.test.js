@@ -315,3 +315,22 @@ describe('stock counts', () => {
     rejects(() => counts.create({ warehouseId: 'nope', userId: 'u1' }), 'NOT_FOUND')
   })
 })
+
+describe('input hardening', () => {
+  test('quantities above one billion are refused everywhere', () => {
+    for (const qty of [1_000_000_001, 1e21, Number.MAX_SAFE_INTEGER]) rejects(() => stock.receive({ variantId: ids.ppe, warehouseId: ids.w1, qty, userId: 'u1' }), 'INVALID_QTY')
+    const lot = stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty: 5, lotNo: 'L1', expiryDate: '2027-01-01', userId: 'u1' })
+    rejects(() => stock.adjust({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, delta: 1e21, reason: 'x', userId: 'u1' }), 'INVALID_QTY')
+    rejects(() => stock.writeOff({ variantId: ids.med, warehouseId: ids.w1, lotId: lot.lotId, qty: 1e21, reason: 'lost', userId: 'u1' }), 'INVALID_QTY')
+    assert.equal(stock.balance({ variantId: ids.med, warehouseId: ids.w1 }).onHand, 5)
+  })
+
+  test('expiry dates must be real calendar dates', () => {
+    for (const expiryDate of ['2026-13-45', '2026-02-30', '0000-00-00', '2026-1-5']) {
+      rejects(() => stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty: 1, lotNo: 'L-BAD', expiryDate, userId: 'u1' }), 'EXPIRY_REQUIRED')
+    }
+    assert.equal(ledger().length, 0)
+    stock.receive({ variantId: ids.med, warehouseId: ids.w1, qty: 1, lotNo: 'L-OK', expiryDate: '2028-02-29', userId: 'u1' })
+    assert.equal(ledger().length, 1)
+  })
+})
