@@ -27,8 +27,8 @@ const FORM_CSS = raw(`<style>
 export function printRequisitionForm(detail: RequisitionDetail, t: (text: string) => string, language: 'th' | 'en'): boolean {
   const title = detail.type === 'medicine' ? t('แบบฟอร์มการขอเบิกยาและอุปกรณ์รักษาพยาบาลเบื้องต้น') : t('แบบฟอร์มการขอเบิกอุปกรณ์ป้องกันอันตรายส่วนบุคคล (PPE)')
   const blanks = Math.max(0, MIN_ROWS - detail.lines.length)
-  const rows = detail.lines.map((line) => html`<tr><td class="desc"><span class="box">✓</span>${line.name}${line.variantLabel ? ` · ${line.variantLabel}` : ''}</td><td>${line.qtyRequested}</td><td>${line.unit}</td><td>${line.qtyIssued > 0 ? line.qtyIssued : ''}</td><td>${line.qtyIssued > 0 ? line.unit : ''}</td></tr>`)
-  const empty = Array.from({ length: blanks }, () => html`<tr><td class="desc"><span class="box"></span></td><td></td><td></td><td></td><td></td></tr>`)
+  const rows = detail.lines.map((line, index) => html`<tr><td>${index + 1}</td><td class="desc">${line.name}${line.variantLabel ? ` · ${line.variantLabel}` : ''}</td><td>${line.qtyRequested}</td><td>${line.unit}</td><td>${line.qtyIssued > 0 ? line.qtyIssued : ''}</td><td>${line.qtyIssued > 0 ? line.unit : ''}</td></tr>`)
+  const empty = Array.from({ length: blanks }, (_, i) => html`<tr><td>${detail.lines.length + i + 1}</td><td class="desc"></td><td></td><td></td><td></td><td></td></tr>`)
   const field = (label: string, value = '') => html`<div class="field"><span>${label}</span><b>${value}</b></div>`
   const signCell = (label: string, sub: string) => html`<th>${label}${sub ? raw(`<small>${sub}</small>`) : ''}</th>`
   const body = html`${FORM_CSS}<div class="rf">
@@ -43,8 +43,8 @@ export function printRequisitionForm(detail: RequisitionDetail, t: (text: string
       <div style="grid-column:1 / span 2"><span class="box">✓</span>${t('อื่นๆ ระบุ')} ${detail.reason} · ${t('ใบเบิกเลขที่')} ${detail.number}</div>
     </div>
     <table><thead>
-      <tr><th colspan="3">${t('สำหรับผู้เบิก')}<small>For Requisition</small></th><th colspan="2">${t('สำหรับเจ้าหน้าที่ store')}</th></tr>
-      <tr><th rowspan="2" style="width:50%">${t('รายการ')}<small>Description</small></th><th colspan="2">${t('จำนวนการเบิก')}</th><th colspan="2">${t('จำนวนการจ่าย')}</th></tr>
+      <tr><th colspan="4">${t('สำหรับผู้เบิก')}<small>For Requisition</small></th><th colspan="2">${t('สำหรับเจ้าหน้าที่ store')}</th></tr>
+      <tr><th rowspan="2" style="width:38px">No.</th><th rowspan="2" style="width:46%">${t('รายการ')}<small>Description</small></th><th colspan="2">${t('จำนวนการเบิก')}</th><th colspan="2">${t('จำนวนการจ่าย')}</th></tr>
       <tr><th>${t('จำนวน')} Q'ty</th><th>${t('หน่วย')} Unit</th><th>${t('จำนวน')} Q'ty</th><th>${t('หน่วย')} Unit</th></tr>
     </thead><tbody>${rows}${empty}</tbody></table>
     <table class="sign3"><thead><tr>${signCell(`${t('ผู้ขอเบิก')} Request`, '')}${signCell(`${t('ตรวจสอบ')} Check`, `${t('อนุมัติ')} Approve`)}${signCell(`${t('ผู้จ่ายของ')} Delivery`, '')}</tr></thead>
