@@ -37,7 +37,6 @@ export function RequisitionNewPage({ onPage }: { user: User; onPage: NavigateFn 
   const [type, setType] = usePersistentState<RequisitionType>('requisition.type', 'ppe')
   const [view, setView] = usePersistentState<CatalogView>('requisition.view', 'tiles', 'local')
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('')
   const [items, setItems] = useState<CatalogItem[]>([])
   const [loading, setLoading] = useState(true)
   const [cart, setCart] = useState<Cart | null>(null)
@@ -62,11 +61,9 @@ export function RequisitionNewPage({ onPage }: { user: User; onPage: NavigateFn 
       .catch((error) => toast.error(t(error instanceof Error ? error.message : 'โหลดตะกร้าไม่สำเร็จ')))
   }, [type, t])
   useEffect(loadCarts, [loadCarts])
-  useEffect(() => setCategory(''), [type])
 
   const inCart = useMemo(() => new Map((cart?.lines ?? []).map((line) => [line.variantId, line.qty])), [cart])
-  const categories = useMemo(() => [...new Set(items.map((item) => item.categoryName).filter(Boolean))], [items])
-  const shown = category ? items.filter((item) => item.categoryName === category) : items
+  const shown = items
   const cartCount = cart?.lines.length ?? 0
 
   async function setLine(variantId: string, qty: number, message?: string) {
@@ -99,9 +96,6 @@ export function RequisitionNewPage({ onPage }: { user: User; onPage: NavigateFn 
       <CardContent className="grid gap-3 border-b border-border-subtle p-4 ">
         <div className="flex gap-2"><div className="relative min-w-0 flex-1"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหารหัสหรือชื่อสินค้า')} aria-label={t('ค้นหา')} className="pl-9" /></div>
           <ViewToggle value={view} onChange={setView} options={VIEWS} /></div>
-        {categories.length > 1 && <div className="flex flex-wrap gap-2 sm:col-span-2">
-          {['', ...categories].map((name) => <button key={name || 'all'} type="button" aria-pressed={category === name} onClick={() => setCategory(name)}
-            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${category === name ? 'border-primary bg-secondary text-primary' : 'border-border text-muted-foreground hover:bg-surface-subtle'}`}>{name || t('ทั้งหมด')}</button>)}</div>}
       </CardContent>
       <CardContent className="p-4">
         {shown.length === 0 ? <div className="grid min-h-48 place-items-center text-center text-sm text-muted-foreground"><div><PackageSearch className="mx-auto mb-2" size={24} />{loading ? t('กำลังโหลด…') : query ? t('ไม่พบสินค้าที่ตรงกับคำค้น') : t('ยังไม่มีสินค้าให้เบิก')}</div></div>
