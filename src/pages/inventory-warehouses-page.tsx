@@ -66,8 +66,8 @@ export function InventoryWarehousesPage() {
     <Card className="overflow-hidden rounded-2xl border-border">
       {warehouses.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('รหัสคลัง')}</TableHead><TableHead>{t('ชื่อคลัง')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('เจ้าหน้าที่')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((warehouse) => <TableRow key={warehouse.id} data-inactive={!warehouse.isActive || undefined}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('รหัสคลัง')}</TableHead><TableHead>{t('ชื่อคลัง')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('เจ้าหน้าที่')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((warehouse, index) => <TableRow key={warehouse.id} data-inactive={!warehouse.isActive || undefined}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{warehouse.code}</Badge></TableCell>
             <TableCell className="font-medium">{warehouse.name}</TableCell>
             <TableCell><Badge variant="outline" className={warehouse.type === 'ppe' ? 'border-primary/25 bg-secondary text-primary' : warehouse.type === 'medicine' ? 'border-destructive/25 bg-destructive/10 text-destructive' : ''}>{t(warehouseTypeLabel[warehouse.type])}</Badge></TableCell>

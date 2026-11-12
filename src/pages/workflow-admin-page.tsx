@@ -69,8 +69,8 @@ export function WorkflowAdminPage() {
         <CardDescription>{t('แก้ไขแม่แบบมีผลกับใบเบิกใหม่เท่านั้น ใบที่กำลังดำเนินการใช้ขั้นตอนเดิมต่อไป')}</CardDescription></CardHeader>
       {templates.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('ชื่อ')}</TableHead><TableHead>{t('ใช้กับ')}</TableHead><TableHead>{t('ขั้นตอน')}</TableHead><TableHead>{t('เวอร์ชัน')}</TableHead><TableHead>{t('กำลังดำเนินการ')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((template) => <TableRow key={template.id} data-inactive={!template.isActive || undefined}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('ชื่อ')}</TableHead><TableHead>{t('ใช้กับ')}</TableHead><TableHead>{t('ขั้นตอน')}</TableHead><TableHead>{t('เวอร์ชัน')}</TableHead><TableHead>{t('กำลังดำเนินการ')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((template, index) => <TableRow key={template.id} data-inactive={!template.isActive || undefined}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell className="font-medium">{template.name}</TableCell>
             <TableCell>{t(appliesLabel[template.appliesType])}{template.warehouseId ? ` · ${t('เฉพาะคลัง')}` : ''}</TableCell>
             <TableCell className="whitespace-normal text-sm text-muted-foreground">{template.steps.map((step) => step.name).join(' → ')}</TableCell>

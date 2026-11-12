@@ -67,10 +67,10 @@ export function ApprovalsPage({ user }: { user: User }) {
     <Card className="overflow-hidden rounded-2xl border-border">
       {rows.length ? <>
         <Table>
-          <TableHeader><TableRow>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead>
             <TableHead className="w-10"><Checkbox checked={allOnPage} aria-label={t('เลือกทั้งหน้า')} onCheckedChange={(checked) => setSelected((current) => { const next = new Set(current); for (const row of pagination.visibleItems) { if (checked === true) next.add(row.id); else next.delete(row.id) } return next })} /></TableHead>
             <TableHead>{t('เลขที่')}</TableHead><TableHead>{t('ผู้เบิก')}</TableHead><TableHead>{t('รายการ')}</TableHead><TableHead>{t('ส่งเมื่อ')}</TableHead><TableHead>{t('ขั้นตอน')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((row) => <TableRow key={row.id} className="cursor-pointer" data-selected={selected.has(row.id) || undefined} onClick={() => setOpenId(row.id)}>
+          <TableBody>{pagination.visibleItems.map((row, index) => <TableRow key={row.id} className="cursor-pointer" data-selected={selected.has(row.id) || undefined} onClick={() => setOpenId(row.id)}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell data-label="" onClick={(event) => event.stopPropagation()}><Checkbox checked={selected.has(row.id)} aria-label={`${t('เลือก')} ${row.number}`} onCheckedChange={() => toggle(row.id)} /></TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{row.number}</Badge></TableCell>
             <TableCell><p className="font-medium">{row.requesterName}</p><p className="text-xs text-muted-foreground">{row.department || '—'}</p></TableCell>

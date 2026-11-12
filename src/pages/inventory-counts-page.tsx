@@ -63,8 +63,8 @@ export function InventoryCountsPage({ user }: { user: User }) {
     <Card className="overflow-hidden rounded-2xl border-border">
       {counts.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('เริ่มเมื่อ')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('รายการ')}</TableHead><TableHead>{t('ผู้เริ่ม')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((count) => <TableRow key={count.id}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('เริ่มเมื่อ')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('รายการ')}</TableHead><TableHead>{t('ผู้เริ่ม')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((count, index) => <TableRow key={count.id}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell className="whitespace-nowrap">{formatDateTime(count.createdAt, language, false)}</TableCell>
             <TableCell className="font-medium">{count.warehouseName}</TableCell>
             <TableCell><Badge variant="outline" className={statusTone[count.status]}>{t(statusLabel[count.status])}</Badge></TableCell>

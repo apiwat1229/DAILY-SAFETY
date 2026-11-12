@@ -76,8 +76,8 @@ export function InventoryMovementsPage({ user }: { user: User }) {
       </CardContent>
       {rows.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('วันเวลา')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead>{t('สินค้า')}</TableHead><TableHead>{t('ล็อต')}</TableHead><TableHead className="text-right">{t('จำนวน')}</TableHead><TableHead>{t('เหตุผล')}</TableHead><TableHead>{t('ผู้ดำเนินการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{rows.map((row) => <TableRow key={row.id}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('วันเวลา')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead>{t('สินค้า')}</TableHead><TableHead>{t('ล็อต')}</TableHead><TableHead className="text-right">{t('จำนวน')}</TableHead><TableHead>{t('เหตุผล')}</TableHead><TableHead>{t('ผู้ดำเนินการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{rows.map((row, index) => <TableRow key={row.id}><TableCell className="text-center text-muted-foreground tabular-nums">{(Math.min(page, totalPages) - 1) * pageSize + index + 1}</TableCell>
             <TableCell className="whitespace-nowrap">{formatDateTime(row.createdAt, language, false)}</TableCell>
             <TableCell><Badge variant="outline" className={typeTone[row.type]}>{t(typeLabel[row.type] ?? row.type)}</Badge></TableCell>
             <TableCell>{row.warehouseName}</TableCell>

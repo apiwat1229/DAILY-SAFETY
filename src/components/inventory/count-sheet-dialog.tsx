@@ -86,13 +86,13 @@ export function CountSheetDialog({ countId, onClose, onChanged }: Props) {
       {!posted && <div className="flex justify-end"><Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => setEntries(Object.fromEntries(lines.map((line) => [lineKey(line), String(line.systemQty)])))}><CheckCheck size={15} />{t('ใช้ยอดระบบทั้งหมด')}</Button></div>}
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow><TableHead>{t('สินค้า')}</TableHead><TableHead>{t('ล็อต')}</TableHead><TableHead className="text-right">{t('ยอดระบบ')}</TableHead><TableHead className="w-36 text-right">{t('นับได้')}</TableHead><TableHead className="text-right">{t('ผลต่าง')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((line) => {
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('สินค้า')}</TableHead><TableHead>{t('ล็อต')}</TableHead><TableHead className="text-right">{t('ยอดระบบ')}</TableHead><TableHead className="w-36 text-right">{t('นับได้')}</TableHead><TableHead className="text-right">{t('ผลต่าง')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((line, index) => {
             const key = lineKey(line)
             const text = entries[key]
             const counted = text === undefined || text.trim() === '' ? null : Number(text)
             const diff = counted === null || !Number.isInteger(counted) ? null : counted - line.systemQty
-            return <TableRow key={key}>
+            return <TableRow key={key}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
               <TableCell><p className="font-medium">{line.itemName}{line.variantLabel && <span className="font-normal text-muted-foreground"> · {line.variantLabel}</span>}</p><p className="text-xs text-muted-foreground">{line.sku}</p></TableCell>
               <TableCell>{line.lotNo ? <>{line.lotNo}{line.expiryDate && <span className="block text-xs text-muted-foreground">{t('หมดอายุ')} {formatDate(line.expiryDate, language)}</span>}</> : '—'}</TableCell>
               <TableCell className="text-right tabular-nums">{line.systemQty}</TableCell>

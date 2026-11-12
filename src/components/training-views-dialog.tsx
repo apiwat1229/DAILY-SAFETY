@@ -75,10 +75,10 @@ export function TrainingViewsDialog({ materialId, title, onOpenChange }: Props) 
         </div>
         <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border">
           <div className="min-h-0 flex-1 overflow-auto"><Table>
-            <TableHeader><TableRow><TableHead>{t('รหัสพนักงาน')}</TableHead><TableHead>{t('ชื่อพนักงาน')}</TableHead><TableHead>{t('แผนก')}</TableHead>{tab === 'viewed' && <TableHead>{t('อ่านเมื่อ')}</TableHead>}</TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('รหัสพนักงาน')}</TableHead><TableHead>{t('ชื่อพนักงาน')}</TableHead><TableHead>{t('แผนก')}</TableHead>{tab === 'viewed' && <TableHead>{t('อ่านเมื่อ')}</TableHead>}</TableRow></TableHeader>
             <TableBody>
-              {pagination.visibleItems.map((row) => <TableRow key={row.employeeCode}><TableCell>{row.employeeCode}</TableCell><TableCell>{row.employeeName}</TableCell><TableCell>{row.department || '—'}</TableCell>{tab === 'viewed' && <TableCell className="whitespace-nowrap">{formatDateTime((row as { viewedAt?: string }).viewedAt ?? '', language, false)}</TableCell>}</TableRow>)}
-              {rows.length === 0 && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">{t('ไม่พบข้อมูล')}</TableCell></TableRow>}
+              {pagination.visibleItems.map((row, index) => <TableRow key={row.employeeCode}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell><TableCell>{row.employeeCode}</TableCell><TableCell>{row.employeeName}</TableCell><TableCell>{row.department || '—'}</TableCell>{tab === 'viewed' && <TableCell className="whitespace-nowrap">{formatDateTime((row as { viewedAt?: string }).viewedAt ?? '', language, false)}</TableCell>}</TableRow>)}
+              {rows.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">{t('ไม่พบข้อมูล')}</TableCell></TableRow>}
             </TableBody>
           </Table></div>
           <DataTablePagination total={rows.length} page={pagination.page} pageSize={pagination.pageSize} totalPages={pagination.totalPages} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} t={t} />

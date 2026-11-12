@@ -73,13 +73,13 @@ export function AuditLogPage() {
     </CardContent></Card>
     <Card><CardContent className="p-0">
       <Table>
-        <TableHeader><TableRow><TableHead>{t('วันเวลา')}</TableHead><TableHead>{t('ผู้ดำเนินการ')}</TableHead><TableHead>{t('การกระทำ')}</TableHead><TableHead>{t('เรื่องที่เกี่ยวข้อง')}</TableHead><TableHead className="w-12"><span className="sr-only">{t('ดูรายละเอียด')}</span></TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('วันเวลา')}</TableHead><TableHead>{t('ผู้ดำเนินการ')}</TableHead><TableHead>{t('การกระทำ')}</TableHead><TableHead>{t('เรื่องที่เกี่ยวข้อง')}</TableHead><TableHead className="w-12"><span className="sr-only">{t('ดูรายละเอียด')}</span></TableHead></TableRow></TableHeader>
         <TableBody>
-          {entries.map((entry) => {
+          {entries.map((entry, index) => {
             const kind = kindStyle[actionKind(entry.action)]
             const Icon = kind.icon
             const summary = summarize(entry)
-            return <TableRow key={entry.id} className="cursor-pointer" onClick={() => setSelected(entry)}>
+            return <TableRow key={entry.id} className="cursor-pointer" onClick={() => setSelected(entry)}><TableCell className="text-center text-muted-foreground tabular-nums">{offset + index + 1}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDateTime(entry.createdAt, language, false)}</TableCell>
               <TableCell>{entry.userName || entry.username || '—'}</TableCell>
               <TableCell><Badge variant="outline" className={`gap-1 ${kind.className}`}><Icon size={12} />{entry.action}</Badge></TableCell>

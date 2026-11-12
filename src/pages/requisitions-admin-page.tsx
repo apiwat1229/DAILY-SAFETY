@@ -55,8 +55,8 @@ export function RequisitionsAdminPage({ user }: { user: User }) {
       </CardContent>
       {rows.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('เลขที่')}</TableHead><TableHead>{t('ผู้เบิก')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead>{t('รายการ')}</TableHead><TableHead>{t('ส่งเมื่อ')}</TableHead><TableHead>{t('สถานะ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{rows.map((row) => <TableRow key={row.id} className="cursor-pointer" onClick={() => setOpenId(row.id)}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('เลขที่')}</TableHead><TableHead>{t('ผู้เบิก')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead>{t('รายการ')}</TableHead><TableHead>{t('ส่งเมื่อ')}</TableHead><TableHead>{t('สถานะ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{rows.map((row, index) => <TableRow key={row.id} className="cursor-pointer" onClick={() => setOpenId(row.id)}><TableCell className="text-center text-muted-foreground tabular-nums">{(Math.min(page, totalPages) - 1) * pageSize + index + 1}</TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{row.number}</Badge></TableCell>
             <TableCell><p className="font-medium">{row.requesterName}</p><p className="text-xs text-muted-foreground">{row.department || '—'}</p></TableCell>
             <TableCell>{row.warehouseName}</TableCell>

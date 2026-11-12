@@ -93,12 +93,12 @@ export function SupervisorReportCard({ refreshKey = 0 }: Props) {
         {filter !== 'all' && <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{t('กำลังกรอง')}: <Badge variant="outline" className="border-primary/25 bg-secondary text-primary">{t(filterLabel[filter])} · {rows.length}</Badge><button type="button" onClick={() => setFilter('all')} className="text-primary underline-offset-4 hover:underline">{t('ล้างตัวกรอง')}</button></p>}
         <div className="overflow-hidden rounded-2xl border border-border">
           <Table>
-            <TableHeader><TableRow>
+            <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead>
               <TableHead>{t('หัวหน้างาน')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead>{t('จำนวนที่ส่ง')}</TableHead>
               <TableHead>{t('รายงานล่าสุด')}</TableHead><TableHead>{t('พบ NG')}</TableHead><TableHead>{t('งานค้าง')}</TableHead><TableHead>{t('เกินกำหนด')}</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {pagination.visibleItems.map((row) => <TableRow key={row.id}>
+              {pagination.visibleItems.map((row, index) => <TableRow key={row.id}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
                 <TableCell><p className="font-medium">{row.name}</p><p className="text-xs text-muted-foreground">{row.employeeCode} · {row.role === 'admin' ? 'Admin' : t('หัวหน้างาน')}</p></TableCell>
                 <TableCell>{(() => { const key = row.inspectionsPeriod > 0 ? 'reported' : 'not_reported'; return <Badge variant="outline" className={`gap-1 ${statusStyle[key]}`}>{key === 'reported' ? <CircleCheck size={12} /> : <CircleDashed size={12} />}{t(filterLabel[key])}</Badge> })()}</TableCell>
                 <TableCell className="tabular-nums">{row.inspectionsPeriod}</TableCell>

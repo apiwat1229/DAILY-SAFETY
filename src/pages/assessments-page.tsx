@@ -61,8 +61,8 @@ export function AssessmentsPage() {
     <Card className="overflow-hidden rounded-2xl border-border"><CardHeader className="border-b border-border-subtle px-5 py-4"><CardTitle>{t('แบบประเมินขององค์กร')}</CardTitle><CardDescription>{t('บันทึกแบบร่างก่อน แล้วเผยแพร่เมื่อตรวจสอบข้อสอบเรียบร้อย')}</CardDescription></CardHeader>
       {assessments.length ? <>
         <div className="overflow-x-auto"><Table className="min-w-[760px]">
-          <TableHeader><TableRow><TableHead>{t('ชื่อแบบประเมิน')}</TableHead><TableHead>{t('รายละเอียด')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('การทำรายการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((assessment) => <TableRow key={assessment.id}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('ชื่อแบบประเมิน')}</TableHead><TableHead>{t('รายละเอียด')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('การทำรายการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((assessment, index) => <TableRow key={assessment.id}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell className="max-w-[260px] font-medium whitespace-normal">{assessment.title}</TableCell>
             <TableCell className="min-w-[300px] whitespace-normal"><p>{assessment.description || t('ไม่มีคำอธิบาย')}</p><p className="mt-1 text-xs text-muted-foreground">{assessment.questionCount} {t('ข้อ')} · {assessment.submissionCount} {t('คำตอบ')} · {t(assessment.allowMultipleAttempts ? 'อนุญาตให้ทำซ้ำ' : 'ตอบได้ครั้งเดียวต่อรหัสพนักงาน')}</p></TableCell>
             <TableCell><Badge variant="outline" className={assessment.isPublished ? 'border-success/25 bg-success/10 text-success' : 'border-info/20 bg-surface-subtle text-info'}>{t(assessment.isPublished ? 'เผยแพร่' : 'แบบร่าง')}</Badge></TableCell>

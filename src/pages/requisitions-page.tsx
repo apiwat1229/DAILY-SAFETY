@@ -57,8 +57,8 @@ export function RequisitionsPage({ user, onPage }: { user: User; onPage: Navigat
     <Card className="overflow-hidden rounded-2xl border-border">
       {filtered.length ? <>
         <Table>
-          <TableHeader><TableRow><TableHead>{t('เลขที่')}</TableHead><TableHead>{t('ส่งเมื่อ')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('รายการ')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead>{t('ขั้นตอนปัจจุบัน')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((row) => <TableRow key={row.id} className="cursor-pointer" onClick={() => setOpenId(row.id)}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('เลขที่')}</TableHead><TableHead>{t('ส่งเมื่อ')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('รายการ')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead>{t('ขั้นตอนปัจจุบัน')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((row, index) => <TableRow key={row.id} className="cursor-pointer" onClick={() => setOpenId(row.id)}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{row.number}</Badge></TableCell>
             <TableCell className="whitespace-nowrap">{formatDateTime(row.submittedAt, language, false)}</TableCell>
             <TableCell>{row.type === 'ppe' ? 'PPE' : t('ยารักษาโรค')}</TableCell>

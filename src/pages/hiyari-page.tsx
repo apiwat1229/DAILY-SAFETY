@@ -99,8 +99,8 @@ export function HiyariPage() {
     <Card className="overflow-hidden rounded-2xl border-border">
       {forms.length ? <>
         <div className="overflow-x-auto"><Table className="min-w-[760px]">
-          <TableHeader><TableRow><TableHead>{t('ชื่อแบบฟอร์ม')}</TableHead><TableHead>{t('จำนวนรายงาน')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('การทำรายการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((form) => <TableRow key={form.id}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('ชื่อแบบฟอร์ม')}</TableHead><TableHead>{t('จำนวนรายงาน')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('การทำรายการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((form, index) => <TableRow key={form.id}><TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell className="min-w-[320px] whitespace-normal"><div className="flex items-start gap-2.5"><div className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-primary"><ClipboardPenLine size={17} /></div><div><p className="font-medium">{form.title}</p><p className="mt-1 text-sm text-muted-foreground">{form.description || t('รายงานสภาพหรือเหตุการณ์ที่อาจก่อให้เกิดอุบัติเหตุ')}</p></div></div></TableCell>
             <TableCell className="tabular-nums">{form.submissionCount.toLocaleString()} {t('รายงาน')}</TableCell>
             <TableCell><Badge variant="outline" className={form.isActive ? 'border-success/25 bg-success/10 text-success' : 'border-info/20 bg-surface-subtle text-info'}>{t(form.isActive ? 'เปิดให้กรอก' : 'ปิดลิงก์')}</Badge></TableCell>
