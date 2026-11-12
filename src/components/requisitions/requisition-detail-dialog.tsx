@@ -55,15 +55,19 @@ export function RequisitionDetailDialog({ id, user, onClose, onChanged, actions 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  return <Dialog open={Boolean(id)} onOpenChange={(open) => { if (!open) onClose() }}><DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-3xl">
+  return <Dialog open={Boolean(id)} onOpenChange={(open) => { if (!open) onClose() }}><DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-5xl">
     <DialogHeader>
       <div className="mb-1 grid size-10 place-items-center rounded-xl bg-secondary text-primary"><ReceiptText size={19} /></div>
       <DialogTitle className="flex flex-wrap items-center gap-2">{detail?.number ?? t('ใบเบิก')}{detail && <StatusBadge status={detail.status} />}</DialogTitle>
       <DialogDescription>{detail ? `${detail.requesterName}${detail.department ? ` · ${detail.department}` : ''} · ${detail.warehouseName}` : ''}</DialogDescription>
     </DialogHeader>
     {!detail || loading ? <div className="grid min-h-40 place-items-center text-muted-foreground"><LoaderCircle className="animate-spin" /></div> : <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
       <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printRequisitionForm(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์แบบฟอร์มเบิก')}</button>
       {detail.lines.some((line) => line.qtyIssued > 0) && <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printIssueSlip(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์ใบจ่ายของ')}</button>}
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+      <div className="space-y-5">
       <section className="grid gap-2 rounded-xl border border-border bg-surface-subtle p-3 text-sm sm:grid-cols-2">
         <div><p className="text-xs text-muted-foreground">{t('เหตุผลการเบิก')}</p><p className="whitespace-pre-wrap">{detail.reason}</p></div>
         <div className="grid grid-cols-2 gap-2">
@@ -86,7 +90,8 @@ export function RequisitionDetailDialog({ id, user, onClose, onChanged, actions 
         </li>)}</ul></section>
 
       <PhotoGallery detail={detail} user={user} onChanged={reload} />
-
+      </div>
+      <div className="space-y-5">
       <section className="space-y-2"><h3 className="text-sm font-semibold">{t('ขั้นตอนการอนุมัติ')}</h3>
         <ol className="space-y-2">{detail.steps.map((step) => <StepRow key={step.position} step={step} />)}</ol></section>
 
@@ -97,6 +102,8 @@ export function RequisitionDetailDialog({ id, user, onClose, onChanged, actions 
           {event.comment && <p className="whitespace-pre-wrap text-muted-foreground">{noteLabel[event.comment] ? t(noteLabel[event.comment]) : event.comment}</p>}
           <p className="text-xs text-muted-foreground">{formatDateTime(event.at, language, false)}</p>
         </li>)}</ol></section>
+      </div>
+      </div>
 
       {actions && <div className="flex flex-wrap justify-end gap-2 border-t pt-4">{actions({ detail, reload, close: onClose })}</div>}
     </div>}

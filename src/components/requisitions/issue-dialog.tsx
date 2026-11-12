@@ -7,7 +7,6 @@ import type { IssueQueueItem } from '@/lib/requisition-types'
 import { useI18n } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useConfirm } from '@/components/confirm-provider'
 import { ItemThumb } from '@/components/item-thumb'
 import { QtyStepper } from '@/components/requisitions/qty-stepper'
 
@@ -16,7 +15,6 @@ type Props = { item: IssueQueueItem; onClose: () => void; onDone: () => Promise<
 /** Pick and hand over goods: quantity per line (default = everything still owed). Stock comes from the lots reserved at approval. */
 export function IssueDialog({ item, onClose, onDone }: Props) {
   const { t, language } = useI18n()
-  const confirm = useConfirm()
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(item.lines.map((line) => [line.id, line.remaining])))
   const [busy, setBusy] = useState(false)
   const chosen = item.lines.filter((line) => qty[line.id] > 0)
@@ -25,7 +23,6 @@ export function IssueDialog({ item, onClose, onDone }: Props) {
     if (chosen.length === 0) return toast.error(t('กรุณาระบุจำนวนที่จ่ายอย่างน้อย 1 รายการ'))
     setBusy(true)
     try {
-      if (!(await confirm({ kind: 'submit', title: t('ยืนยันการจ่ายของ'), description: `${item.number} · ${chosen.length} ${t('รายการ')}`, confirmLabel: t('จ่ายของ') }))) return
       await requisitionApi.issue(item.id, chosen.map((line) => ({ lineId: line.id, qty: qty[line.id] })))
       toast.success(t('จ่ายของแล้ว'))
       await onDone()

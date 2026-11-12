@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CircleCheck, CornerUpLeft, XCircle } from 'lucide-react'
+import { CircleCheck, CornerUpLeft, Pencil, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { requisitionApi } from '@/lib/requisition-api'
 import type { RequisitionDetail } from '@/lib/requisition-types'
@@ -23,6 +23,7 @@ export function ApprovalActions({ detail, user, reload, close }: Props) {
   const [approveOpen, setApproveOpen] = useState(false)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [changesOpen, setChangesOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   if (detail.status !== 'in_approval' || detail.requesterId === user.id) return null
 
   const stopWith = (kind: 'reject' | 'changes') => async (reason: string) => {
@@ -38,10 +39,26 @@ export function ApprovalActions({ detail, user, reload, close }: Props) {
     } catch (error) { if (!(error instanceof Error && error.message === 'cancelled')) toast.error(t(error instanceof Error ? error.message : 'ดำเนินการไม่สำเร็จ')); throw error }
   }
 
+  const activeStep = detail.steps.find((entry) => entry.status === 'active')
+  const canEditQty = Boolean(activeStep?.allowEditQty) || user.role === 'admin'
+
+  // One click: when this step cannot change quantities there is nothing to fill in, so approve straight away.
+  async function approveNow() {
+    setBusy(true)
+    try {
+      await requisitionApi.approve(detail.id, { comment: '', lines: [] })
+      toast.success(t('อนุมัติแล้ว'))
+      await reload()
+      close()
+    } catch (error) { toast.error(t(error instanceof Error ? error.message : 'อนุมัติไม่สำเร็จ')) }
+    finally { setBusy(false) }
+  }
+
   return <>
     <Button type="button" variant="outline" className="gap-2" onClick={() => setChangesOpen(true)}><CornerUpLeft size={16} />{t('ส่งกลับให้แก้ไข')}</Button>
+    {canEditQty && <Button type="button" variant="outline" className="gap-2" disabled={busy} onClick={() => setApproveOpen(true)}><Pencil size={16} />{t('ปรับจำนวน')}</Button>}
     <Button type="button" variant="outline" className="gap-2 text-destructive" onClick={() => setRejectOpen(true)}><XCircle size={16} />{t('ไม่อนุมัติ')}</Button>
-    <Button type="button" className="gap-2" onClick={() => setApproveOpen(true)}><CircleCheck size={16} />{t('อนุมัติ')}</Button>
+    <Button type="button" className="gap-2" disabled={busy} onClick={() => void approveNow()}><CircleCheck size={16} />{t('อนุมัติ')}</Button>
     <ReasonDialog open={rejectOpen} title={t('ไม่อนุมัติใบเบิก')} description={detail.number} danger confirmLabel={t('ไม่อนุมัติ')} onClose={() => setRejectOpen(false)} onSubmit={stopWith('reject')} />
     <ReasonDialog open={changesOpen} title={t('ส่งกลับให้ผู้เบิกแก้ไข')} description={detail.number} label={t('สิ่งที่ต้องแก้ไข')} confirmLabel={t('ส่งกลับ')} onClose={() => setChangesOpen(false)} onSubmit={stopWith('changes')} />
     {approveOpen && <ApproveDialog detail={detail} user={user} onClose={() => setApproveOpen(false)} onDone={async () => { setApproveOpen(false); await reload(); close() }} />}
@@ -50,7 +67,6 @@ export function ApprovalActions({ detail, user, reload, close }: Props) {
 
 function ApproveDialog({ detail, user, onClose, onDone }: { detail: RequisitionDetail; user: User; onClose: () => void; onDone: () => Promise<void> }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const step = detail.steps.find((entry) => entry.status === 'active')
   const canEdit = Boolean(step?.allowEditQty) || user.role === 'admin'
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(detail.lines.map((line) => [line.id, line.qtyApproved])))
@@ -63,7 +79,6 @@ function ApproveDialog({ detail, user, onClose, onDone }: { detail: RequisitionD
     if (detail.lines.every((line) => qty[line.id] === 0)) return toast.error(t('ต้องอนุมัติอย่างน้อย 1 รายการ หากไม่อนุมัติทั้งหมดให้ใช้การไม่อนุมัติ'))
     setBusy(true)
     try {
-      if (!(await confirm({ kind: 'submit', title: t('ยืนยันการอนุมัติ'), description: `${detail.number}${changed.length ? ` · ${t('มีการปรับจำนวน')} ${changed.length} ${t('รายการ')}` : ''}`, confirmLabel: t('อนุมัติ') }))) return
       await requisitionApi.approve(detail.id, { comment: comment.trim(), lines: changed.map((line) => ({ lineId: line.id, qty: qty[line.id] })) })
       toast.success(t('อนุมัติแล้ว'))
       await onDone()

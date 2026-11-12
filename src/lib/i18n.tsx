@@ -233,6 +233,7 @@ Object.assign(english, {
   'ผู้ขอเบิก': 'Requested by', 'ตรวจสอบ / อนุมัติ (Manager)': 'Checked / approved (Manager)', 'พิมพ์แบบฟอร์มเบิก': 'Print requisition form',
   'แบบฟอร์มการขอเบิกยาและอุปกรณ์รักษาพยาบาลเบื้องต้น': 'Request form for first-aid medicine and medical supplies',
   'แบบฟอร์มการขอเบิกอุปกรณ์ป้องกันอันตรายส่วนบุคคล (PPE)': 'Request form for personal protective equipment (PPE)',
+  'ปรับจำนวน': 'Adjust quantities',
   'ผู้จ่ายของ': 'Issued by',
   'ผู้รับของ': 'Received by',
   'พบสต็อกที่ไม่ตรงกับสมุดบัญชี': 'Some stock does not match the ledger',
