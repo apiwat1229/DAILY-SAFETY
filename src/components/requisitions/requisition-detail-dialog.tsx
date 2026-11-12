@@ -56,14 +56,16 @@ export function RequisitionDetailDialog({ id, user, onClose, onChanged, actions 
   }, [id])
 
   return <Dialog open={Boolean(id)} onOpenChange={(open) => { if (!open) onClose() }}><DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-5xl">
-    <DialogHeader className="relative">
+    <DialogHeader>
       <div className="mb-1 grid size-10 place-items-center rounded-xl bg-secondary text-primary"><ReceiptText size={19} /></div>
-      <DialogTitle className="flex flex-wrap items-center gap-2">{detail?.number ?? t('ใบเบิก')}{detail && <StatusBadge status={detail.status} />}</DialogTitle>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:pr-10">
+        <DialogTitle className="flex flex-wrap items-center gap-2">{detail?.number ?? t('ใบเบิก')}{detail && <StatusBadge status={detail.status} />}</DialogTitle>
+        {detail && <div className="flex flex-wrap gap-2">
+        <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printRequisitionForm(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์แบบฟอร์มเบิก')}</button>
+        {detail.lines.some((line) => line.qtyIssued > 0) && <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printIssueSlip(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์ใบจ่ายของ')}</button>}
+        </div>}
+      </div>
       <DialogDescription>{detail ? `${detail.requesterName}${detail.department ? ` · ${detail.department}` : ''} · ${detail.warehouseName}` : ''}</DialogDescription>
-    {detail && <div className="flex flex-wrap gap-2 sm:absolute sm:right-14 sm:top-5">
-      <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printRequisitionForm(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์แบบฟอร์มเบิก')}</button>
-      {detail.lines.some((line) => line.qtyIssued > 0) && <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printIssueSlip(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์ใบจ่ายของ')}</button>}
-    </div>}
     </DialogHeader>
     {!detail || loading ? <div className="grid min-h-40 place-items-center text-muted-foreground"><LoaderCircle className="animate-spin" /></div> : <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
