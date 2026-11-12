@@ -3,6 +3,7 @@ import express from 'express'
 import session from 'express-session'
 import bcrypt from 'bcryptjs'
 import multer from 'multer'
+import { registerAvatarRoutes } from './avatars.js'
 import { DatabaseSync } from 'node:sqlite'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile, unlink, readFile } from 'node:fs/promises'
@@ -35,6 +36,7 @@ const trainingUploadDir = path.join(uploadDir, 'training')
 const hiyariUploadDir = path.join(uploadDir, 'hiyari')
 const inventoryUploadDir = path.join(uploadDir, 'inventory')
 const requisitionUploadDir = path.join(uploadDir, 'requisitions')
+const avatarUploadDir = path.join(uploadDir, 'avatars')
 const dbPath = path.join(dataDir, 'daily-safety.sqlite')
 const port = Number(process.env.PORT || 4000)
 const host = process.env.HOST || '127.0.0.1'
@@ -46,7 +48,7 @@ if (isProduction && (!process.env.SESSION_SECRET || !process.env.ADMIN_PASSWORD 
   throw new Error('Production requires SESSION_SECRET, ADMIN_PASSWORD, and LEADER_PASSWORD environment variables.')
 }
 
-await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true }), mkdir(inventoryUploadDir, { recursive: true }), mkdir(requisitionUploadDir, { recursive: true })])
+await Promise.all([mkdir(trainingUploadDir, { recursive: true }), mkdir(hiyariUploadDir, { recursive: true }), mkdir(inventoryUploadDir, { recursive: true }), mkdir(requisitionUploadDir, { recursive: true }), mkdir(avatarUploadDir, { recursive: true })])
 
 const db = new DatabaseSync(dbPath)
 db.exec(`
@@ -356,6 +358,10 @@ if (!usersSchema.includes("'storekeeper'")) {
     COMMIT;
     PRAGMA foreign_keys = ON;
   `)
+}
+
+if (!db.prepare('PRAGMA table_info(users)').all().some((column) => column.name === 'avatar')) {
+  db.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
 }
 
 migrateInventory(db)
@@ -691,6 +697,7 @@ function safeUser(row) {
     employeeCode: row.employee_code || row.employeeCode || '',
     role: row.role,
     isActive: row.is_active === undefined ? true : Boolean(row.is_active),
+    avatar: row.avatar || '',
   }
 }
 
@@ -3254,6 +3261,7 @@ app.patch('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
   res.json({ ok: true })
 })
 
+registerAvatarRoutes(app, { db, requireAuth, uploadDir, safeUser })
 const inventory = registerInventoryRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir })
 const requisitions = registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, nowIso, uploadDir, stock: inventory.stock })
 // Ledger vs balances check, once per Bangkok day; the admin sees the latest result in the reports page.

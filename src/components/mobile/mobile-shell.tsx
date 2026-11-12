@@ -37,6 +37,7 @@ export function MobileShell({ user, page, onPage, onUserChange }: ShellProps) {
     <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} user={user} page={page} groups={model.groups}
       onNavigate={(next) => { setMoreOpen(false); onPage(next); window.scrollTo({ top: 0 }) }}
       onDesktopView={() => { setMoreOpen(false); setPreference('desktop') }}
+      onUserChange={onUserChange}
       onLogout={() => { setMoreOpen(false); void signOut(onUserChange, t('ออกจากระบบแล้ว')) }} />
   </div>
 }

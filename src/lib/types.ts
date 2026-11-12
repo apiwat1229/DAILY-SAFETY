@@ -5,6 +5,8 @@ export type User = {
   employeeCode: string
   role: 'admin' | 'leader' | 'employee' | 'storekeeper'
   isActive: boolean
+  /** '' (initials), 'preset:<id>' or 'photo:<file>' */
+  avatar?: string
 }
 
 export type Assignee = Pick<User, 'id' | 'name' | 'employeeCode' | 'role'>

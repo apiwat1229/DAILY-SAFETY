@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, KeyRound, LogOut, Menu, X } from 'lucide-react'
+import { Activity, Camera, KeyRound, LogOut, Menu, X } from 'lucide-react'
 import type { User } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
@@ -12,7 +12,8 @@ import type { PageKey } from '@/lib/pages'
 import { LanguageSwitch } from '@/components/language-switch'
 import { ThemeButton } from '@/components/theme-dialog'
 import { useBadges } from '@/lib/use-badges'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { AvatarPickerDialog } from '@/components/avatar-picker-dialog'
+import { UserAvatar } from '@/components/user-avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export type ShellProps = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -30,7 +31,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   return (
     <div className="app-shell min-h-screen md:flex">
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
-        <div className="flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ProfileMenu user={user} onLogout={handleLogout} /></div>
+        <div className="flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ProfileMenu user={user} onLogout={handleLogout} onUserChange={onUserChange} /></div>
         <SidebarNav sections={sections} page={page} onSelect={onPage} />
       </aside>
 
@@ -50,7 +51,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
 
       {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 flex-1 items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ProfileMenu user={user} onLogout={handleLogout} /></div><Button variant="ghost" size="icon" className="shrink-0 text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
+          <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 flex-1 items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ProfileMenu user={user} onLogout={handleLogout} onUserChange={onUserChange} /></div><Button variant="ghost" size="icon" className="shrink-0 text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
           <SidebarNav sections={sections} page={page} onSelect={(key) => { onPage(key); setMobileMenu(false) }} />
         </aside>
       </div>}
@@ -72,30 +73,33 @@ function SidebarNav({ sections, page, onSelect }: { sections: Section[]; page: P
 }
 
 /** One compact button in the sidebar header; opens a small menu with the account details and actions. */
-function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+function ProfileMenu({ user, onLogout, onUserChange }: { user: User; onLogout: () => void; onUserChange: (user: User | null) => void }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [avatarOpen, setAvatarOpen] = useState(false)
   const role = user.role === 'admin' ? t('ผู้ดูแลระบบ') : t(user.role === 'leader' ? 'หัวหน้างาน' : user.role === 'storekeeper' ? 'เจ้าหน้าที่คลัง' : 'พนักงาน')
   return <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button type="button" aria-label={t('บัญชีของฉัน')} title={user.name} className="ml-auto rounded-full outline-offset-2 transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-sidebar-active">
-          <Avatar className="size-9 ring-2 ring-sidebar-muted/40"><AvatarFallback className="bg-sidebar-active text-sm font-semibold text-sidebar">{user.name.slice(0, 1)}</AvatarFallback></Avatar>
+          <UserAvatar user={user} className="size-9 ring-2 ring-sidebar-muted/40" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-0">
         <div className="flex items-center gap-3 border-b border-border-subtle p-3.5">
-          <Avatar className="size-10 shrink-0"><AvatarFallback className="bg-secondary text-base font-semibold text-primary">{user.name.slice(0, 1)}</AvatarFallback></Avatar>
+          <button type="button" onClick={() => { setOpen(false); setAvatarOpen(true) }} aria-label={t('เปลี่ยนรูปโปรไฟล์')} title={t('เปลี่ยนรูปโปรไฟล์')} className="rounded-full"><UserAvatar user={user} className="size-11" /></button>
           <div className="min-w-0"><p className="truncate text-sm font-semibold">{user.name}</p><p className="truncate text-xs text-muted-foreground">{role} · {user.employeeCode}</p></div>
         </div>
         <div className="p-1.5">
+          <button type="button" onClick={() => { setOpen(false); setAvatarOpen(true) }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-accent"><Camera size={16} className="text-muted-foreground" />{t('เปลี่ยนรูปโปรไฟล์')}</button>
           <button type="button" onClick={() => { setOpen(false); setPasswordOpen(true) }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-accent"><KeyRound size={16} className="text-muted-foreground" />{t('เปลี่ยนรหัสผ่าน')}</button>
           <button type="button" onClick={() => { setOpen(false); onLogout() }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-destructive/10"><LogOut size={16} />{t('ออกจากระบบ')}</button>
         </div>
       </PopoverContent>
     </Popover>
     <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+    <AvatarPickerDialog open={avatarOpen} onOpenChange={setAvatarOpen} user={user} onUserChange={onUserChange} />
   </>
 }
 

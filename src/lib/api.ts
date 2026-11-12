@@ -25,6 +25,9 @@ export const api = {
     return request<AuditLogResponse>(`/api/admin/audit-log${qs ? `?${qs}` : ''}`)
   },
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
+  setAvatarPreset: (preset: string) => request<{ user: User }>('/api/auth/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preset }) }),
+  uploadAvatar: (file: File) => { const form = new FormData(); form.append('image', file); return request<{ user: User }>('/api/auth/avatar', { method: 'POST', body: form }) },
+  deleteAvatar: () => request<{ user: User }>('/api/auth/avatar', { method: 'DELETE' }),
   dashboard: (filters?: Partial<Filters> & { categoryResult?: 'NG' | 'N/A' }) => request<DashboardData>(`/api/dashboard${toQuery(filters)}`),
   dashboardCategory: (category: string, from: string, to: string, result: 'NG' | 'N/A') => {
     const query = new URLSearchParams({ category, from, to, result })
