@@ -453,3 +453,9 @@ body:has(input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):n
 /* Scrollable menus keep scrolling but hide the bar. */
 .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Gentle bobbing for the login-page mascots. */
+@keyframes mascot-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.animate-float { animation: mascot-float 4s ease-in-out infinite; }
+.animate-float-delayed { animation: mascot-float 4s ease-in-out 2s infinite; }
+@media (prefers-reduced-motion: reduce) { .animate-float, .animate-float-delayed { animation: none; } }
