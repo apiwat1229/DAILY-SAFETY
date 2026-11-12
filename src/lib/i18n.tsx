@@ -364,6 +364,7 @@ Object.assign(english, {
   'คลังนี้เก็บเฉพาะยา': 'This warehouse stores medicine only',
   'คลังนี้ไม่ได้เก็บสินค้าประเภทนี้': 'This warehouse does not store this type of item',
   'คลังนี้ยังมีสต็อกของสินค้าอีกประเภท เปลี่ยนประเภทไม่ได้': 'This warehouse still holds stock of the other type, so its type cannot change',
+  'แบบประเมินและอบรม': 'Assessments & training',
   'เจ้าหน้าที่คลัง': 'Storekeeper', 'สต็อกคงเหลือ': 'Stock on hand', 'สินค้าและหมวด': 'Items & categories', 'คลังสินค้า': 'Warehouses', 'นับสต็อก': 'Stock count', 'ประวัติสต็อก': 'Stock movements',
   'สินค้า': 'Item', 'หมวดสินค้า': 'Category', 'สต็อกสินค้า': 'Stock', 'ใบนับสต็อก': 'Count sheet', 'ตั้งค่าคลังสินค้า': 'Warehouse settings',
   'กลับเป็นวันนี้': 'Back to today', 'ข้อมูลของวันนี้': 'Data for today', 'ข้อมูลช่วง': 'Data for', 'อัตราการรายงาน': 'Reporting rate', 'จำนวนที่ส่ง': 'Submitted',

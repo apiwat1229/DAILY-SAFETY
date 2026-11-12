@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useI18n } from '@/lib/i18n'
 import { LanguageSwitch } from '@/components/language-switch'
+import { SafetyBackdrop } from '@/components/safety-backdrop'
 
 type Props = { onLogin: (user: User) => void }
 
@@ -37,12 +38,13 @@ export function LoginScreen({ onLogin }: Props) {
   return (
     <main className="min-h-screen bg-background lg:grid lg:grid-cols-[1.04fr_.96fr]">
       <section className="relative hidden overflow-hidden bg-sidebar p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
-        <div className="absolute inset-0 opacity-30 soft-grid" />
+        <SafetyBackdrop artClassName="absolute right-[-8%] top-[9%] h-[42%] w-auto max-w-none" />
+        <div className="absolute inset-0 opacity-20 soft-grid" />
         <div className="relative flex items-center gap-3">
           <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23} /></div>
           <div><p className="text-sm font-semibold tracking-wide">Y.T. RUBBER</p><p className="text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p></div>
         </div>
-        <div className="relative max-w-xl">
+        <div className="relative mt-auto max-w-xl">
           <div className="mb-5 inline-flex items-center gap-2 rounded-sm border border-white/15 bg-white/[.07] px-3 py-1.5 text-xs text-sidebar-muted"><ClipboardCheck size={14} /> Daily safety workspace</div>
           <h1 className="mb-5 max-w-lg text-4xl font-semibold leading-[1.2] tracking-tight xl:text-5xl">{t('พื้นที่ทำงานที่ปลอดภัย เริ่มจากการตรวจที่ทำได้ทุกวัน')}</h1>
           <p className="max-w-md text-base leading-7 text-sidebar-muted">{t('บันทึกผลตรวจ แนบหลักฐาน และติดตามการแก้ไขในที่เดียว')}</p>
@@ -50,11 +52,12 @@ export function LoginScreen({ onLogin }: Props) {
             {[['13', 'หัวข้อตรวจ'], ['3', 'ผลตรวจ'], ['1', 'พื้นที่ติดตาม']].map(([number, label]) => <div key={label} className="rounded-xl border border-white/10 bg-white/[.06] px-4 py-3"><p className="text-xl font-semibold">{number}</p><p className="mt-1 text-xs text-sidebar-muted">{t(label)}</p></div>)}
           </div>
         </div>
-        <p className="relative text-xs text-sidebar-muted">{t('บันทึกครบ ตรวจสอบย้อนหลังได้')}</p>
+        <p className="relative mt-6 pb-3 text-xs text-sidebar-muted">{t('บันทึกครบ ตรวจสอบย้อนหลังได้')}</p>
       </section>
-      <section className="relative flex min-h-screen items-center justify-center px-5 py-8 sm:px-8">
-        <LanguageSwitch compact className="absolute right-5 top-5 rounded-sm bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-primary sm:right-8 sm:top-8" />
-        <div className="w-full max-w-[430px]">
+      <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-8 sm:px-8">
+        <div className="absolute inset-0 bg-sidebar lg:hidden"><SafetyBackdrop className="opacity-70" /></div>
+        <LanguageSwitch compact className="absolute right-5 top-5 z-10 bg-white/85 text-muted-foreground shadow-sm hover:bg-white hover:text-primary sm:right-8 sm:top-8" />
+        <div className="relative w-full max-w-[430px] rounded-2xl bg-background/95 p-6 shadow-xl max-lg:border max-lg:border-white/20 lg:bg-transparent lg:p-0 lg:shadow-none">
           <div className="mb-6 flex items-center gap-3 lg:hidden">
             <div className="grid size-11 place-items-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23} /></div>
             <div><p className="text-sm font-semibold">Y.T. RUBBER</p><p className="text-xs text-muted-foreground">{t('ระบบความปลอดภัยประจำวัน')}</p></div>

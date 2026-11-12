@@ -86,10 +86,16 @@ const GROUP_OF = (key: PageKey): string => {
   if (key.startsWith('inventory-')) return 'คลังสินค้า'
   if (key === 'requisition-new' || key === 'requisitions' || key === 'approvals' || key === 'issue-queue' || key === 'requisitions-admin' || key === 'reports') return 'การเบิกของ'
   if (key === 'users' || key === 'employees' || key === 'checklist' || key === 'audit-log' || key === 'workflow-admin') return 'ข้อมูลระบบ'
-  if (key === 'assessments' || key === 'assessment-reports' || key === 'training-materials' || key === 'hiyari' || key === 'hiyari-reports') return 'การตรวจและอบรม'
+  if (key === 'assessments' || key === 'assessment-reports' || key === 'training-materials' || key === 'hiyari' || key === 'hiyari-reports') return 'แบบประเมินและอบรม'
   return 'การตรวจ'
 }
-const GROUP_ORDER = ['การตรวจ', 'การเบิกของ', 'คลังสินค้า', 'การตรวจและอบรม', 'ข้อมูลระบบ']
+const GROUP_ORDER = ['การตรวจ', 'การเบิกของ', 'คลังสินค้า', 'แบบประเมินและอบรม', 'ข้อมูลระบบ']
+
+/** Sidebar sections: every menu item of the role, grouped under a heading (empty groups are dropped). */
+export function sidebarGroups(role: Role): NavGroup[] {
+  const all = ITEMS[role]
+  return GROUP_ORDER.map((title) => ({ title, items: all.filter((entry) => GROUP_OF(entry.key) === title) })).filter((group) => group.items.length > 0)
+}
 
 export function navFor(role: Role): { all: NavItem[]; tabs: TabSlot[]; groups: NavGroup[] } {
   const all = ITEMS[role]

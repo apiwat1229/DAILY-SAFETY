@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Activity, KeyRound, LogOut, Menu, ShieldCheck, X } from 'lucide-react'
+import { Activity, KeyRound, LogOut, Menu, X } from 'lucide-react'
 import type { User } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
 import { useI18n } from '@/lib/i18n'
-import { navFor } from '@/lib/nav-model'
+import { navFor, sidebarGroups } from '@/lib/nav-model'
 import { signOut } from '@/lib/sign-out'
 import { iconFor } from '@/components/nav-icons'
 import { renderPage, type NavigateFn } from '@/components/app-pages'
@@ -20,6 +20,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   const { t } = useI18n()
   const badges = useBadges(true)
   const navItems = navFor(user.role).all.map((entry) => ({ key: entry.key, label: t(entry.label), icon: iconFor(entry.icon), badge: entry.badge ? badges[entry.badge] : 0 }))
+  const sections = sidebarGroups(user.role).map((group) => ({ title: group.title, items: group.items.map((entry) => ({ key: entry.key, label: t(entry.label), icon: iconFor(entry.icon), badge: entry.badge ? badges[entry.badge] : 0 })) }))
   const primaryKeys: PageKey[] = user.role === 'storekeeper' ? ['inventory-stock', 'inventory-counts', 'new'] : ['dashboard', 'inspections', 'new']
   const primaryItems = navItems.filter((item) => primaryKeys.includes(item.key))
   const handleLogout = () => signOut(onUserChange, t('ออกจากระบบแล้ว'))
@@ -27,10 +28,8 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   return (
     <div className="app-shell min-h-screen md:flex">
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
-        <div className="flex items-center justify-between gap-1"><Brand /></div>
-        <div className="mt-3 flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /></div>
-        <div className="mt-9 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
-        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 hide-scrollbar">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => onPage(item.key)} />)}</nav>
+        <div className="flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /></div>
+        <SidebarNav sections={sections} page={page} onSelect={onPage} />
         <ProfileBlock user={user} onLogout={handleLogout} />
       </aside>
 
@@ -50,10 +49,8 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
 
       {mobileMenu && <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)}>
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-center justify-between gap-1"><Brand /><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
-          <div className="mt-3 flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /></div>
-          <div className="mt-8 px-3 text-xs font-semibold uppercase tracking-[.14em] text-sidebar-muted">{t('เมนูหลัก')}</div>
-          <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 hide-scrollbar">{navItems.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => { onPage(item.key); setMobileMenu(false) }} />)}</nav>
+          <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /></div><Button variant="ghost" size="icon" className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
+          <SidebarNav sections={sections} page={page} onSelect={(key) => { onPage(key); setMobileMenu(false) }} />
           <ProfileBlock user={user} onLogout={handleLogout} />
         </aside>
       </div>}
@@ -61,12 +58,17 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
   )
 }
 
-function Brand() {
+type Section = { title: string; items: { key: PageKey; label: string; icon: typeof Activity; badge: number }[] }
+
+/** Scrollable menu split into titled sections so each area is easy to find. */
+function SidebarNav({ sections, page, onSelect }: { sections: Section[]; page: PageKey; onSelect: (key: PageKey) => void }) {
   const { t } = useI18n()
-  return <div className="flex min-w-0 items-center gap-2.5">
-    <div className="grid size-10 place-items-center rounded-lg bg-secondary text-primary"><ShieldCheck size={21} /></div>
-    <p className="min-w-0 whitespace-nowrap text-xs text-sidebar-muted">{t('ระบบความปลอดภัยประจำวัน')}</p>
-  </div>
+  return <nav aria-label={t('เมนูหลัก')} className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pr-1 hide-scrollbar">
+    {sections.map((section) => <section key={section.title}>
+      <h2 className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[.14em] text-sidebar-muted/80">{t(section.title)}</h2>
+      <div className="space-y-0.5">{section.items.map((item) => <NavLink key={item.key} label={item.label} icon={item.icon} badge={item.badge} active={page === item.key} onClick={() => onSelect(item.key)} />)}</div>
+    </section>)}
+  </nav>
 }
 
 function ProfileBlock({ user, onLogout }: { user: User; onLogout: () => void }) {
