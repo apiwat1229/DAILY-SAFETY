@@ -234,6 +234,8 @@ Object.assign(english, {
   'แบบฟอร์มการขอเบิกยาและอุปกรณ์รักษาพยาบาลเบื้องต้น': 'Request form for first-aid medicine and medical supplies',
   'แบบฟอร์มการขอเบิกอุปกรณ์ป้องกันอันตรายส่วนบุคคล (PPE)': 'Request form for personal protective equipment (PPE)',
   'ปรับจำนวน': 'Adjust quantities',
+  'กะทำงาน': 'Shift', 'จำนวนพนักงานทั้งหมด': 'Total employees', 'ขอเบิกประจำเดือน': 'Monthly requisition', 'ขอเบิกเพิ่ม เนื่องจาก': 'Additional requisition, because', 'อื่นๆ ระบุ': 'Other, specify',
+  'ใบเบิกเลขที่': 'Requisition no.', 'สำหรับเจ้าหน้าที่ store': 'For store staff', 'ตรวจสอบ': 'Check',
   'ผู้จ่ายของ': 'Issued by',
   'ผู้รับของ': 'Received by',
   'พบสต็อกที่ไม่ตรงกับสมุดบัญชี': 'Some stock does not match the ledger',
