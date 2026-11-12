@@ -92,7 +92,10 @@ describe('requisition navigation', () => {
     const titles = navFor('admin').groups.map((group) => group.title)
     assert.ok(titles.includes('การเบิกของ'))
     assert.ok(navFor('admin').groups.find((group) => group.title === 'การเบิกของ').items.some((item) => item.key === 'requisitions-admin'))
-    assert.ok(navFor('admin').groups.find((group) => group.title === 'ข้อมูลระบบ').items.some((item) => item.key === 'workflow-admin'))
+    // Approval-workflow settings live with the requisition pages, and requisitions and warehouses come before system data.
+    assert.ok(navFor('admin').groups.find((group) => group.title === 'การเบิกของ').items.some((item) => item.key === 'workflow-admin'))
+    assert.ok(!navFor('admin').groups.find((group) => group.title === 'ข้อมูลระบบ').items.some((item) => item.key === 'workflow-admin'))
+    assert.ok(titles.indexOf('การเบิกของ') < titles.indexOf('ข้อมูลระบบ') && titles.indexOf('คลังสินค้า') < titles.indexOf('ข้อมูลระบบ'))
   })
 })
 

@@ -84,8 +84,8 @@ const BAR: Record<Role, { tabs: PageKey[]; center: TabSlot }> = {
 
 const GROUP_OF = (key: PageKey): string => {
   if (key.startsWith('inventory-')) return 'คลังสินค้า'
-  if (key === 'requisition-new' || key === 'requisitions' || key === 'approvals' || key === 'issue-queue' || key === 'requisitions-admin' || key === 'reports') return 'การเบิกของ'
-  if (key === 'users' || key === 'employees' || key === 'checklist' || key === 'audit-log' || key === 'workflow-admin') return 'ข้อมูลระบบ'
+  if (key === 'requisition-new' || key === 'requisitions' || key === 'approvals' || key === 'issue-queue' || key === 'requisitions-admin' || key === 'reports' || key === 'workflow-admin') return 'การเบิกของ'
+  if (key === 'users' || key === 'employees' || key === 'checklist' || key === 'audit-log') return 'ข้อมูลระบบ'
   if (key === 'assessments' || key === 'assessment-reports' || key === 'training-materials' || key === 'hiyari' || key === 'hiyari-reports') return 'แบบประเมินและอบรม'
   return 'การตรวจ'
 }
