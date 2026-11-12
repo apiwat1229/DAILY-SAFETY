@@ -8,6 +8,7 @@ import type { RequisitionDetail, RequisitionStep } from '@/lib/requisition-types
 import type { User } from '@/lib/types'
 import { useI18n } from '@/lib/i18n'
 import { printIssueSlip } from '@/lib/issue-slip'
+import { printRequisitionForm } from '@/lib/requisition-form'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ImageViewer, ItemThumb } from '@/components/item-thumb'
@@ -61,6 +62,7 @@ export function RequisitionDetailDialog({ id, user, onClose, onChanged, actions 
       <DialogDescription>{detail ? `${detail.requesterName}${detail.department ? ` · ${detail.department}` : ''} · ${detail.warehouseName}` : ''}</DialogDescription>
     </DialogHeader>
     {!detail || loading ? <div className="grid min-h-40 place-items-center text-muted-foreground"><LoaderCircle className="animate-spin" /></div> : <div className="space-y-5">
+      <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printRequisitionForm(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์แบบฟอร์มเบิก')}</button>
       {detail.lines.some((line) => line.qtyIssued > 0) && <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-accent" onClick={() => { if (!printIssueSlip(detail, t, language)) toast.error(t('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป')) }}><Printer size={15} />{t('พิมพ์ใบจ่ายของ')}</button>}
       <section className="grid gap-2 rounded-xl border border-border bg-surface-subtle p-3 text-sm sm:grid-cols-2">
         <div><p className="text-xs text-muted-foreground">{t('เหตุผลการเบิก')}</p><p className="whitespace-pre-wrap">{detail.reason}</p></div>

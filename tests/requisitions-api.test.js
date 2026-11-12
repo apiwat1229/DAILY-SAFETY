@@ -229,6 +229,14 @@ describe('requisition API', () => {
     assert.equal((await rq(s.employee.client, 'GET', '/cart?type=ppe')).json.cart.lines.length, 1)
   })
 
+  test('detail carries the requester employee code and position for the printed form', async () => {
+    const s = await scene()
+    const created = await submit(s, 2)
+    const detail = (await rq(s.employee.client, 'GET', `/${created.id}`)).json.requisition
+    assert.equal(typeof detail.requesterCode, 'string')
+    assert.equal(typeof detail.requesterPosition, 'string')
+  })
+
   test('happy path: employee → supervisor approves → storekeeper issues → employee confirms, stock agrees at each step', async () => {
     const s = await scene()
     const created = await submit(s, 5)

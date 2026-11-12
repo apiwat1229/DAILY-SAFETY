@@ -19,7 +19,7 @@ async function seed() {
   db = new DatabaseSync(':memory:')
   db.exec(`
     CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT, display_name TEXT, employee_code TEXT, role TEXT, is_active INTEGER NOT NULL DEFAULT 1);
-    CREATE TABLE employee_directory (employee_code TEXT PRIMARY KEY, name_th TEXT, department_th TEXT NOT NULL DEFAULT '', department_en TEXT NOT NULL DEFAULT '');
+    CREATE TABLE employee_directory (employee_code TEXT PRIMARY KEY, name_th TEXT, position_th TEXT NOT NULL DEFAULT '', department_th TEXT NOT NULL DEFAULT '', department_en TEXT NOT NULL DEFAULT '');
     CREATE TABLE app_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '');
   `)
   migrateInventory(db); migrateRequisitions(db)

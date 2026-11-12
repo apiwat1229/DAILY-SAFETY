@@ -30,6 +30,7 @@ export type RequisitionEvent = { id: string; step: number; actorId: string; acto
 export type RequisitionPhoto = { id: string; originalName: string; url: string; thumbUrl: string }
 export type RequisitionDetail = {
   id: string; number: string; type: RequisitionType; status: RequisitionStatus; requesterId: string; requesterName: string; department: string
+  requesterCode: string; requesterPosition: string
   warehouseId: string; warehouseName: string; reason: string; neededBy: string; currentStep: number; createdAt: string; submittedAt: string; approvedAt: string
   lines: RequisitionLine[]; steps: RequisitionStep[]; events: RequisitionEvent[]; photos: RequisitionPhoto[]
 }

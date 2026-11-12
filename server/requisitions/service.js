@@ -168,8 +168,12 @@ export function createRequisitionService(db, { stock, workflow, now = () => new 
     const photos = db.prepare('SELECT id, original_name FROM requisition_photos WHERE requisition_id = ? ORDER BY uploaded_at, rowid').all(id).map((photo) => ({
       id: photo.id, originalName: photo.original_name, url: `/api/requisitions/photos/${photo.id}`, thumbUrl: `/api/requisitions/photos/${photo.id}?size=thumb`,
     }))
+    const requester = db.prepare('SELECT employee_code FROM users WHERE id = ?').get(req.requester_id)
+    const requesterCode = requester?.employee_code || ''
+    const directory = requesterCode ? db.prepare('SELECT position_th FROM employee_directory WHERE employee_code = ?').get(requesterCode) : null
     return {
       id: req.id, number: req.number, type: req.type, status: req.status, requesterId: req.requester_id, requesterName: userName(req.requester_id), department: req.department,
+      requesterCode, requesterPosition: directory?.position_th || '',
       warehouseId: req.warehouse_id, warehouseName: warehouse?.name || '', reason: req.reason, neededBy: req.needed_by, currentStep: req.current_step,
       createdAt: req.created_at, submittedAt: req.submitted_at, approvedAt: req.approved_at,
       lines: lineRows(id).map((line) => ({
