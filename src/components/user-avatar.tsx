@@ -67,11 +67,16 @@ export function PresetArt({ id, className = 'size-full' }: { id: string; classNa
   </svg>
 }
 
-/** The user's picture: uploaded photo, chosen cartoon, or the first letter of the name. */
-export function UserAvatar({ user, className = 'size-9' }: { user: Pick<User, 'id' | 'name' | 'avatar'>; className?: string }) {
+/** Who you are when you have not picked a picture: a cartoon that matches your role (never a bare letter). */
+const DEFAULT_PRESET: Record<User['role'], string> = { admin: 'engineer-white', leader: 'inspector', employee: 'helmet-yellow', storekeeper: 'technician' }
+export const defaultPresetFor = (role: User['role']) => DEFAULT_PRESET[role] ?? 'helmet-yellow'
+
+/** The user's picture: uploaded photo, chosen cartoon, or the cartoon that goes with their role. */
+export function UserAvatar({ user, className = 'size-9' }: { user: Pick<User, 'id' | 'name' | 'avatar' | 'role'>; className?: string }) {
   const avatar = user.avatar || ''
-  const initial = <AvatarFallback className="bg-sidebar-active text-sm font-semibold text-sidebar">{user.name.slice(0, 1)}</AvatarFallback>
-  if (avatar.startsWith('preset:')) return <Avatar className={className}><div className="size-full overflow-hidden rounded-full"><PresetArt id={avatar.slice(7)} /></div></Avatar>
-  if (avatar.startsWith('photo:')) return <Avatar className={className}><AvatarImage src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(avatar.slice(6))}`} alt={user.name} className="object-cover" />{initial}</Avatar>
-  return <Avatar className={className}>{initial}</Avatar>
+  const art = (id: string) => <div className="size-full overflow-hidden rounded-full"><PresetArt id={id} /></div>
+  if (avatar.startsWith('photo:')) return <Avatar className={className}><AvatarImage src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(avatar.slice(6))}`} alt={user.name} className="object-cover" />
+    <AvatarFallback className="bg-transparent p-0">{art(defaultPresetFor(user.role))}</AvatarFallback></Avatar>
+  const id = avatar.startsWith('preset:') ? avatar.slice(7) : defaultPresetFor(user.role)
+  return <Avatar className={className}>{art(id)}</Avatar>
 }

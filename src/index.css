@@ -250,7 +250,8 @@ label { line-height: var(--type-line-label); }
 .page-heading { font-size: var(--type-size-page-heading) !important; line-height: var(--type-line-page-heading) !important; letter-spacing: -.025em; }
 .section-heading { font-size: var(--type-size-section-heading) !important; line-height: var(--type-line-section-heading) !important; }
 .subsection-heading { font-size: var(--type-size-subsection-heading) !important; line-height: var(--type-line-subsection-heading) !important; }
-.sidebar { background: var(--sidebar); color: var(--sidebar-foreground); }
+.sidebar { background-color: var(--sidebar); background-image: var(--sidebar-art, none), var(--sidebar-fill, none); color: var(--sidebar-foreground); }
+html[data-sidebar="light"] .sidebar { border-right: 1px solid var(--border); }
 .side-link { font-size: var(--type-size-control) !important; line-height: var(--type-line-control) !important; color: var(--sidebar-muted); transition: background .18s ease, color .18s ease; }
 .side-link:hover, .side-link[data-active="true"] { background: var(--sidebar-soft); color: var(--sidebar-foreground); }
 .metric-card { box-shadow: 0 6px 20px rgba(26, 53, 57, .035); }

@@ -14,6 +14,7 @@ import { ThemeButton } from '@/components/theme-dialog'
 import { useBadges } from '@/lib/use-badges'
 import { AvatarPickerDialog } from '@/components/avatar-picker-dialog'
 import { UserAvatar } from '@/components/user-avatar'
+import { SidebarArt } from '@/components/sidebar-art'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export type ShellProps = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -33,6 +34,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
       <aside className="sidebar sticky top-0 z-30 hidden h-screen w-[var(--app-sidebar-width)] shrink-0 flex-col px-4 py-5 md:flex">
         <div className="flex items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ProfileMenu user={user} onLogout={handleLogout} onUserChange={onUserChange} /></div>
         <SidebarNav sections={sections} page={page} onSelect={onPage} />
+        <SidebarArt />
       </aside>
 
       <div className="page-scroll min-w-0 flex-1">
@@ -53,6 +55,7 @@ export function DesktopShell({ user, page, onPage, onUserChange }: ShellProps) {
         <aside className="sidebar flex h-full w-[var(--app-sidebar-width)] flex-col px-4 py-5" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 flex-1 items-center gap-2"><LanguageSwitch compact className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ThemeButton className="text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" /><ProfileMenu user={user} onLogout={handleLogout} onUserChange={onUserChange} /></div><Button variant="ghost" size="icon" className="shrink-0 text-sidebar-muted hover:bg-sidebar-soft hover:text-sidebar-foreground" onClick={() => setMobileMenu(false)} aria-label={t('ปิดเมนู')}><X size={18} /></Button></div>
           <SidebarNav sections={sections} page={page} onSelect={(key) => { onPage(key); setMobileMenu(false) }} />
+          <SidebarArt />
         </aside>
       </div>}
     </div>

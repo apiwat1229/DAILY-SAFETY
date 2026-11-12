@@ -29,7 +29,7 @@ export function AvatarPickerDialog({ open, onOpenChange, user, onUserChange }: {
     <div className="flex items-center gap-4"><UserAvatar user={user} className="size-20 ring-2 ring-border" />
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" className="gap-2" disabled={busy} onClick={() => fileInput.current?.click()}>{busy ? <LoaderCircle size={15} className="animate-spin" /> : <Camera size={15} />}{t('อัปโหลดรูปถ่าย')}</Button>
-        {user.avatar && <Button type="button" variant="ghost" className="gap-2 text-destructive" disabled={busy} onClick={() => void run(() => api.deleteAvatar(), t('ลบรูปโปรไฟล์แล้ว'))}><Trash2 size={15} />{t('ลบรูป')}</Button>}
+        {user.avatar && <Button type="button" variant="ghost" className="gap-2 text-destructive" disabled={busy} onClick={() => void run(() => api.deleteAvatar(), t('กลับไปใช้ตัวการ์ตูนเริ่มต้นแล้ว'))}><Trash2 size={15} />{t('ใช้ค่าเริ่มต้น')}</Button>}
       </div>
       <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label={t('อัปโหลดรูปถ่าย')}
         onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void run(() => api.uploadAvatar(file), t('อัปเดตรูปโปรไฟล์แล้ว')) }} />
