@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Toaster } from 'sonner'
+import { Toaster } from '@/components/ui/sonner'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
 import { AppShell } from '@/components/app-shell'

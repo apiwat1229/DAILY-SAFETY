@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ChevronDown, KeyRound, LogOut, Menu, X } from 'lucide-react'
+import { Activity, KeyRound, LogOut, Menu, X } from 'lucide-react'
 import type { User } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { ChangePasswordDialog } from '@/components/change-password-dialog'
@@ -12,6 +12,7 @@ import type { PageKey } from '@/lib/pages'
 import { LanguageSwitch } from '@/components/language-switch'
 import { ThemeButton } from '@/components/theme-dialog'
 import { useBadges } from '@/lib/use-badges'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export type ShellProps = { user: User; page: PageKey; onPage: NavigateFn; onUserChange: (user: User | null) => void }
@@ -79,14 +80,13 @@ function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
   return <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label={t('บัญชีของฉัน')} title={user.name} className="ml-auto flex h-9 min-w-0 items-center gap-1.5 rounded-lg border border-current/25 py-0 pl-1 pr-2 text-sidebar-muted transition-colors hover:bg-sidebar-soft hover:text-sidebar-foreground">
-          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-sidebar-soft text-xs font-semibold text-sidebar-foreground">{user.name.slice(0, 1)}</span>
-          <ChevronDown size={14} className="shrink-0" />
+        <button type="button" aria-label={t('บัญชีของฉัน')} title={user.name} className="ml-auto rounded-full outline-offset-2 transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-sidebar-active">
+          <Avatar className="size-9 ring-2 ring-sidebar-muted/40"><AvatarFallback className="bg-sidebar-active text-sm font-semibold text-sidebar">{user.name.slice(0, 1)}</AvatarFallback></Avatar>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-0">
         <div className="flex items-center gap-3 border-b border-border-subtle p-3.5">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-base font-semibold text-primary">{user.name.slice(0, 1)}</span>
+          <Avatar className="size-10 shrink-0"><AvatarFallback className="bg-secondary text-base font-semibold text-primary">{user.name.slice(0, 1)}</AvatarFallback></Avatar>
           <div className="min-w-0"><p className="truncate text-sm font-semibold">{user.name}</p><p className="truncate text-xs text-muted-foreground">{role} · {user.employeeCode}</p></div>
         </div>
         <div className="p-1.5">
