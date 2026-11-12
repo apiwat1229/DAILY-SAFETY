@@ -89,14 +89,14 @@ export function RequisitionNewPage({ onPage }: { user: User; onPage: NavigateFn 
   }
 
   return <div className="page-stack">
-    <div className="flex items-end justify-between gap-3">
+    <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
       <div><p className="text-sm font-medium text-primary">{t('การเบิกของ')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('เบิกของ')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('เลือกอุปกรณ์หรือยา ใส่ตะกร้า แล้วส่งใบเบิกให้หัวหน้างานอนุมัติ')}</p></div>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2"><Tabs value={type} onValueChange={(value) => setType(value as RequisitionType)}><TabsList><TabsTrigger value="ppe">PPE</TabsTrigger><TabsTrigger value="medicine">{t('ยารักษาโรค')}</TabsTrigger></TabsList></Tabs>
       <Button type="button" onClick={() => setCartOpen(true)} className="relative shrink-0 gap-2"><ShoppingCart size={17} /><span className="hidden sm:inline">{t('ตะกร้า')}</span>
-        {cartCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-primary">{cartCount}</span>}</Button>
+        {cartCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-primary">{cartCount}</span>}</Button></div>
     </div>
     <Card className="overflow-hidden rounded-2xl border-border">
-      <CardContent className="grid gap-3 border-b border-border-subtle p-4 sm:grid-cols-[auto_1fr] sm:items-center">
-        <Tabs value={type} onValueChange={(value) => setType(value as RequisitionType)}><TabsList><TabsTrigger value="ppe">PPE</TabsTrigger><TabsTrigger value="medicine">{t('ยารักษาโรค')}</TabsTrigger></TabsList></Tabs>
+      <CardContent className="grid gap-3 border-b border-border-subtle p-4 ">
         <div className="flex gap-2"><div className="relative min-w-0 flex-1"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหารหัสหรือชื่อสินค้า')} aria-label={t('ค้นหา')} className="pl-9" /></div>
           <ViewToggle value={view} onChange={setView} options={VIEWS} /></div>
         {categories.length > 1 && <div className="flex flex-wrap gap-2 sm:col-span-2">

@@ -94,17 +94,16 @@ export function InventoryStockPage({ user }: { user: User }) {
   return <div className="page-stack">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><p className="text-sm font-medium text-primary">{t('คลังสินค้า')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('สต็อกคงเหลือ')}</h2><p className="mt-1 text-sm text-muted-foreground">{user.role === 'admin' ? t('ดูและจัดการสต็อกทุกคลัง') : t('สต็อกของคลังที่คุณดูแล')}</p></div>
-      <Button iconOnly disabled={activeWarehouses.length === 0} onClick={() => setReceiveOpen(true)}><PackagePlus size={16} />{t('รับสินค้าเข้าคลัง')}</Button>
+      <div className="flex flex-wrap items-center gap-2"><Tabs value={type} onValueChange={(value) => setType(value as 'all' | InventoryType)}><TabsList><TabsTrigger value="all">{t('ทั้งหมด')}</TabsTrigger><TabsTrigger value="ppe">PPE</TabsTrigger><TabsTrigger value="medicine">{t('ยารักษาโรค')}</TabsTrigger></TabsList></Tabs><Button iconOnly disabled={activeWarehouses.length === 0} onClick={() => setReceiveOpen(true)}><PackagePlus size={16} />{t('รับสินค้าเข้าคลัง')}</Button></div>
     </div>
     <StockAlertsCard alerts={alerts} onSelect={toggleFilter} />
     <Card className="overflow-hidden rounded-2xl border-border">
-      <CardContent className="grid gap-3 border-b border-border-subtle p-4 lg:grid-cols-[auto_1fr_auto_auto] lg:items-center">
-        <Tabs value={type} onValueChange={(value) => setType(value as 'all' | InventoryType)}><TabsList><TabsTrigger value="all">{t('ทั้งหมด')}</TabsTrigger><TabsTrigger value="ppe">PPE</TabsTrigger><TabsTrigger value="medicine">{t('ยารักษาโรค')}</TabsTrigger></TabsList></Tabs>
+      <CardContent className="grid gap-3 border-b border-border-subtle p-4 lg:grid-cols-[1fr_auto_auto] lg:items-center">
         <div className="relative"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ค้นหารหัสหรือชื่อสินค้า')} aria-label={t('ค้นหา')} className="pl-9" /></div>
         <Select value={warehouseId} onValueChange={(value) => value && setWarehouseId(value)}><SelectTrigger className="h-10 w-full lg:w-56" aria-label={t('คลัง')}><SelectValue>{warehouseId === ALL ? t('ทุกคลัง') : warehouses.find((warehouse) => warehouse.id === warehouseId)?.name ?? t('ทุกคลัง')}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value={ALL}>{t('ทุกคลัง')}</SelectItem>{warehouses.map((warehouse) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</SelectItem>)}</SelectContent></Select>
         <ViewToggle value={view} onChange={setView} options={VIEWS} />
-        {filter && <p className="flex items-center gap-2 text-sm text-muted-foreground lg:col-span-4">{t('กำลังกรอง')}: <Badge variant="outline" className="border-primary/25 bg-secondary text-primary">{filter === 'low' ? t('ใกล้หมด') : t('ใกล้หมดอายุ')} · {rows.length}</Badge><button type="button" onClick={() => setFilter('')} className="text-primary underline-offset-4 hover:underline">{t('ล้างตัวกรอง')}</button></p>}
+        {filter && <p className="flex items-center gap-2 text-sm text-muted-foreground lg:col-span-3">{t('กำลังกรอง')}: <Badge variant="outline" className="border-primary/25 bg-secondary text-primary">{filter === 'low' ? t('ใกล้หมด') : t('ใกล้หมดอายุ')} · {rows.length}</Badge><button type="button" onClick={() => setFilter('')} className="text-primary underline-offset-4 hover:underline">{t('ล้างตัวกรอง')}</button></p>}
       </CardContent>
       {rows.length ? <>
         {view === 'tiles' ? <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 xl:grid-cols-4">{pagination.visibleItems.map((row) => {

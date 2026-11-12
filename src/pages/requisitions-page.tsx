@@ -47,14 +47,14 @@ export function RequisitionsPage({ user, onPage }: { user: User; onPage: Navigat
   const pagination = useDataPagination(filtered)
 
   return <div className="page-stack">
-    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div><p className="text-sm font-medium text-primary">{t('การเบิกของ')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('ใบเบิกของฉัน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('ติดตามสถานะใบเบิกและยืนยันรับของ')}</p></div>
-      <Button type="button" className="gap-2" onClick={() => onPage('requisition-new')}><ShoppingCart size={16} />{t('เบิกของ')}</Button>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-end justify-between gap-3">
+        <div><p className="text-sm font-medium text-primary">{t('การเบิกของ')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('ใบเบิกของฉัน')}</h2><p className="mt-1 text-sm text-muted-foreground">{t('ติดตามสถานะใบเบิกและยืนยันรับของ')}</p></div>
+        <Button type="button" className="gap-2" onClick={() => onPage('requisition-new')}><ShoppingCart size={16} />{t('เบิกของ')}</Button>
+      </div>
+      <div className="overflow-x-auto"><Tabs value={group} onValueChange={(value) => setGroup(value as Group)}><TabsList>{(Object.keys(groups) as Group[]).map((key) => <TabsTrigger key={key} value={key}>{t(groups[key].label)} ({count(key)})</TabsTrigger>)}</TabsList></Tabs></div>
     </div>
     <Card className="overflow-hidden rounded-2xl border-border">
-      <CardContent className="overflow-x-auto border-b border-border-subtle p-4">
-        <Tabs value={group} onValueChange={(value) => setGroup(value as Group)}><TabsList>{(Object.keys(groups) as Group[]).map((key) => <TabsTrigger key={key} value={key}>{t(groups[key].label)} ({count(key)})</TabsTrigger>)}</TabsList></Tabs>
-      </CardContent>
       {filtered.length ? <>
         <Table>
           <TableHeader><TableRow><TableHead>{t('เลขที่')}</TableHead><TableHead>{t('ส่งเมื่อ')}</TableHead><TableHead>{t('ประเภท')}</TableHead><TableHead>{t('รายการ')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead>{t('ขั้นตอนปัจจุบัน')}</TableHead></TableRow></TableHeader>

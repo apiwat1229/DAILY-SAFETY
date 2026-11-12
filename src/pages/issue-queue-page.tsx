@@ -51,12 +51,12 @@ export function IssueQueuePage({ user }: { user: User }) {
   const total = tab === 'queue' ? queue.length : history.length
 
   return <div className="page-stack">
-    <div><p className="text-sm font-medium text-primary">{t('การเบิกของ')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('จ่ายของ')}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{user.role === 'admin' ? t('ใบเบิกที่อนุมัติแล้วทุกคลัง') : t('ใบเบิกที่อนุมัติแล้วของคลังที่คุณดูแล')}</p></div>
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+      <div><p className="text-sm font-medium text-primary">{t('การเบิกของ')}</p><h2 className="page-heading mt-1 text-2xl font-semibold tracking-tight">{t('จ่ายของ')}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{user.role === 'admin' ? t('ใบเบิกที่อนุมัติแล้วทุกคลัง') : t('ใบเบิกที่อนุมัติแล้วของคลังที่คุณดูแล')}</p></div>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}><TabsList><TabsTrigger value="queue">{t('รอจ่าย')} ({queue.length})</TabsTrigger><TabsTrigger value="history">{t('จ่ายแล้ว')} ({history.length})</TabsTrigger></TabsList></Tabs>
+    </div>
     <Card className="overflow-hidden rounded-2xl border-border">
-      <CardContent className="overflow-x-auto border-b border-border-subtle p-4">
-        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}><TabsList><TabsTrigger value="queue">{t('รอจ่าย')} ({queue.length})</TabsTrigger><TabsTrigger value="history">{t('จ่ายแล้ว')} ({history.length})</TabsTrigger></TabsList></Tabs>
-      </CardContent>
       {total === 0 ? <CardContent className="grid min-h-48 place-items-center p-8 text-center text-sm text-muted-foreground"><div><PackageOpen className="mx-auto mb-2" size={24} />{loading ? t('กำลังโหลด…') : tab === 'queue' ? t('ไม่มีใบเบิกที่รอจ่าย') : t('ยังไม่มีใบเบิกที่จ่ายแล้ว')}</div></CardContent> : <>
         <div className="divide-y divide-border-subtle">
           {tab === 'queue' ? shownQueue.visibleItems.map((item) => <div key={item.id} className="space-y-3 p-4">
