@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { activeSlotIndex, navFor } from '../src/lib/nav-model.ts'
+import { activeSlotIndex, navFor, sidebarGroups } from '../src/lib/nav-model.ts'
 import { pagesFor } from '../src/lib/pages.ts'
 import { parsePreference, resolveViewMode } from '../src/lib/view-mode-core.ts'
 
@@ -127,5 +127,12 @@ describe('view mode', () => {
   test('parsePreference falls back to auto for junk', () => {
     for (const raw of [null, '', 'tablet', '"mobile"', 'MOBILE', undefined]) assert.equal(parsePreference(raw), 'auto')
     for (const value of ['auto', 'mobile', 'desktop']) assert.equal(parsePreference(value), value)
+  })
+})
+
+describe('sidebar sections', () => {
+  test('assessments and training follow the inspection group, before requisitions, warehouses and system data', () => {
+    const titles = sidebarGroups('admin').map((group) => group.title)
+    assert.deepEqual(titles, ['การตรวจ', 'แบบประเมินและอบรม', 'การเบิกของ', 'คลังสินค้า', 'ข้อมูลระบบ'])
   })
 })

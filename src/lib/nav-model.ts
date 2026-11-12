@@ -89,7 +89,7 @@ const GROUP_OF = (key: PageKey): string => {
   if (key === 'assessments' || key === 'assessment-reports' || key === 'training-materials' || key === 'hiyari' || key === 'hiyari-reports') return 'แบบประเมินและอบรม'
   return 'การตรวจ'
 }
-const GROUP_ORDER = ['การตรวจ', 'การเบิกของ', 'คลังสินค้า', 'แบบประเมินและอบรม', 'ข้อมูลระบบ']
+const GROUP_ORDER = ['การตรวจ', 'แบบประเมินและอบรม', 'การเบิกของ', 'คลังสินค้า', 'ข้อมูลระบบ']
 
 /** Sidebar sections: every menu item of the role, grouped under a heading (empty groups are dropped). */
 export function sidebarGroups(role: Role): NavGroup[] {
