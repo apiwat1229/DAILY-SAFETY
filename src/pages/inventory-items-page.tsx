@@ -76,8 +76,9 @@ export function InventoryItemsPage() {
             <div className="mt-auto flex justify-end gap-1 border-t border-border-subtle pt-2"><Button iconOnly variant="ghost" size="sm" onClick={() => setEditor({ item, key: item.id })}><Pencil size={15} />{t('แก้ไข')}</Button><Button iconOnly variant="ghost" size="sm" className="text-destructive" onClick={() => remove(item)}><Trash2 size={15} />{t('ลบ')}</Button></div>
           </div>
         </div>)}</div> : <Table>
-          <TableHeader><TableRow><TableHead className="w-14"><span className="sr-only">{t('รูปสินค้า')}</span></TableHead><TableHead>{t('รหัสสินค้า')}</TableHead><TableHead>{t('ชื่อสินค้า')}</TableHead><TableHead>{t('หมวด')}</TableHead><TableHead>{t('ตัวเลือก')}</TableHead><TableHead>{t('สต็อกขั้นต่ำ')}</TableHead><TableHead>{t('การติดตาม')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((item) => <TableRow key={item.id} data-inactive={!item.isActive || undefined}>
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead className="w-14"><span className="sr-only">{t('รูปสินค้า')}</span></TableHead><TableHead>{t('รหัสสินค้า')}</TableHead><TableHead>{t('ชื่อสินค้า')}</TableHead><TableHead>{t('หมวด')}</TableHead><TableHead>{t('ตัวเลือก')}</TableHead><TableHead>{t('สต็อกขั้นต่ำ')}</TableHead><TableHead>{t('การติดตาม')}</TableHead><TableHead>{t('สถานะ')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((item, index) => <TableRow key={item.id} data-inactive={!item.isActive || undefined}>
+            <TableCell data-label="" className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
             <TableCell data-label=""><ItemThumb url={item.imageUrl} name={item.name} size={44} /></TableCell>
             <TableCell><Badge variant="outline" className="font-mono">{item.sku}</Badge></TableCell>
             <TableCell className="font-medium">{item.name}<span className="ml-1 text-xs font-normal text-muted-foreground">({item.unit})</span></TableCell>

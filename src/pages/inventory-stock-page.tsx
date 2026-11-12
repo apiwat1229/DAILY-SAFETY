@@ -122,10 +122,11 @@ export function InventoryStockPage({ user }: { user: User }) {
             </div>
           </div>
         })}</div> : <Table>
-          <TableHeader><TableRow><TableHead>{t('สินค้า')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead className="text-right">{t('คงเหลือ')}</TableHead><TableHead className="text-right">{t('ถูกจอง')}</TableHead><TableHead className="text-right">{t('เบิกได้')}</TableHead><TableHead>{t('วันหมดอายุใกล้สุด')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
-          <TableBody>{pagination.visibleItems.map((row) => {
+          <TableHeader><TableRow><TableHead className="w-12 text-center">{t('ลำดับ')}</TableHead><TableHead>{t('สินค้า')}</TableHead><TableHead>{t('คลัง')}</TableHead><TableHead className="text-right">{t('คงเหลือ')}</TableHead><TableHead className="text-right">{t('ถูกจอง')}</TableHead><TableHead className="text-right">{t('เบิกได้')}</TableHead><TableHead>{t('วันหมดอายุใกล้สุด')}</TableHead><TableHead className="text-right">{t('จัดการ')}</TableHead></TableRow></TableHeader>
+          <TableBody>{pagination.visibleItems.map((row, index) => {
             const days = row.nearestExpiry ? daysUntil(row.nearestExpiry) : null
             return <TableRow key={`${row.variantId}:${row.warehouseId}`}>
+              <TableCell className="text-center text-muted-foreground tabular-nums">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
               <TableCell><div className="flex items-center gap-3"><ItemThumb url={row.imageUrl} name={row.name} size={40} /><div className="min-w-0"><p className="font-medium">{row.name}{row.variantLabel && <span className="ml-1 font-normal text-muted-foreground">· {row.variantLabel}</span>}</p><p className="text-xs text-muted-foreground">{row.sku} · {row.unit}</p></div></div></TableCell>
               <TableCell>{row.warehouseName}</TableCell>
               <TableCell className="text-right tabular-nums">{row.onHand}{row.isLow && <Badge variant="outline" className="ml-2 border-warning/25 bg-warning/10 text-warning">{t('ใกล้หมด')}</Badge>}</TableCell>
