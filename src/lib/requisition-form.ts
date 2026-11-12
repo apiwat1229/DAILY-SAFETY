@@ -1,4 +1,4 @@
-import { formatDate } from './api'
+import { formatDateTime } from './api'
 import { html, printDocument } from './print-html'
 import type { RequisitionDetail } from './requisition-types'
 
@@ -13,7 +13,7 @@ export function printRequisitionForm(detail: RequisitionDetail, t: (text: string
   const body = html`<h1 style="text-align:center">${title}</h1>
     <p class="muted" style="text-align:center">${t('เลขที่ใบเบิก')} ${detail.number}</p>
     <dl class="meta">
-      <dt>${t('วันที่')}</dt><dd>${formatDate(detail.submittedAt || detail.createdAt, language)}</dd>
+      <dt>${t('วันที่')}</dt><dd>${formatDateTime(detail.submittedAt || detail.createdAt, language, false)}</dd>
       <dt>${t('ชื่อผู้เบิก')}</dt><dd>${detail.requesterName}</dd>
       <dt>${t('รหัสพนักงาน')}</dt><dd>${detail.requesterCode || '—'}</dd>
       <dt>${t('ตำแหน่ง')}</dt><dd>${detail.requesterPosition || '—'}</dd>
