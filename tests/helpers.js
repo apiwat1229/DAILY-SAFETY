@@ -22,13 +22,13 @@ function freePort() {
   })
 }
 
-export async function startServer() {
+export async function startServer(extraEnv = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'daily-safety-test-'))
   const port = await freePort()
   const baseUrl = `http://127.0.0.1:${port}`
   const child = spawn(process.execPath, ['server/index.js'], {
     cwd: root,
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, ADMIN_PASSWORD, LEADER_PASSWORD },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, ADMIN_PASSWORD, LEADER_PASSWORD, ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''

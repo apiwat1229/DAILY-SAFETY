@@ -5,7 +5,8 @@ import bcrypt from 'bcryptjs'
 import multer from 'multer'
 import { registerAvatarRoutes } from './avatars.js'
 import { DatabaseSync } from 'node:sqlite'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { mkdir, mkdtemp, rm, writeFile, unlink, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
@@ -644,6 +645,44 @@ app.use('/api', (req, res, next) => {
   next()
 })
 app.use(express.json({ limit: '1mb' }))
+
+// ---------- MRP (Safety tab) ----------
+// MRP reaches the same API at /api/integration/* with "Authorization: Bearer <INTEGRATION_TOKEN>", acting as the admin service
+// account "mrp-integration"; X-Acting-User (percent-encoded) names the MRP user and is written with every audit entry.
+// Without INTEGRATION_TOKEN the integration is off. Sign-in and the public links are not reachable this way.
+const integrationToken = String(process.env.INTEGRATION_TOKEN || '')
+const integrationDigest = integrationToken ? createHash('sha256').update(integrationToken).digest() : null
+const integrationContext = new AsyncLocalStorage()
+function integrationAccount() {
+  let row = db.prepare("SELECT * FROM users WHERE username = 'mrp-integration'").get()
+  if (!row) {
+    db.prepare(`INSERT INTO users (id, username, password_hash, display_name, employee_code, role, created_at)
+                VALUES (?, 'mrp-integration', ?, 'MRP (Safety)', '', 'admin', ?)`)
+      .run(randomUUID(), bcrypt.hashSync(randomBytes(32).toString('hex'), 10), nowIso())
+    row = db.prepare("SELECT * FROM users WHERE username = 'mrp-integration'").get()
+  }
+  if (!row.is_active) db.prepare('UPDATE users SET is_active = 1 WHERE id = ?').run(row.id)
+  return row
+}
+if (integrationDigest) integrationAccount()
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api/integration/')) return next()
+  const sent = (req.get('authorization') || '').replace(/^Bearer\s+/i, '')
+  if (!integrationDigest || !sent || !timingSafeEqual(createHash('sha256').update(sent).digest(), integrationDigest)) {
+    return res.status(401).json({ error: 'integration token ไม่ถูกต้อง' })
+  }
+  const rest = req.url.slice('/api/integration'.length)
+  if (/^\/(auth|public)(\/|$|\?)/.test(rest)) return res.status(404).json({ error: 'ไม่พบ API ที่ร้องขอ' })
+  let actor = req.get('x-acting-user') || ''
+  try { actor = decodeURIComponent(actor) } catch { /* keep as sent */ }
+  actor = actor.trim().slice(0, 120) || 'MRP'
+  req.url = `/api${rest}`
+  // A session of its own for this one request: express-session sees it and leaves it alone (no cookie, nothing stored).
+  const account = integrationAccount()
+  req.session = { user: safeUser(account), destroy: (callback) => callback?.(), regenerate: (callback) => callback?.(), save: (callback) => callback?.(), touch() {}, cookie: {} }
+  integrationContext.run({ actor }, next)
+})
+
 app.use(session({
   name: 'daily-safety.sid',
   secret: process.env.SESSION_SECRET || 'change-this-demo-session-secret-before-deployment',
@@ -843,6 +882,9 @@ const limitPublicTrainingViews = rateLimit({ bucket: 'public-training-view', max
 const limitPublicEmployeeSearch = rateLimit({ bucket: 'public-employee-search', max: 240, windowMs: 60_000 })
 
 function addAudit(userId, action, targetType, targetId, details = {}) {
+  // A change made from MRP keeps the name of the MRP user who made it (the account is the MRP service account).
+  const viaMrp = integrationContext.getStore()?.actor
+  if (viaMrp) details = { ...details, viaMrp }
   db.prepare(`INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(randomUUID(), userId, action, targetType, targetId, JSON.stringify(details), nowIso())
@@ -3130,7 +3172,7 @@ app.get('/api/admin/employees/:code/report', requireAdmin, (req, res) => {
 })
 
 app.get('/api/admin/users', requireAdmin, (_req, res) => {
-  const users = db.prepare('SELECT id, username, display_name, employee_code, role, is_active FROM users ORDER BY is_active DESC, role, display_name').all()
+  const users = db.prepare('SELECT id, username, display_name, employee_code, role, is_active FROM users WHERE username <> 'mrp-integration' ORDER BY is_active DESC, role, display_name').all()
   res.json({ users: users.map(safeUser) })
 })
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
