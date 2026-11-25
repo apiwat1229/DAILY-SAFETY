@@ -3172,7 +3172,7 @@ app.get('/api/admin/employees/:code/report', requireAdmin, (req, res) => {
 })
 
 app.get('/api/admin/users', requireAdmin, (_req, res) => {
-  const users = db.prepare('SELECT id, username, display_name, employee_code, role, is_active FROM users WHERE username <> 'mrp-integration' ORDER BY is_active DESC, role, display_name').all()
+  const users = db.prepare('SELECT id, username, display_name, employee_code, role, is_active FROM users WHERE username <> ? ORDER BY is_active DESC, role, display_name').all('mrp-integration')
   res.json({ users: users.map(safeUser) })
 })
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
