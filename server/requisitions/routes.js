@@ -5,19 +5,27 @@ import { ImageError, removeImage, saveImage } from '../inventory/images.js'
 import { WorkflowError, createWorkflowService } from './workflow.js'
 import { RequisitionError, createRequisitionService } from './service.js'
 import { registerReportRoutes } from './report-routes.js'
+import { MrpError, createMrpRequisitions, mrpConfig } from './mrp.js'
 
 const FORBIDDEN = 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้'
 const STATUS = { INVALID: 400, NOT_FOUND: 404, FORBIDDEN: 403, BAD_STATE: 409, IN_USE: 409, SHORTAGE: 409 }
 
 /** Workflow settings (/api/workflow) and requisitions (/api/requisitions). */
-export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, stock, uploadDir }) {
+export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, addAudit, stock, uploadDir, env = process.env, fetch = globalThis.fetch }) {
   const photoDir = path.join(uploadDir, 'requisitions')
   const workflow = createWorkflowService(db)
   const service = createRequisitionService(db, { stock, workflow })
+  // MRP mode (MRP_INVENTORY_URL + MRP_INVENTORY_TOKEN): the catalog, checkout and "my requests" go to the MRP inventory; approving and
+  // issuing are done in MRP. Requisitions made here before the switch stay here as history.
+  const mrpSettings = mrpConfig(env)
+  const mrp = mrpSettings ? createMrpRequisitions(db, { ...mrpSettings, fetch }) : null
+  const isLocal = (id) => Boolean(db.prepare('SELECT 1 FROM requisitions WHERE id = ?').get(String(id)))
+  const moved = (res) => res.status(410).json({ error: mrp.MOVED })
 
   /** Maps domain errors to HTTP statuses; anything else is a real bug and goes to the error handler. */
   const handle = (handler) => async (req, res, next) => {
     try { await handler(req, res) } catch (error) {
+      if (error instanceof MrpError) return res.status(error.status).json({ error: error.message })
       if (error instanceof WorkflowError || error instanceof RequisitionError) {
         const body = { error: error.message }
         if (error.details) body.details = error.details
@@ -124,32 +132,47 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
   const actor = (req) => req.session.user
   const detailBody = (id) => ({ requisition: service.get(id) })
 
-  reqRouter.get('/catalog', handle((req, res) => res.json({ items: service.catalog({ type: req.query.type, q: req.query.q }) })))
+  reqRouter.get('/mode', (_req, res) => res.json({ mode: mrp ? 'mrp' : 'local' }))
 
-  reqRouter.get('/cart', handle((req, res) => res.json({ cart: service.getCart(actor(req).id, String(req.query.type ?? '')) })))
-  reqRouter.put('/cart/lines', handle((req, res) => res.json({ cart: service.setCartLine(actor(req).id, String(req.body?.type ?? ''), String(req.body?.variantId ?? ''), req.body?.qty) })))
+  reqRouter.get('/catalog', handle(async (req, res) => res.json({ items: mrp ? await mrp.catalog({ type: req.query.type, q: req.query.q }) : service.catalog({ type: req.query.type, q: req.query.q }) })))
+
+  reqRouter.get('/cart', handle(async (req, res) => res.json({ cart: await (mrp ?? service).getCart(actor(req).id, String(req.query.type ?? '')) })))
+  reqRouter.put('/cart/lines', handle(async (req, res) => res.json({ cart: await (mrp ?? service).setCartLine(actor(req).id, String(req.body?.type ?? ''), String(req.body?.variantId ?? ''), req.body?.qty) })))
   reqRouter.delete('/cart', handle((req, res) => {
-    service.clearCart(actor(req).id, String(req.query.type ?? ''))
+    ;(mrp ?? service).clearCart(actor(req).id, String(req.query.type ?? ''))
     res.json({ ok: true })
   }))
 
-  reqRouter.post('/checkout', handle((req, res) => {
-    const { id } = service.checkout({ userId: actor(req).id, type: String(req.body?.type ?? ''), warehouseId: req.body?.warehouseId, reason: req.body?.reason, neededBy: req.body?.neededBy ?? '' })
+  reqRouter.post('/checkout', handle(async (req, res) => {
+    const input = { type: String(req.body?.type ?? ''), warehouseId: req.body?.warehouseId, reason: req.body?.reason, neededBy: req.body?.neededBy ?? '' }
+    if (mrp) {
+      const requisition = await mrp.checkout(actor(req), input)
+      addAudit(actor(req).id, 'ส่งใบเบิก (MRP)', 'requisition', requisition.id, { type: input.type, number: requisition.number })
+      return res.status(201).json({ requisition })
+    }
+    const { id } = service.checkout({ userId: actor(req).id, ...input })
     addAudit(actor(req).id, 'ส่งใบเบิก', 'requisition', id, { type: req.body.type })
     res.status(201).json(detailBody(id))
   }))
 
-  reqRouter.get('/warehouses', handle((req, res) => res.json({ warehouses: service.warehouseOptions(actor(req).id, String(req.query.type ?? '')) })))
-  reqRouter.get('/route-preview', handle((req, res) => res.json({ route: service.previewRoute({ userId: actor(req).id, type: String(req.query.type ?? ''), warehouseId: req.query.warehouseId }) })))
+  reqRouter.get('/warehouses', handle(async (req, res) => res.json({ warehouses: await (mrp ?? service).warehouseOptions(actor(req).id, String(req.query.type ?? '')) })))
+  reqRouter.get('/route-preview', handle((req, res) => res.json({ route: mrp ? mrp.previewRoute() : service.previewRoute({ userId: actor(req).id, type: String(req.query.type ?? ''), warehouseId: req.query.warehouseId }) })))
 
-  reqRouter.get('/mine', handle((req, res) => res.json({ requisitions: service.listMine(actor(req).id, { status: req.query.status ? String(req.query.status) : undefined }) })))
-  reqRouter.get('/inbox', requireManagerRole, handle((req, res) => res.json({ requisitions: service.inbox(actor(req).id) })))
-  reqRouter.get('/issue-queue', requireManagerRole, handle((req, res) => res.json({ requisitions: service.issueQueue(actor(req).id, actor(req).role) })))
+  reqRouter.get('/mine', handle(async (req, res) => {
+    const status = req.query.status ? String(req.query.status) : undefined
+    if (!mrp) return res.json({ requisitions: service.listMine(actor(req).id, { status }) })
+    // The ones raised in MRP first, then the history made here before the switch.
+    res.json({ requisitions: [...await mrp.listMine(actor(req), { status }), ...service.listMine(actor(req).id, { status })] })
+  }))
+  // In MRP mode nothing waits here any more: approvals and the issue queue are in MRP.
+  reqRouter.get('/inbox', requireManagerRole, handle((req, res) => res.json({ requisitions: mrp ? [] : service.inbox(actor(req).id) })))
+  reqRouter.get('/issue-queue', requireManagerRole, handle((req, res) => res.json({ requisitions: mrp ? [] : service.issueQueue(actor(req).id, actor(req).role) })))
   reqRouter.get('/issue-history', requireManagerRole, handle((req, res) => res.json({ requisitions: service.issueHistory(actor(req).id, actor(req).role) })))
-  reqRouter.get('/badges', handle((req, res) => {
+  reqRouter.get('/badges', handle(async (req, res) => {
     const user = actor(req)
-    const cart = ['ppe', 'medicine'].reduce((sum, type) => sum + service.getCart(user.id, type).lines.length, 0)
-    res.json({ ...service.badges(user), cart })
+    let cart = 0
+    for (const type of ['ppe', 'medicine']) cart += (await (mrp ?? service).getCart(user.id, type)).lines.length
+    res.json({ ...(mrp ? { approvals: 0, issue: 0 } : service.badges(user)), cart })
   }))
 
   reqRouter.get('/admin/all', requireAdmin, handle((req, res) => {
@@ -158,6 +181,7 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
   }))
 
   reqRouter.post('/bulk-approve', requireManagerRole, handle((req, res) => {
+    if (mrp) return moved(res)
     const ids = req.body?.ids
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) return res.status(400).json({ error: 'เลือกใบเบิก 1–50 ใบ' })
     const results = ids.map((rawId) => {
@@ -198,7 +222,7 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
       .sendFile(path.join(photoDir, path.basename(name)), (error) => error && next(error))
   }))
 
-  reqRouter.post('/:id/photos', photoFiles, handle(async (req, res) => {
+  reqRouter.post('/:id/photos', (req, res, next) => (mrp && !isLocal(req.params.id) ? res.status(409).json({ error: 'ใบเบิกในระบบ MRP แนบรูปจากหน้านี้ไม่ได้' }) : next()), photoFiles, handle(async (req, res) => {
     const files = req.files ?? []
     service.prepareUpload({ id: req.params.id, userId: actor(req).id, count: files.length })
     const saved = []
@@ -224,14 +248,22 @@ export function registerRequisitionRoutes(app, { db, requireAuth, requireAdmin, 
     res.json(detailBody(req.params.id))
   }))
 
-  reqRouter.get('/:id', handle((req, res) => {
+  reqRouter.get('/:id', handle(async (req, res) => {
+    if (mrp && !isLocal(req.params.id)) return res.json({ requisition: await mrp.get(actor(req), req.params.id) })
     const detail = service.get(req.params.id)
     if (!service.canView(actor(req), detail)) return res.status(403).json({ error: FORBIDDEN })
     res.json({ requisition: detail })
   }))
 
   /** Declares a mutation: runs the service call, writes the audit row and returns the fresh detail. */
-  const action = (path, label, run) => reqRouter.post(path, handle((req, res) => {
+  const action = (path, label, run) => reqRouter.post(path, handle(async (req, res) => {
+    if (mrp && !isLocal(req.params.id)) {
+      // Raised in MRP: the requester may still withdraw it from here; everything else is done in MRP.
+      if (path !== '/:id/cancel') return moved(res)
+      const requisition = await mrp.cancel(actor(req), req.params.id, req.body?.reason)
+      addAudit(actor(req).id, 'ยกเลิกใบเบิก (MRP)', 'requisition', req.params.id, { number: requisition.number })
+      return res.json({ requisition })
+    }
     run(req)
     addAudit(actor(req).id, label, 'requisition', req.params.id, { ...(req.body?.reason ? { reason: String(req.body.reason).slice(0, 200) } : {}) })
     res.json(detailBody(req.params.id))
