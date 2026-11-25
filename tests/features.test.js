@@ -73,6 +73,25 @@ describe('leader role, result edits and photo deletion', () => {
     assert.equal((await leader.call('DELETE', `/api/inspections/${inspection.id}`)).status, 403)
   })
 
+  test('the inspection list filters by inspector and employee code (as the dashboard and export do)', async () => {
+    const ids = async (query) => (await adminClient.call('GET', `/api/inspections?${query}`)).json.inspections.map((row) => row.id)
+    assert.ok((await ids('inspector=' + encodeURIComponent('ผู้ตรวจ'))).includes(inspection.id))
+    assert.ok(!(await ids('inspector=' + encodeURIComponent('ไม่มีคนนี้'))).includes(inspection.id))
+    assert.ok((await ids('employeeCode=L002')).includes(inspection.id))
+    assert.ok(!(await ids('employeeCode=ZZ999')).includes(inspection.id))
+  })
+
+  test('the employee report finds work assigned by name to someone without an account', async () => {
+    assert.equal((await adminClient.call('POST', '/api/admin/employees', employeeBody('N001', 'ไม่มีบัญชี ทดสอบ'))).status, 201)
+    const item = inspection.items.find((row) => row.result === 'NG')
+    const db = new DatabaseSync(path.join(server.dataDir, 'daily-safety.sqlite'))
+    db.prepare("UPDATE responses SET responsible = ?, responsible_user_id = '' WHERE id = ?").run('ไม่มีบัญชี ทดสอบ', item.id)
+    db.close()
+    const report = await adminClient.call('GET', '/api/admin/employees/N001/report')
+    assert.equal(report.status, 200)
+    assert.ok(report.json.correctiveTasks.some((task) => task.id === item.id), JSON.stringify(report.json.summary))
+  })
+
   test('a plain employee still only sees their own work and no dashboard', async () => {
     assert.equal((await adminClient.call('POST', '/api/admin/employees', employeeBody('E901', 'พนักงาน ทั่วไป'))).status, 201)
     assert.equal((await adminClient.call('POST', '/api/admin/users', { name: 'พนักงาน ทั่วไป', employeeCode: 'E901', password: 'Emp-pass-1', role: 'employee' })).status, 201)

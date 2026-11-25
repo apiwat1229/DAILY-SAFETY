@@ -1878,7 +1878,7 @@ app.get('/api/inspections/export.xlsx', requireAdmin, async (req, res, next) => 
 })
 
 app.get('/api/inspections', requireAuth, (req, res) => {
-  const filters = Object.fromEntries(['from', 'to', 'area', 'shift', 'result', 'status', 'category'].map((key) => [key, String(req.query[key] || '')]).filter(([, value]) => value))
+  const filters = Object.fromEntries(['from', 'to', 'area', 'inspector', 'employeeCode', 'shift', 'result', 'status', 'category'].map((key) => [key, String(req.query[key] || '')]).filter(([, value]) => value))
   res.json({ inspections: inspectionRows(filters, req.session.user) })
 })
 
@@ -3107,7 +3107,7 @@ app.get('/api/admin/employees/:code/report', requireAdmin, (req, res) => {
   if (!employeeRow) return res.status(404).json({ error: 'ไม่พบข้อมูลพนักงาน' })
   const employee = employeeDto(employeeRow)
   const accountIds = db.prepare('SELECT id FROM users WHERE UPPER(TRIM(employee_code)) = ?').all(employee.employeeCode).map((row) => row.id)
-  const responsibleNames = [...new Set([employee.name_th, employee.name_en].filter(Boolean).map((name) => name.trim().toLocaleLowerCase()))]
+  const responsibleNames = [...new Set([employee.nameTh, employee.nameEn].filter(Boolean).map((name) => name.trim().toLocaleLowerCase()))]
   const assignmentClauses = []
   const assignmentParams = []
   if (accountIds.length) {
